@@ -31,3 +31,11 @@ export interface Plugin {
   getMenus?: () => PluginMenuConfig[]
   getRoutes?: () => PluginRouteConfig[]
 }
+
+export interface PluginInfo {
+  name: string
+  description: string
+  version: string
+  author: string
+  enabled?: boolean
+}

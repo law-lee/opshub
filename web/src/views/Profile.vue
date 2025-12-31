@@ -1,15 +1,14 @@
 <template>
   <div class="profile-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>个人信息</span>
-        </div>
-      </template>
+    <!-- 页面标题 -->
+    <div class="page-header">
+      <h2 class="page-title">个人信息</h2>
+    </div>
 
-      <el-tabs v-model="activeTab">
-        <!-- 基本信息标签页 -->
-        <el-tab-pane label="基本信息" name="basic">
+    <el-tabs v-model="activeTab" class="profile-tabs">
+      <!-- 基本信息标签页 -->
+      <el-tab-pane label="基本信息" name="basic">
+        <div class="tab-content">
           <el-form
             :model="profileForm"
             :rules="profileRules"
@@ -22,7 +21,19 @@
                 <el-avatar :size="100" :src="profileForm.avatar">
                   <el-icon><UserFilled /></el-icon>
                 </el-avatar>
+                <el-upload
+                  class="avatar-uploader"
+                  :show-file-list="false"
+                  :before-upload="beforeAvatarUpload"
+                  :http-request="handleAvatarUpload"
+                  accept="image/*"
+                >
+                  <el-button class="black-button" :loading="uploadLoading" style="margin-left: 20px;">
+                    {{ uploadLoading ? '上传中...' : '更换头像' }}
+                  </el-button>
+                </el-upload>
               </div>
+              <div class="avatar-tip">支持 JPG、PNG 格式,文件大小不超过 2MB</div>
             </el-form-item>
 
             <el-form-item label="用户名">
@@ -42,15 +53,17 @@
             </el-form-item>
 
             <el-form-item>
-              <el-button type="primary" @click="handleUpdateProfile" :loading="updateLoading">
+              <el-button class="black-button" @click="handleUpdateProfile" :loading="updateLoading">
                 保存修改
               </el-button>
             </el-form-item>
           </el-form>
-        </el-tab-pane>
+        </div>
+      </el-tab-pane>
 
-        <!-- 修改密码标签页 -->
-        <el-tab-pane label="修改密码" name="password">
+      <!-- 修改密码标签页 -->
+      <el-tab-pane label="修改密码" name="password">
+        <div class="tab-content">
           <el-form
             :model="passwordForm"
             :rules="passwordRules"
@@ -87,15 +100,15 @@
             </el-form-item>
 
             <el-form-item>
-              <el-button type="primary" @click="handleUpdatePassword" :loading="passwordLoading">
+              <el-button class="black-button" @click="handleUpdatePassword" :loading="passwordLoading">
                 修改密码
               </el-button>
               <el-button @click="handleResetPassword">重置</el-button>
             </el-form-item>
           </el-form>
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -105,11 +118,14 @@ import { ElMessage, FormInstance } from 'element-plus'
 import { UserFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { updateUser, changePassword } from '@/api/user'
+import { uploadAvatar, updateUserAvatar } from '@/api/upload'
+import type { UploadProps } from 'element-plus'
 
 const userStore = useUserStore()
 const activeTab = ref('basic')
 const updateLoading = ref(false)
 const passwordLoading = ref(false)
+const uploadLoading = ref(false)
 
 const profileFormRef = ref<FormInstance>()
 const passwordFormRef = ref<FormInstance>()
@@ -161,7 +177,20 @@ const passwordRules = {
 // 加载用户信息
 const loadUserInfo = async () => {
   try {
+    // 如果 store 中已有用户信息，先显示出来
+    if (userStore.userInfo) {
+      profileForm.id = userStore.userInfo.ID || userStore.userInfo.id
+      profileForm.username = userStore.userInfo.username
+      profileForm.realName = userStore.userInfo.realName || ''
+      profileForm.email = userStore.userInfo.email || ''
+      profileForm.phone = userStore.userInfo.phone || ''
+      profileForm.avatar = userStore.userInfo.avatar || ''
+    }
+
+    // 然后异步刷新最新数据
     await userStore.getProfile()
+
+    // 刷新后再次更新表单，确保数据最新
     if (userStore.userInfo) {
       profileForm.id = userStore.userInfo.ID || userStore.userInfo.id
       profileForm.username = userStore.userInfo.username
@@ -173,6 +202,59 @@ const loadUserInfo = async () => {
   } catch (error) {
     console.error(error)
     ElMessage.error('获取用户信息失败')
+  }
+}
+
+// 上传前校验
+const beforeAvatarUpload: UploadProps['beforeUpload'] = (file) => {
+  const isImage = file.type.startsWith('image/')
+  const isLt2M = file.size / 1024 / 1024 < 2
+
+  if (!isImage) {
+    ElMessage.error('只能上传图片文件!')
+    return false
+  }
+  if (!isLt2M) {
+    ElMessage.error('图片大小不能超过 2MB!')
+    return false
+  }
+  return true
+}
+
+// 处理头像上传
+const handleAvatarUpload = async (options: any) => {
+  const { file } = options
+  uploadLoading.value = true
+
+  try {
+    // 上传图片到服务器
+    const uploadRes: any = await uploadAvatar(file)
+    console.log('上传响应:', uploadRes)
+
+    if (uploadRes.code === 0 && uploadRes.data) {
+      const avatarUrl = uploadRes.data.url || uploadRes.data
+      console.log('头像URL:', avatarUrl)
+
+      // 更新用户头像
+      const updateRes: any = await updateUserAvatar(avatarUrl)
+      console.log('更新头像响应:', updateRes)
+
+      // 更新表单中的头像
+      profileForm.avatar = avatarUrl
+
+      // 重新获取用户信息,同步到全局store
+      await userStore.getProfile()
+
+      ElMessage.success('头像上传成功')
+    } else {
+      throw new Error(uploadRes.message || '上传失败')
+    }
+  } catch (error: any) {
+    console.error('头像上传失败:', error)
+    const errorMsg = error.response?.data?.message || error.message || '头像上传失败'
+    ElMessage.error(errorMsg)
+  } finally {
+    uploadLoading.value = false
   }
 }
 
@@ -242,17 +324,33 @@ onMounted(() => {
 <style scoped>
 .profile-container {
   padding: 20px;
+  background-color: #fff;
+  min-height: 100%;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.page-header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.profile-tabs {
+  background-color: transparent;
+}
+
+.tab-content {
+  padding-top: 20px;
 }
 
 .profile-form {
   max-width: 800px;
-  margin-top: 20px;
 }
 
 .avatar-section {
@@ -261,12 +359,39 @@ onMounted(() => {
 }
 
 .avatar-section :deep(.el-avatar) {
-  background-color: #1890ff;
+  background-color: #FFAF35;
   border: 3px solid rgba(255, 255, 255, 0.2);
 }
 
 .avatar-section :deep(.el-icon) {
   font-size: 50px;
   color: #fff;
+}
+
+.avatar-uploader {
+  display: inline-block;
+}
+
+.avatar-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+/* 黑色按钮样式 */
+.black-button {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
+}
+
+.black-button:hover {
+  background-color: #333333 !important;
+  border-color: #333333 !important;
+}
+
+.black-button:focus {
+  background-color: #000000 !important;
+  border-color: #000000 !important;
 }
 </style>

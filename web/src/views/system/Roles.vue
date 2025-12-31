@@ -1,43 +1,40 @@
 <template>
   <div class="roles-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>角色管理</span>
-          <el-button type="primary" @click="handleAdd">新增角色</el-button>
-        </div>
-      </template>
+    <!-- 页面标题和操作按钮 -->
+    <div class="page-header">
+      <h2 class="page-title">角色管理</h2>
+      <el-button class="black-button" @click="handleAdd">新增角色</el-button>
+    </div>
 
-      <el-table :data="roleList" border stripe v-loading="loading" style="width: 100%">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="角色名称" min-width="150" />
-        <el-table-column prop="code" label="角色编码" min-width="150" />
-        <el-table-column prop="description" label="描述" min-width="200" />
-        <el-table-column label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-              {{ row.status === 1 ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <el-table :data="roleList" border stripe v-loading="loading" style="width: 100%">
+      <el-table-column prop="id" label="ID" width="80" />
+      <el-table-column prop="name" label="角色名称" min-width="150" />
+      <el-table-column prop="code" label="角色编码" min-width="150" />
+      <el-table-column prop="description" label="描述" min-width="200" />
+      <el-table-column label="状态" width="80">
+        <template #default="{ row }">
+          <el-tag :type="row.status === 1 ? 'success' : 'danger'">
+            {{ row.status === 1 ? '启用' : '禁用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="200" fixed="right">
+        <template #default="{ row }">
+          <el-button class="black-button" size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
 
-      <!-- 分页 -->
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        layout="total, prev, pager, next"
-        @current-change="loadRoles"
-        style="margin-top: 20px; justify-content: center"
-      />
-    </el-card>
+    <!-- 分页 -->
+    <el-pagination
+      v-model:current-page="pagination.page"
+      v-model:page-size="pagination.pageSize"
+      :total="pagination.total"
+      layout="total, prev, pager, next"
+      @current-change="loadRoles"
+      style="margin-top: 20px; justify-content: center"
+    />
 
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
@@ -166,11 +163,40 @@ onMounted(() => {
 <style scoped>
 .roles-container {
   padding: 20px;
+  background-color: #fff;
+  min-height: 100%;
 }
 
-.card-header {
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: #303133;
+}
+
+/* 黑色按钮样式 */
+.black-button {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
+}
+
+.black-button:hover {
+  background-color: #333333 !important;
+  border-color: #333333 !important;
+}
+
+.black-button:focus {
+  background-color: #000000 !important;
+  border-color: #000000 !important;
 }
 </style>

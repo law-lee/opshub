@@ -60,7 +60,11 @@ const router = createRouter({
 
 // 注册插件路由
 export function registerPluginRoutes() {
-  const plugins = pluginManager.getAll()
+  // 修改为使用 getInstalled() 以保持与菜单构建的一致性
+  const plugins = pluginManager.getInstalled()
+
+  console.log('[Router] 开始注册插件路由')
+  console.log('[Router] 已安装的插件数量:', plugins.length)
 
   for (const plugin of plugins) {
     if (plugin.getRoutes) {
@@ -71,9 +75,13 @@ export function registerPluginRoutes() {
         router.addRoute('Layout', route)
       })
 
-      console.log(`插件 ${plugin.name} 路由注册成功, 路由数量:`, routes.length)
+      console.log(`[Router] 插件 ${plugin.name} 路由注册成功, 路由数量:`, routes.length)
+    } else {
+      console.log(`[Router] 插件 ${plugin.name} 没有提供路由配置`)
     }
   }
+
+  console.log('[Router] 插件路由注册完成')
 }
 
 // 路由守卫

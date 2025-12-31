@@ -11,22 +11,23 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/ydcloud-dy/opshub/internal/conf"
 	"github.com/ydcloud-dy/opshub/internal/plugin"
-	k8splugin "github.com/ydcloud-dy/opshub/internal/plugins/kubernetes"
 	"github.com/ydcloud-dy/opshub/internal/server/rbac"
 	"github.com/ydcloud-dy/opshub/internal/service"
-	"github.com/ydcloud-dy/opshub/pkg/middleware"
 	appLogger "github.com/ydcloud-dy/opshub/pkg/logger"
+	"github.com/ydcloud-dy/opshub/pkg/middleware"
+	k8splugin "github.com/ydcloud-dy/opshub/plugins/kubernetes"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // HTTPServer HTTP服务器
 type HTTPServer struct {
-	server     *http.Server
-	conf       *conf.Config
-	svc        *service.Service
-	db         *gorm.DB
-	pluginMgr  *plugin.Manager
+	server    *http.Server
+	conf      *conf.Config
+	svc       *service.Service
+	db        *gorm.DB
+	pluginMgr *plugin.Manager
+	uploadSrv *UploadServer
 }
 
 // NewHTTPServer 创建HTTP服务器
@@ -45,7 +46,12 @@ func NewHTTPServer(conf *conf.Config, svc *service.Service, db *gorm.DB) *HTTPSe
 	// 创建插件管理器
 	pluginMgr := plugin.NewManager(db)
 
-	// 注册插件
+	// 创建上传服务
+	uploadDir := "./web/public/uploads"
+	uploadURL := "/uploads"
+	uploadSrv := NewUploadServer(db, uploadDir, uploadURL)
+
+	// 注册 Kubernetes 插件
 	if err := pluginMgr.Register(k8splugin.New()); err != nil {
 		appLogger.Error("注册Kubernetes插件失败", zap.Error(err))
 	}
@@ -56,12 +62,14 @@ func NewHTTPServer(conf *conf.Config, svc *service.Service, db *gorm.DB) *HTTPSe
 		svc:       svc,
 		db:        db,
 		pluginMgr: pluginMgr,
+		uploadSrv: uploadSrv,
 	}
 
-	s.registerRoutes(router, conf.Server.JWTSecret)
-
-	// 启用所有插件
+	// 先启用所有插件（在注册路由之前）
 	s.enablePlugins()
+
+	// 注册路由（插件启用后才能注册路由）
+	s.registerRoutes(router, conf.Server.JWTSecret)
 
 	// 创建HTTP服务器
 	s.server = &http.Server{
@@ -82,31 +90,45 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 	// 健康检查
 	router.GET("/health", s.svc.Health)
 
-	// API v1
-	v1 := router.Group("/api/v1")
-	{
-		// 示例接口
-		v1.GET("/example", s.svc.Example)
+	// 静态文件服务 - 上传的文件
+	router.Static("/uploads", "./web/public/uploads")
 
-		// 在这里添加更多路由
-		// v1.POST("/users", s.svc.CreateUser)
-		// v1.GET("/users/:id", s.svc.GetUser)
-	}
+	// 创建 RBAC 服务
+	userService, roleService, departmentService, menuService, authMiddleware := rbac.NewRBACServices(s.db, jwtSecret)
 
 	// RBAC 路由
-	rbacServer := rbac.NewHTTPServer(rbac.NewRBACServices(s.db, jwtSecret))
+	rbacServer := rbac.NewHTTPServer(userService, roleService, departmentService, menuService, authMiddleware)
 	rbacServer.RegisterRoutes(router)
 
+	// API v1 - 需要认证的接口
+	v1 := router.Group("/api/v1")
+	v1.Use(authMiddleware.AuthRequired())
+	{
+		// 上传接口
+		v1.POST("/upload/avatar", s.uploadSrv.UploadAvatar)
+		v1.PUT("/profile/avatar", s.uploadSrv.UpdateUserAvatar)
+	}
+
+	// API v1 - 公开接口(不需要认证)
+	public := router.Group("/api/v1/public")
+	{
+		public.GET("/example", s.svc.Example)
+	}
+
 	// 插件路由
-	pluginsGroup := v1.Group("/plugins")
+	pluginsGroup := router.Group("/api/v1/plugins")
+	pluginsGroup.Use(authMiddleware.AuthRequired())
 	s.pluginMgr.RegisterAllRoutes(pluginsGroup)
 
 	// 插件管理接口
-	pluginInfoGroup := v1.Group("/plugins")
+	pluginInfoGroup := router.Group("/api/v1/plugins")
+	pluginInfoGroup.Use(authMiddleware.AuthRequired())
 	{
 		pluginInfoGroup.GET("", s.listPlugins)
 		pluginInfoGroup.GET("/:name", s.getPlugin)
 		pluginInfoGroup.GET("/:name/menus", s.getPluginMenus)
+		pluginInfoGroup.POST("/:name/enable", s.enablePlugin)
+		pluginInfoGroup.POST("/:name/disable", s.disablePlugin)
 	}
 
 	// 前端静态文件服务（后面会用到）
@@ -144,6 +166,7 @@ func (s *HTTPServer) listPlugins(c *gin.Context) {
 			"description": p.Description(),
 			"version":     p.Version(),
 			"author":      p.Author(),
+			"enabled":     s.pluginMgr.IsEnabled(p.Name()),
 		})
 	}
 
@@ -174,6 +197,7 @@ func (s *HTTPServer) getPlugin(c *gin.Context) {
 			"description": plugin.Description(),
 			"version":     plugin.Version(),
 			"author":      plugin.Author(),
+			"enabled":     s.pluginMgr.IsEnabled(name),
 		},
 	})
 }
@@ -195,6 +219,52 @@ func (s *HTTPServer) getPluginMenus(c *gin.Context) {
 		"code":    0,
 		"message": "success",
 		"data":    menus,
+	})
+}
+
+// enablePlugin 启用插件
+func (s *HTTPServer) enablePlugin(c *gin.Context) {
+	name := c.Param("name")
+
+	if err := s.pluginMgr.Enable(name); err != nil {
+		appLogger.Error("启用插件失败",
+			zap.String("plugin", name),
+			zap.Error(err),
+		)
+		c.JSON(500, gin.H{
+			"code":    500,
+			"message": fmt.Sprintf("启用插件失败: %v", err),
+		})
+		return
+	}
+
+	appLogger.Info("插件启用成功", zap.String("plugin", name))
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "插件启用成功，请刷新页面以生效",
+	})
+}
+
+// disablePlugin 禁用插件
+func (s *HTTPServer) disablePlugin(c *gin.Context) {
+	name := c.Param("name")
+
+	if err := s.pluginMgr.Disable(name); err != nil {
+		appLogger.Error("禁用插件失败",
+			zap.String("plugin", name),
+			zap.Error(err),
+		)
+		c.JSON(500, gin.H{
+			"code":    500,
+			"message": fmt.Sprintf("禁用插件失败: %v", err),
+		})
+		return
+	}
+
+	appLogger.Info("插件禁用成功", zap.String("plugin", name))
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "插件禁用成功，请刷新页面以生效",
 	})
 }
 

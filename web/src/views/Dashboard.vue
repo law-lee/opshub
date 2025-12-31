@@ -367,9 +367,8 @@ const getAlarmLevelText = (level: string) => {
 
 <style scoped>
 .dashboard {
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
+  padding: 0;
+  background-color: transparent;
 }
 
 .stats-row {

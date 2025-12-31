@@ -1,59 +1,56 @@
 <template>
   <div class="users-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>用户管理</span>
-          <el-button type="primary" @click="handleAdd">新增用户</el-button>
-        </div>
-      </template>
+    <!-- 页面标题和操作按钮 -->
+    <div class="page-header">
+      <h2 class="page-title">用户管理</h2>
+      <el-button class="black-button" @click="handleAdd">新增用户</el-button>
+    </div>
 
-      <!-- 搜索表单 -->
-      <el-form :inline="true" :model="searchForm" class="search-form">
-        <el-form-item label="关键词">
-          <el-input v-model="searchForm.keyword" placeholder="用户名/邮箱" clearable />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadUsers">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
-        </el-form-item>
-      </el-form>
+    <!-- 搜索表单 -->
+    <el-form :inline="true" :model="searchForm" class="search-form">
+      <el-form-item label="关键词">
+        <el-input v-model="searchForm.keyword" placeholder="用户名/邮箱" clearable />
+      </el-form-item>
+      <el-form-item>
+        <el-button class="black-button" @click="loadUsers">查询</el-button>
+        <el-button @click="resetSearch">重置</el-button>
+      </el-form-item>
+    </el-form>
 
-      <!-- 表格 -->
-      <el-table :data="userList" border stripe v-loading="loading" style="width: 100%">
-        <el-table-column prop="ID" label="ID" width="80" />
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="realName" label="真实姓名" min-width="120" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column prop="phone" label="手机号" min-width="130" />
-        <el-table-column label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-              {{ row.status === 1 ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="warning" size="small" @click="handleResetPassword(row)">重置密码</el-button>
-            <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <!-- 表格 -->
+    <el-table :data="userList" border stripe v-loading="loading" style="width: 100%">
+      <el-table-column prop="ID" label="ID" width="80" />
+      <el-table-column prop="username" label="用户名" min-width="120" />
+      <el-table-column prop="realName" label="真实姓名" min-width="120" />
+      <el-table-column prop="email" label="邮箱" min-width="180" />
+      <el-table-column prop="phone" label="手机号" min-width="130" />
+      <el-table-column label="状态" width="80">
+        <template #default="{ row }">
+          <el-tag :type="row.status === 1 ? 'success' : 'danger'">
+            {{ row.status === 1 ? '启用' : '禁用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="280" fixed="right">
+        <template #default="{ row }">
+          <el-button class="black-button" size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button class="black-button" size="small" @click="handleResetPassword(row)">重置密码</el-button>
+          <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
 
-      <!-- 分页 -->
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="loadUsers"
-        @current-change="loadUsers"
-        style="margin-top: 20px; justify-content: center"
-      />
-    </el-card>
+    <!-- 分页 -->
+    <el-pagination
+      v-model:current-page="pagination.page"
+      v-model:page-size="pagination.pageSize"
+      :total="pagination.total"
+      :page-sizes="[10, 20, 50, 100]"
+      layout="total, sizes, prev, pager, next, jumper"
+      @size-change="loadUsers"
+      @current-change="loadUsers"
+      style="margin-top: 20px; justify-content: center"
+    />
 
     <!-- 新增/编辑对话框 -->
     <el-dialog
@@ -334,15 +331,44 @@ onMounted(() => {
 <style scoped>
 .users-container {
   padding: 20px;
+  background-color: #fff;
+  min-height: 100%;
 }
 
-.card-header {
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: #303133;
 }
 
 .search-form {
   margin-bottom: 20px;
+}
+
+/* 黑色按钮样式 */
+.black-button {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
+}
+
+.black-button:hover {
+  background-color: #333333 !important;
+  border-color: #333333 !important;
+}
+
+.black-button:focus {
+  background-color: #000000 !important;
+  border-color: #000000 !important;
 }
 </style>

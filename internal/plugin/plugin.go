@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -63,6 +64,20 @@ type MenuConfig struct {
 	Permission string `json:"permission"`
 }
 
+// PluginState 插件状态数据模型
+type PluginState struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	Name      string    `gorm:"type:varchar(100);uniqueIndex;not null" json:"name"`
+	Enabled   bool      `gorm:"default:false;not null" json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// TableName 指定表名
+func (PluginState) TableName() string {
+	return "plugin_states"
+}
+
 // Manager Plugin manager
 type Manager struct {
 	plugins map[string]Plugin
@@ -71,10 +86,17 @@ type Manager struct {
 
 // NewManager Create plugin manager
 func NewManager(db *gorm.DB) *Manager {
-	return &Manager{
+	mgr := &Manager{
 		plugins: make(map[string]Plugin),
 		db:      db,
 	}
+
+	// 自动迁移插件状态表
+	if err := db.AutoMigrate(&PluginState{}); err != nil {
+		fmt.Printf("Failed to migrate PluginState table: %v\n", err)
+	}
+
+	return mgr
 }
 
 // Register 注册插件
@@ -88,6 +110,22 @@ func (m *Manager) Register(plugin Plugin) error {
 
 	// Register plugin
 	m.plugins[name] = plugin
+
+	// 初始化插件状态（如果不存在）
+	var state PluginState
+	if err := m.db.Where("name = ?", name).First(&state).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 插件状态不存在，创建新记录（默认禁用）
+			state = PluginState{
+				Name:    name,
+				Enabled: false,
+			}
+			if err := m.db.Create(&state).Error; err != nil {
+				return fmt.Errorf("failed to create plugin state: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -101,6 +139,11 @@ func (m *Manager) Enable(name string) error {
 	// Execute plugin Enable method
 	if err := plugin.Enable(m.db); err != nil {
 		return err
+	}
+
+	// 更新插件状态为已启用
+	if err := m.db.Model(&PluginState{}).Where("name = ?", name).Update("enabled", true).Error; err != nil {
+		return fmt.Errorf("failed to update plugin state: %w", err)
 	}
 
 	return nil
@@ -118,7 +161,21 @@ func (m *Manager) Disable(name string) error {
 		return err
 	}
 
+	// 更新插件状态为已禁用
+	if err := m.db.Model(&PluginState{}).Where("name = ?", name).Update("enabled", false).Error; err != nil {
+		return fmt.Errorf("failed to update plugin state: %w", err)
+	}
+
 	return nil
+}
+
+// IsEnabled 检查插件是否已启用
+func (m *Manager) IsEnabled(name string) bool {
+	var state PluginState
+	if err := m.db.Where("name = ?", name).First(&state).Error; err != nil {
+		return false
+	}
+	return state.Enabled
 }
 
 // GetPlugin Get plugin
@@ -139,9 +196,11 @@ func (m *Manager) GetAllPlugins() []Plugin {
 // RegisterAllRoutes Register all plugin routes
 func (m *Manager) RegisterAllRoutes(router *gin.RouterGroup) {
 	for _, plugin := range m.plugins {
-		// Create route group for each plugin
-		pluginGroup := router.Group("/plugins/" + plugin.Name())
-		plugin.RegisterRoutes(pluginGroup, m.db)
+		// 只有启用的插件才注册路由
+		if m.IsEnabled(plugin.Name()) {
+			// 直接将 router 传给插件，让插件自己决定路径前缀
+			plugin.RegisterRoutes(router, m.db)
+		}
 	}
 }
 
@@ -149,8 +208,11 @@ func (m *Manager) RegisterAllRoutes(router *gin.RouterGroup) {
 func (m *Manager) GetAllMenus() []MenuConfig {
 	allMenus := make([]MenuConfig, 0)
 	for _, plugin := range m.plugins {
-		menus := plugin.GetMenus()
-		allMenus = append(allMenus, menus...)
+		// 只有启用的插件才返回菜单
+		if m.IsEnabled(plugin.Name()) {
+			menus := plugin.GetMenus()
+			allMenus = append(allMenus, menus...)
+		}
 	}
 	return allMenus
 }

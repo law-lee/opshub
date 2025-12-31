@@ -33,7 +33,7 @@ request.interceptors.response.use(
       }
       return Promise.reject(new Error(res.message || '请求失败'))
     }
-    // 返回实际数据
+    // 返回实际数据 (res.data)
     return res.data
   },
   (error) => {
