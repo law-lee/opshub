@@ -30,8 +30,9 @@ go.work
 logs/
 *.log
 
-# Config (uncomment if you don't want to commit config)
-# config/config.yaml
+# Config - don't commit sensitive configuration
+config/config.yaml
+.env
 
 # OS
 .DS_Store
