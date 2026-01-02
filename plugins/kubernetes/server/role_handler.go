@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -214,6 +215,14 @@ func (h *RoleHandler) ListNamespaceRoles(c *gin.Context) {
 	// 获取集群的 clientset
 	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
 	if err != nil {
+		// 检查是否是"用户尚未申请凭据"错误
+		if strings.Contains(err.Error(), "尚未申请") || strings.Contains(err.Error(), "凭据") {
+			c.JSON(http.StatusForbidden, gin.H{
+				"code":    403,
+				"message": "您尚未申请该集群的访问凭据，请在集群管理页面申请 kubeconfig 后再访问",
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取集群连接失败",
