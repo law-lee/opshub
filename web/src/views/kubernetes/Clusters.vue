@@ -610,6 +610,7 @@ import {
   syncClusterStatus,
   syncAllClustersStatus,
   createDefaultClusterRoles,
+  createDefaultNamespaceRoles,
   type Cluster,
   type CredentialUser
 } from '@/api/kubernetes'
@@ -1032,23 +1033,37 @@ const handleSubmit = async () => {
           const newCluster = await createCluster(requestData)
           ElMessage.success('集群注册成功')
 
-          // 注册成功后立即创建默认集群角色，显示加载提示
+          // 注册成功后立即创建默认集群角色和常用命名空间角色
           const roleLoadingMsg = ElMessage.info({
-            message: '正在创建默认集群角色，请稍候...',
+            message: '正在初始化默认角色，请稍候...',
             duration: 0,
             showClose: false
           })
 
           try {
-            await createDefaultClusterRoles(newCluster.id)
+            // 并行创建集群角色和常用命名空间角色
+            const commonNamespaces = ['default', 'kube-system']
+
+            // 所有创建操作并行执行
+            const [clusterRolesResult] = await Promise.all([
+              createDefaultClusterRoles(newCluster.id),
+              ...commonNamespaces.map(ns =>
+                createDefaultNamespaceRoles(newCluster.id, ns).catch(err => {
+                  console.warn(`创建命名空间 ${ns} 的角色失败:`, err)
+                  // 命名空间角色创建失败不影响整体流程
+                  return { created: [] }
+                })
+              )
+            ])
+
             roleLoadingMsg.close()
-            ElMessage.success('默认集群角色创建成功')
-            console.log('默认集群角色创建成功')
+
+            const clusterCount = clusterRolesResult?.created?.length || 0
+            ElMessage.success(`默认角色初始化完成（集群角色：${clusterCount}个，命名空间：default、kube-system）`)
           } catch (roleError) {
             roleLoadingMsg.close()
-            console.error('创建默认集群角色失败:', roleError)
+            console.error('创建默认角色失败:', roleError)
             ElMessage.warning('集群注册成功，但创建默认角色失败，请稍后在角色管理页面手动创建')
-            // 角色创建失败不影响集群注册，只记录错误
           }
         }
 

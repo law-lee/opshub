@@ -1,9 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -349,6 +351,7 @@ func (h *RoleHandler) GetRoleDetail(c *gin.Context) {
 // @Success 200 {object} Response
 // @Router /api/v1/plugins/kubernetes/roles/create-defaults [post]
 func (h *RoleHandler) CreateDefaultClusterRoles(c *gin.Context) {
+	startTime := time.Now()
 	clusterIdStr := c.Query("clusterId")
 	if clusterIdStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -382,30 +385,64 @@ func (h *RoleHandler) CreateDefaultClusterRoles(c *gin.Context) {
 		})
 		return
 	}
+	fmt.Printf("[CreateDefaultClusterRoles] 获取clientset耗时: %v\n", time.Since(startTime))
 
 	// 定义默认角色及其权限
 	defaultRoles := getDefaultClusterRoles()
+	fmt.Printf("[CreateDefaultClusterRoles] 需要创建 %d 个角色\n", len(defaultRoles))
 
-	createdRoles := []string{}
+	createStartTime := time.Now()
+
+	// 使用 goroutine 并行创建所有角色
+	type result struct {
+		name string
+		err  error
+	}
+	resultChan := make(chan result, len(defaultRoles))
 
 	for _, roleDef := range defaultRoles {
-		// 检查角色是否已存在
-		_, err := clientset.RbacV1().ClusterRoles().Get(c.Request.Context(), roleDef.Name, metav1.GetOptions{})
-		if err == nil {
-			// 角色已存在，先删除再创建（确保标签正确）
-			_ = clientset.RbacV1().ClusterRoles().Delete(c.Request.Context(), roleDef.Name, metav1.DeleteOptions{})
-		}
+		go func(role rbacv1.ClusterRole) {
+			roleStart := time.Now()
+			// 直接尝试创建，如果已存在会返回错误，我们忽略错误
+			_, err := clientset.RbacV1().ClusterRoles().Create(c.Request.Context(), &role, metav1.CreateOptions{})
+			if err != nil {
+				// 如果是"已存在"错误，不算失败
+				if !strings.Contains(err.Error(), "already exists") {
+					fmt.Printf("[CreateDefaultClusterRoles] 创建角色 %s 失败: %v, 耗时: %v\n", role.Name, err, time.Since(roleStart))
+					resultChan <- result{name: role.Name, err: err}
+					return
+				}
+				fmt.Printf("[CreateDefaultClusterRoles] 角色 %s 已存在, 耗时: %v\n", role.Name, time.Since(roleStart))
+			} else {
+				fmt.Printf("[CreateDefaultClusterRoles] 创建角色 %s 成功, 耗时: %v\n", role.Name, time.Since(roleStart))
+			}
+			resultChan <- result{name: role.Name, err: nil}
+		}(roleDef)
+	}
 
-		// 创建角色
-		_, err = clientset.RbacV1().ClusterRoles().Create(c.Request.Context(), &roleDef, metav1.CreateOptions{})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "创建角色失败: " + roleDef.Name + ", " + err.Error(),
-			})
-			return
+	// 收集结果
+	createdRoles := []string{}
+	var createErr error
+	for i := 0; i < len(defaultRoles); i++ {
+		res := <-resultChan
+		if res.err != nil {
+			createErr = res.err
+			break
 		}
-		createdRoles = append(createdRoles, roleDef.Name)
+		if res.err == nil {
+			createdRoles = append(createdRoles, res.name)
+		}
+	}
+
+	fmt.Printf("[CreateDefaultClusterRoles] 所有角色创建完成, 总耗时: %v\n", time.Since(createStartTime))
+	fmt.Printf("[CreateDefaultClusterRoles] 接口总耗时: %v\n", time.Since(startTime))
+
+	if createErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "创建角色失败: " + createErr.Error(),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -725,26 +762,48 @@ func (h *RoleHandler) CreateDefaultNamespaceRoles(c *gin.Context) {
 	// 定义默认角色及其权限
 	defaultRoles := getDefaultNamespaceRoles(namespace)
 
-	createdRoles := []string{}
+	// 使用 goroutine 并行创建所有角色
+	type result struct {
+		name string
+		err  error
+	}
+	resultChan := make(chan result, len(defaultRoles))
 
 	for _, roleDef := range defaultRoles {
-		// 检查角色是否已存在
-		_, err := clientset.RbacV1().Roles(namespace).Get(c.Request.Context(), roleDef.Name, metav1.GetOptions{})
-		if err == nil {
-			// 角色已存在，先删除再创建（确保标签正确）
-			_ = clientset.RbacV1().Roles(namespace).Delete(c.Request.Context(), roleDef.Name, metav1.DeleteOptions{})
-		}
+		go func(role rbacv1.Role) {
+			// 直接尝试创建，如果已存在会返回错误，我们忽略错误
+			_, err := clientset.RbacV1().Roles(namespace).Create(c.Request.Context(), &role, metav1.CreateOptions{})
+			if err != nil {
+				// 如果是"已存在"错误，不算失败
+				if !strings.Contains(err.Error(), "already exists") {
+					resultChan <- result{name: role.Name, err: err}
+					return
+				}
+			}
+			resultChan <- result{name: role.Name, err: nil}
+		}(roleDef)
+	}
 
-		// 创建角色
-		_, err = clientset.RbacV1().Roles(namespace).Create(c.Request.Context(), &roleDef, metav1.CreateOptions{})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "创建角色失败: " + roleDef.Name + ", " + err.Error(),
-			})
-			return
+	// 收集结果
+	createdRoles := []string{}
+	var createErr error
+	for i := 0; i < len(defaultRoles); i++ {
+		res := <-resultChan
+		if res.err != nil {
+			createErr = res.err
+			break
 		}
-		createdRoles = append(createdRoles, roleDef.Name)
+		if res.err == nil {
+			createdRoles = append(createdRoles, res.name)
+		}
+	}
+
+	if createErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "创建角色失败: " + createErr.Error(),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
