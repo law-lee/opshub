@@ -18,7 +18,7 @@ type SysUser struct {
 	Status      int            `gorm:"type:tinyint;default:1;comment:状态 1:启用 0:禁用" json:"status"`
 	DepartmentID uint          `gorm:"default:0;comment:部门ID" json:"departmentId"`
 	Department  *SysDepartment `gorm:"foreignKey:DepartmentID;references:ID" json:"department,omitempty"`
-	Roles       []SysRole      `gorm:"many2many:sys_user_roles" json:"roles,omitempty"`
+	Roles       []SysRole      `gorm:"many2many:sys_user_roles" json:"roles"`
 	LastLoginAt *time.Time     `gorm:"comment:最后登录时间" json:"lastLoginAt,omitempty"`
 }
 

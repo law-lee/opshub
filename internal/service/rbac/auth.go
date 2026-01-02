@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/ydcloud-dy/opshub/internal/biz/rbac"
 )
 
 type JwtClaims struct {
@@ -14,12 +15,14 @@ type JwtClaims struct {
 }
 
 type AuthService struct {
-	secretKey string
+	secretKey   string
+	roleUseCase *rbac.RoleUseCase
 }
 
-func NewAuthService(secretKey string) *AuthService {
+func NewAuthService(secretKey string, roleUseCase *rbac.RoleUseCase) *AuthService {
 	return &AuthService{
-		secretKey: secretKey,
+		secretKey:   secretKey,
+		roleUseCase: roleUseCase,
 	}
 }
 

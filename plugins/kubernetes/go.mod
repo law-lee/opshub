@@ -8,7 +8,10 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/ydcloud-dy/opshub v0.0.0-00010101000000-000000000000
 	gorm.io/gorm v1.31.1
+	k8s.io/api v0.35.0
+	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
+	k8s.io/metrics v0.35.0
 )
 
 require (
@@ -65,8 +68,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.35.0 // indirect
-	k8s.io/apimachinery v0.35.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect

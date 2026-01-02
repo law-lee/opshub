@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/ydcloud-dy/opshub/plugins/kubernetes/data/models"
 	"github.com/ydcloud-dy/opshub/plugins/kubernetes/data/repository"
@@ -289,4 +290,22 @@ func DecryptKubeConfig(cipherText string) (string, error) {
 // GetRepo 获取 repository 实例
 func (b *ClusterBiz) GetRepo() *repository.ClusterRepository {
 	return b.repo
+}
+
+// CreateClientsetFromKubeConfig 从 kubeconfig 字符串创建 clientset
+// 这个方法用于创建基于用户凭据的 clientset
+func CreateClientsetFromKubeConfig(kubeConfigContent string) (*kubernetes.Clientset, error) {
+	// 需要导入 k8s.io/client-go/tools/clientcmd
+	config, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeConfigContent))
+	if err != nil {
+		return nil, fmt.Errorf("从 kubeconfig 创建配置失败: %w", err)
+	}
+
+	// 创建 clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("创建 clientset 失败: %w", err)
+	}
+
+	return clientset, nil
 }

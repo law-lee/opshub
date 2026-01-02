@@ -124,6 +124,11 @@ export interface NodeInfo {
   kernelVersion: string
   containerRuntime: string
   labels: Record<string, string>
+  cpuCapacity: string
+  memoryCapacity: string
+  podCount: number
+  schedulable: boolean
+  taintCount: number
 }
 
 export interface NamespaceInfo {
@@ -309,6 +314,30 @@ export function getClusterEvents(clusterId: number, namespace?: string) {
 }
 
 /**
+ * 获取集群API组列表
+ */
+export function getAPIGroups(clusterId: number) {
+  return request<string[]>({
+    url: '/api/v1/plugins/kubernetes/resources/api-groups',
+    method: 'get',
+    params: { clusterId }
+  })
+}
+
+/**
+ * 根据API组获取资源列表
+ */
+export function getResourcesByAPIGroup(clusterId: number, apiGroups: string[] | string) {
+  // 确保 apiGroups 是数组
+  const groups = Array.isArray(apiGroups) ? apiGroups : [apiGroups]
+  return request<string[]>({
+    url: '/api/v1/plugins/kubernetes/resources/api-resources',
+    method: 'get',
+    params: { clusterId, apiGroups: groups.join(',') }
+  })
+}
+
+/**
  * 生成集群 KubeConfig 凭据
  */
 export function generateKubeConfig(clusterId: number, username: string) {
@@ -349,6 +378,7 @@ export interface Role {
   labels: Record<string, string>
   age: string
   rules: any[]
+  isCustom?: boolean // 是否为自定义角色（系统角色和默认角色为 false）
 }
 
 export interface RoleDetail {
@@ -367,6 +397,34 @@ export function getClusterRoles(clusterId: number) {
     url: '/api/v1/plugins/kubernetes/roles/cluster',
     method: 'get',
     params: { clusterId }
+  })
+}
+
+/**
+ * 创建默认集群角色
+ */
+export function createDefaultClusterRoles(clusterId: number) {
+  return request<{
+    created: string[]
+    existing: string[]
+  }>({
+    url: '/api/v1/plugins/kubernetes/roles/create-defaults',
+    method: 'post',
+    params: { clusterId }
+  })
+}
+
+/**
+ * 创建默认命名空间角色
+ */
+export function createDefaultNamespaceRoles(clusterId: number, namespace: string) {
+  return request<{
+    created: string[]
+    existing: string[]
+  }>({
+    url: '/api/v1/plugins/kubernetes/roles/create-defaults-namespace',
+    method: 'post',
+    params: { clusterId, namespace }
   })
 }
 
@@ -495,6 +553,31 @@ export function deleteRole(clusterId: number, namespace: string, roleName: strin
     url: `/api/v1/plugins/kubernetes/roles/${ns}/${roleName}`,
     method: 'delete',
     params: { clusterId }
+  })
+}
+
+/**
+ * 创建角色请求接口
+ */
+export interface CreateRoleRequest {
+  namespace: string
+  name: string
+  rules: {
+    apiGroups: string[]
+    resources: string[]
+    resourceNames: string[]
+    verbs: string[]
+  }[]
+}
+
+/**
+ * 创建角色
+ */
+export function createRole(clusterId: number, data: CreateRoleRequest) {
+  return request({
+    url: `/api/v1/plugins/kubernetes/clusters/${clusterId}/roles`,
+    method: 'post',
+    data
   })
 }
 

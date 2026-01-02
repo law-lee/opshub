@@ -73,3 +73,40 @@ func (m *AuthMiddleware) AuthRequired() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RequireAdmin 检查是否为管理员
+func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := GetUserID(c)
+		if userID == 0 {
+			response.ErrorCode(c, http.StatusUnauthorized, "未登录")
+			c.Abort()
+			return
+		}
+
+		// 获取用户角色
+		roles, err := m.authService.roleUseCase.GetByUserID(c.Request.Context(), userID)
+		if err != nil {
+			response.ErrorCode(c, http.StatusInternalServerError, "获取用户角色失败")
+			c.Abort()
+			return
+		}
+
+		// 检查是否有admin角色
+		hasAdminRole := false
+		for _, role := range roles {
+			if role.Code == "admin" {
+				hasAdminRole = true
+				break
+			}
+		}
+
+		if !hasAdminRole {
+			response.ErrorCode(c, http.StatusForbidden, "权限不足：此操作仅限管理员执行")
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

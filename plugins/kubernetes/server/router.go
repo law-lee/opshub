@@ -38,6 +38,8 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 		clusters.GET("/resources/namespaces", resourceHandler.ListNamespaces)
 		clusters.GET("/resources/pods", resourceHandler.ListPods)
 		clusters.GET("/resources/deployments", resourceHandler.ListDeployments)
+		clusters.GET("/resources/api-groups", resourceHandler.GetAPIGroups)
+		clusters.GET("/resources/api-resources", resourceHandler.GetResourcesByAPIGroup)
 
 		// 统计信息
 		clusters.GET("/resources/stats", resourceHandler.GetClusterStats)
@@ -47,10 +49,13 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 
 		// 角色管理
 		clusters.GET("/roles/cluster", roleHandler.ListClusterRoles)
+		clusters.POST("/roles/create-defaults", roleHandler.CreateDefaultClusterRoles)
+		clusters.POST("/roles/create-defaults-namespace", roleHandler.CreateDefaultNamespaceRoles)
 		clusters.GET("/roles/namespaces", roleHandler.ListNamespaces)
 		clusters.GET("/roles/namespace", roleHandler.ListNamespaceRoles)
 		clusters.GET("/roles/:namespace/:name", roleHandler.GetRoleDetail)
 		clusters.DELETE("/roles/:namespace/:name", roleHandler.DeleteRole)
+		clusters.POST("/clusters/:id/roles", roleHandler.CreateRole)
 
 		// 角色绑定管理
 		clusters.POST("/role-bindings/bind", roleBindingHandler.BindUserToRole)

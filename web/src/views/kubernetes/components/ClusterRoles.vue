@@ -82,7 +82,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Key, View, Delete } from '@element-plus/icons-vue'
-import { getClusterRoles } from '@/api/kubernetes'
+import { getClusterRoles, deleteRole } from '@/api/kubernetes'
 
 interface ClusterRole {
   name: string
@@ -154,11 +154,13 @@ const handleDelete = async (row: ClusterRole) => {
       cancelButtonText: '取消'
     })
 
+    // 集群角色的 namespace 为空字符串
+    await deleteRole(props.clusterId, '', row.name)
     ElMessage.success('删除成功')
     await loadClusterRoles()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(error.response?.data?.message || '删除失败')
     }
   }
 }

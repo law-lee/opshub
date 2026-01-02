@@ -51,7 +51,7 @@
           <p class="page-subtitle">管理您的 Kubernetes 集群，支持多云平台统一管理</p>
         </div>
       </div>
-      <el-button class="black-button" @click="handleRegister">
+      <el-button v-if="isAdmin" class="black-button" @click="handleRegister">
         <el-icon style="margin-right: 6px;"><Plus /></el-icon>
         注册集群
       </el-button>
@@ -172,7 +172,7 @@
         <template #default="{ row }">
           <div class="action-buttons">
             <el-tooltip content="凭证" placement="top">
-              <el-button link class="action-btn" @click="handleViewConfig(row)">
+              <el-button v-if="isAdmin" link class="action-btn" @click="handleViewConfig(row)">
                 <el-icon><Key /></el-icon>
               </el-button>
             </el-tooltip>
@@ -187,12 +187,12 @@
               </el-button>
             </el-tooltip>
             <el-tooltip content="编辑" placement="top">
-              <el-button link class="action-btn action-edit" @click="handleEdit(row)">
+              <el-button v-if="isAdmin" link class="action-btn action-edit" @click="handleEdit(row)">
                 <el-icon><Edit /></el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
-              <el-button link class="action-btn action-delete" @click="handleDelete(row)">
+              <el-button v-if="isAdmin" link class="action-btn action-delete" @click="handleDelete(row)">
                 <el-icon><Delete /></el-icon>
               </el-button>
             </el-tooltip>
@@ -257,7 +257,7 @@
                     <li>区域: {{ clusterForm.region || '未配置' }}</li>
                   </ul>
                   <p style="margin: 8px 0 0 0; color: #409eff;">
-                    💡 如需更新集群凭证，请在下方重新输入新的 KubeConfig；留空则保持原配置不变
+                    💡 下方显示的是当前的 KubeConfig 配置，您可以直接编辑或上传新文件替换
                   </p>
                 </div>
               </template>
@@ -271,7 +271,6 @@
                 <input
                   ref="fileInputRef"
                   type="file"
-                  accept=".conf,.yaml,.yml,.json"
                   style="display: none"
                   @change="handleFileChange"
                 />
@@ -507,7 +506,7 @@
         </el-tab-pane>
 
         <!-- 用户 -->
-        <el-tab-pane name="users">
+        <el-tab-pane v-if="isAdmin" name="users">
           <template #label>
             <span class="tab-label">
               <el-icon class="tab-icon"><User /></el-icon>
@@ -526,12 +525,12 @@
           </div>
         </el-tab-pane>
 
-        <!-- 角色绑定 -->
-        <el-tab-pane name="roles">
+        <!-- 角色 -->
+        <el-tab-pane v-if="isAdmin" name="roles">
           <template #label>
             <span class="tab-label">
-              <el-icon class="tab-icon"><Lock /></el-icon>
-              角色绑定
+              <el-icon class="tab-icon"><Key /></el-icon>
+              角色
             </span>
           </template>
           <div class="tab-content">
@@ -556,7 +555,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { FormInstance } from 'element-plus'
 import {
   Search,
   InfoFilled,
@@ -594,6 +594,23 @@ import {
 } from '@/api/kubernetes'
 import ClusterAuthDialog from './components/ClusterAuthDialog.vue'
 import UserRoleBinding from './components/UserRoleBinding.vue'
+import { useUserStore } from '@/stores/user'
+
+// 用户权限
+const userStore = useUserStore()
+const isAdmin = computed(() => {
+  if (!userStore.userInfo) {
+    return false
+  }
+
+  // 确保 roles 是数组，如果不是则返回 false
+  if (!Array.isArray(userStore.userInfo.roles)) {
+    return false
+  }
+
+  // 检查是否有 admin 角色
+  return userStore.userInfo.roles.some((role: any) => role.code === 'admin')
+})
 
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -762,22 +779,43 @@ const handleViewDetail = (row: Cluster) => {
 }
 
 // 编辑集群
-const handleEdit = (row: Cluster) => {
+const handleEdit = async (row: Cluster) => {
   isEdit.value = true
   editClusterId.value = row.id
   kubeConfigEditable.value = true
 
-  // 填充表单数据
-  Object.assign(clusterForm, {
-    name: row.name,
-    alias: row.alias,
-    apiEndpoint: row.apiEndpoint,
-    kubeConfig: "", // 允许重新输入 KubeConfig
-    token: "",
-    provider: row.provider,
-    region: row.region,
-    description: row.description
-  })
+  try {
+    // 获取现有的 kubeconfig 内容
+    const config = await getClusterConfig(row.id)
+
+    // 填充表单数据
+    Object.assign(clusterForm, {
+      name: row.name,
+      alias: row.alias,
+      apiEndpoint: row.apiEndpoint,
+      kubeConfig: config, // 显示现有的 KubeConfig
+      token: "",
+      provider: row.provider,
+      region: row.region,
+      description: row.description
+    })
+
+    // 更新行号
+    updateLineCount()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '获取集群配置失败')
+    // 即使失败也打开对话框，但不显示配置
+    Object.assign(clusterForm, {
+      name: row.name,
+      alias: row.alias,
+      apiEndpoint: row.apiEndpoint,
+      kubeConfig: "",
+      token: "",
+      provider: row.provider,
+      region: row.region,
+      description: row.description
+    })
+  }
 
   dialogVisible.value = true
 }
@@ -1260,7 +1298,16 @@ const getProviderText = (provider: string) => {
   return providerMap[provider] || provider || '未配置'
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 确保用户信息已加载
+  if (!userStore.userInfo) {
+    try {
+      await userStore.getProfile()
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+    }
+  }
+
   loadClusters()
 })
 
@@ -1498,20 +1545,26 @@ watch(activeAuthTab, async (newTab) => {
 /* 搜索框样式优化 */
 .search-bar :deep(.el-input__wrapper) {
   border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: 1px solid #dcdfe6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
+  background-color: #fff;
 }
 
 .search-bar :deep(.el-input__wrapper:hover) {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  border-color: #d4af37;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.15);
 }
 
 .search-bar :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-color: #d4af37;
+  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.25);
 }
 
 .search-bar :deep(.el-select .el-input__wrapper) {
   border-radius: 8px;
+  border: 1px solid #dcdfe6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 .search-icon {

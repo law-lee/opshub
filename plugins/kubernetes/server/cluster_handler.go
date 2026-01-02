@@ -16,12 +16,14 @@ import (
 // ClusterHandler 集群 HTTP 处理器
 type ClusterHandler struct {
 	clusterService *service.ClusterService
+	db             *gorm.DB
 }
 
 // NewClusterHandler 创建集群处理器
 func NewClusterHandler(db *gorm.DB) *ClusterHandler {
 	return &ClusterHandler{
 		clusterService: service.NewClusterService(db),
+		db:             db,
 	}
 }
 
@@ -35,6 +37,11 @@ func NewClusterHandler(db *gorm.DB) *ClusterHandler {
 // @Success 200 {object} Response
 // @Router /api/v1/kubernetes/clusters [post]
 func (h *ClusterHandler) CreateCluster(c *gin.Context) {
+	// 检查是否为管理员
+	if !RequireAdmin(c, h.db) {
+		return
+	}
+
 	var req service.CreateClusterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -82,6 +89,11 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 // @Success 200 {object} Response
 // @Router /api/v1/kubernetes/clusters/{id} [put]
 func (h *ClusterHandler) UpdateCluster(c *gin.Context) {
+	// 检查是否为管理员
+	if !RequireAdmin(c, h.db) {
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
@@ -127,6 +139,11 @@ func (h *ClusterHandler) UpdateCluster(c *gin.Context) {
 // @Success 200 {object} Response
 // @Router /api/v1/kubernetes/clusters/{id} [delete]
 func (h *ClusterHandler) DeleteCluster(c *gin.Context) {
+	// 检查是否为管理员
+	if !RequireAdmin(c, h.db) {
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
@@ -265,6 +282,11 @@ func (h *ClusterHandler) TestClusterConnection(c *gin.Context) {
 // @Success 200 {object} Response
 // @Router /api/v1/plugins/kubernetes/clusters/{id}/config [get]
 func (h *ClusterHandler) GetClusterConfig(c *gin.Context) {
+	// 检查是否为管理员
+	if !RequireAdmin(c, h.db) {
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {

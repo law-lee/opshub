@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -27,17 +28,23 @@ func NewResourceHandler(clusterService *service.ClusterService) *ResourceHandler
 
 // NodeInfo 节点信息
 type NodeInfo struct {
-	Name            string   `json:"name"`
-	Status          string   `json:"status"`
-	Roles           string   `json:"roles"`
-	Age             string   `json:"age"`
-	Version         string   `json:"version"`
-	InternalIP      string   `json:"internalIP"`
-	ExternalIP      string   `json:"externalIP,omitempty"`
-	OSImage         string   `json:"osImage"`
-	KernelVersion   string   `json:"kernelVersion"`
-	ContainerRuntime string  `json:"containerRuntime"`
-	Labels          map[string]string `json:"labels"`
+	Name             string            `json:"name"`
+	Status           string            `json:"status"`
+	Roles            string            `json:"roles"`
+	Age              string            `json:"age"`
+	Version          string            `json:"version"`
+	InternalIP       string            `json:"internalIP"`
+	ExternalIP       string            `json:"externalIP,omitempty"`
+	OSImage          string            `json:"osImage"`
+	KernelVersion    string            `json:"kernelVersion"`
+	ContainerRuntime string            `json:"containerRuntime"`
+	Labels           map[string]string `json:"labels"`
+	// 新增字段
+	CPUCapacity      string `json:"cpuCapacity"`      // CPU容量
+	MemoryCapacity   string `json:"memoryCapacity"`   // 内存容量
+	PodCount         int    `json:"podCount"`         // Pod数量
+	Schedulable      bool   `json:"schedulable"`      // 是否可调度
+	TaintCount       int    `json:"taintCount"`       // 污点数量
 }
 
 // PodInfo Pod信息
@@ -184,8 +191,32 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 		return
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前登录用户 ID
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    401,
+			"message": "未授权：无法获取用户信息",
+		})
+		return
+	}
+
+	currentUserID, ok := userIDVal.(uint)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "用户ID类型错误",
+		})
+		return
+	}
+
+	// 调试日志
+	fmt.Printf("🔍 DEBUG [ListNodes]: clusterID=%d, currentUserID=%d\n", clusterID, currentUserID)
+
+	// 使用用户的凭据获取 clientset（实现权限隔离）
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
+		fmt.Printf("❌ DEBUG [ListNodes]: GetClientsetForUser failed for userID=%d: %v\n", currentUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取集群连接失败: " + err.Error(),
@@ -193,24 +224,34 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 		return
 	}
 
+	fmt.Printf("✅ DEBUG [ListNodes]: Successfully got clientset for userID=%d\n", currentUserID)
+
 	nodes, err := clientset.CoreV1().Nodes().List(c.Request.Context(), metav1.ListOptions{})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取节点列表失败: " + err.Error(),
-		})
+		HandleK8sError(c, err, "节点")
 		return
+	}
+
+	// 获取所有Pod以计算每个节点的Pod数量
+	pods, err := clientset.CoreV1().Pods("").List(c.Request.Context(), metav1.ListOptions{})
+	podCountMap := make(map[string]int)
+	if err == nil {
+		for _, pod := range pods.Items {
+			if pod.Spec.NodeName != "" {
+				podCountMap[pod.Spec.NodeName]++
+			}
+		}
 	}
 
 	nodeInfos := make([]NodeInfo, 0, len(nodes.Items))
 	for _, node := range nodes.Items {
 		nodeInfo := NodeInfo{
-			Name:            node.Name,
-			Version:         node.Status.NodeInfo.KubeletVersion,
-			OSImage:         node.Status.NodeInfo.OSImage,
-			KernelVersion:   node.Status.NodeInfo.KernelVersion,
+			Name:             node.Name,
+			Version:          node.Status.NodeInfo.KubeletVersion,
+			OSImage:          node.Status.NodeInfo.OSImage,
+			KernelVersion:    node.Status.NodeInfo.KernelVersion,
 			ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
-			Labels:          node.Labels,
+			Labels:           node.Labels,
 		}
 
 		// 获取节点状态
@@ -246,6 +287,21 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 			nodeInfo.Roles = "worker"
 		}
 
+		// 获取CPU和内存容量
+		cpuCapacity := node.Status.Capacity.Cpu().String()
+		memoryCapacity := node.Status.Capacity.Memory().String()
+		nodeInfo.CPUCapacity = cpuCapacity
+		nodeInfo.MemoryCapacity = memoryCapacity
+
+		// 获取Pod数量
+		nodeInfo.PodCount = podCountMap[node.Name]
+
+		// 判断是否可调度
+		nodeInfo.Schedulable = !node.Spec.Unschedulable
+
+		// 获取污点数量
+		nodeInfo.TaintCount = len(node.Spec.Taints)
+
 		nodeInfos = append(nodeInfos, nodeInfo)
 	}
 
@@ -268,7 +324,14 @@ func (h *ResourceHandler) ListNamespaces(c *gin.Context) {
 		return
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -279,10 +342,7 @@ func (h *ResourceHandler) ListNamespaces(c *gin.Context) {
 
 	namespaces, err := clientset.CoreV1().Namespaces().List(c.Request.Context(), metav1.ListOptions{})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取命名空间列表失败: " + err.Error(),
-		})
+		HandleK8sError(c, err, "命名空间")
 		return
 	}
 
@@ -328,7 +388,14 @@ func (h *ResourceHandler) ListPods(c *gin.Context) {
 		namespace = v1.NamespaceAll
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -339,10 +406,7 @@ func (h *ResourceHandler) ListPods(c *gin.Context) {
 
 	pods, err := clientset.CoreV1().Pods(namespace).List(c.Request.Context(), metav1.ListOptions{})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取Pod列表失败: " + err.Error(),
-		})
+		HandleK8sError(c, err, "Pod")
 		return
 	}
 
@@ -398,7 +462,14 @@ func (h *ResourceHandler) ListDeployments(c *gin.Context) {
 		namespace = v1.NamespaceAll
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -409,10 +480,7 @@ func (h *ResourceHandler) ListDeployments(c *gin.Context) {
 
 	deployments, err := clientset.AppsV1().Deployments(namespace).List(c.Request.Context(), metav1.ListOptions{})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "获取Deployment列表失败: " + err.Error(),
-		})
+		HandleK8sError(c, err, "Deployment")
 		return
 	}
 
@@ -456,7 +524,14 @@ func (h *ResourceHandler) GetClusterStats(c *gin.Context) {
 		return
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -596,7 +671,14 @@ func (h *ResourceHandler) GetClusterNetworkInfo(c *gin.Context) {
 		return
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -800,7 +882,14 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 		return
 	}
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -1076,7 +1165,14 @@ func (h *ResourceHandler) ListEvents(c *gin.Context) {
 
 	namespace := c.Query("namespace")
 
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterID))
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 使用用户凭据获取 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -1145,5 +1241,214 @@ func (h *ResourceHandler) ListEvents(c *gin.Context) {
 		"code":    0,
 		"message": "success",
 		"data":    eventInfos,
+	})
+}
+
+// GetAPIGroups 获取集群的API组列表
+// @Summary 获取API组列表
+// @Description 获取Kubernetes集群所有可用的API组
+// @Tags Kubernetes/Resources
+// @Accept json
+// @Produce json
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} Response
+// @Router /api/v1/plugins/kubernetes/resources/api-groups [get]
+func (h *ResourceHandler) GetAPIGroups(c *gin.Context) {
+	clusterIdStr := c.Query("clusterId")
+	if clusterIdStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "缺少集群ID参数",
+		})
+		return
+	}
+
+	clusterId, err := strconv.ParseUint(clusterIdStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的集群ID",
+		})
+		return
+	}
+
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 获取集群的 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取集群连接失败",
+		})
+		return
+	}
+
+	// 获取所有API组
+	discoveryClient := clientset.Discovery()
+	apiGroupList, err := discoveryClient.ServerGroups()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取API组失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 收集所有API组名称
+	apiGroups := make(map[string]bool)
+	apiGroups["core"] = true // core API 用 "core" 表示
+
+	for _, group := range apiGroupList.Groups {
+		apiGroups[group.Name] = true
+	}
+
+	// 转换为切片并排序（core 放在最前面）
+	groupList := make([]string, 0, len(apiGroups))
+	// 先添加 core
+	groupList = append(groupList, "core")
+	// 再添加其他组（按字母排序）
+	for group := range apiGroups {
+		if group != "core" {
+			groupList = append(groupList, group)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "success",
+		"data":    groupList,
+	})
+}
+
+// GetResourcesByAPIGroup 根据API组获取资源列表
+// @Summary 根据API组获取资源列表
+// @Description 根据选定的API组列表获取所有这些组下的资源类型
+// @Tags Kubernetes/Resources
+// @Accept json
+// @Produce json
+// @Param clusterId query int true "集群ID"
+// @Param apiGroups query string true "API组列表（逗号分隔）"
+// @Success 200 {object} Response
+// @Router /api/v1/plugins/kubernetes/resources/api-resources [get]
+func (h *ResourceHandler) GetResourcesByAPIGroup(c *gin.Context) {
+	clusterIdStr := c.Query("clusterId")
+	if clusterIdStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "缺少集群ID参数",
+		})
+		return
+	}
+
+	clusterId, err := strconv.ParseUint(clusterIdStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的集群ID",
+		})
+		return
+	}
+
+	apiGroupsStr := c.Query("apiGroups")
+	if apiGroupsStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "缺少API组参数",
+		})
+		return
+	}
+
+	// 解析API组列表
+	apiGroups := strings.Split(apiGroupsStr, ",")
+	// 将 "core" 转换为空字符串（Kubernetes core API group 的正确表示）
+	for i, group := range apiGroups {
+		if strings.TrimSpace(group) == "core" {
+			apiGroups[i] = ""
+		}
+	}
+
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 获取集群的 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取集群连接失败",
+		})
+		return
+	}
+
+	// 获取所有API资源和版本
+	discoveryClient := clientset.Discovery()
+	_, resourceLists, err := discoveryClient.ServerGroupsAndResources()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取资源列表失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 使用map去重
+	resourceMap := make(map[string]bool)
+
+	// 收集所有指定API组的资源
+	for _, resourceList := range resourceLists {
+		// 提取GroupVersion中的组名
+		groupVersion := resourceList.GroupVersion
+		groupName := ""
+		if strings.Contains(groupVersion, "/") {
+			parts := strings.Split(groupVersion, "/")
+			if len(parts) == 2 {
+				groupName = parts[0]
+			}
+		}
+
+		// 检查是否在请求的API组列表中
+		matched := false
+		for _, apiGroup := range apiGroups {
+			apiGroup = strings.TrimSpace(apiGroup)
+			if apiGroup == "" {
+				// 空字符串表示core组，匹配 v1
+				if groupVersion == "v1" {
+					matched = true
+					break
+				}
+			} else if groupName == apiGroup || groupVersion == apiGroup {
+				matched = true
+				break
+			}
+		}
+
+		if matched {
+			for _, resource := range resourceList.APIResources {
+				// 过滤掉子资源（如 pods/status, pods/log 等）
+				if !strings.Contains(resource.Name, "/") {
+					resourceMap[resource.Name] = true
+				}
+			}
+		}
+	}
+
+	// 转换为切片
+	resources := make([]string, 0, len(resourceMap))
+	for resource := range resourceMap {
+		resources = append(resources, resource)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "success",
+		"data":    resources,
 	})
 }

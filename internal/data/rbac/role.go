@@ -94,8 +94,8 @@ func (r *roleRepo) AssignMenus(ctx context.Context, roleID uint, menuIDs []uint)
 func (r *roleRepo) GetByUserID(ctx context.Context, userID uint) ([]*rbac.SysRole, error) {
 	var roles []*rbac.SysRole
 	err := r.db.WithContext(ctx).
-		Joins("JOIN sys_user_roles ON sys_user_roles.role_id = sys_role.id").
-		Where("sys_user_roles.user_id = ?", userID).
+		Joins("JOIN sys_user_role ON sys_user_role.role_id = sys_role.id").
+		Where("sys_user_role.user_id = ?", userID).
 		Find(&roles).Error
 	return roles, err
 }

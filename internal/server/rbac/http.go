@@ -115,7 +115,7 @@ func NewRBACServices(db *gorm.DB, jwtSecret string) (
 	menuUseCase := rbacbiz.NewMenuUseCase(menuRepo)
 
 	// 初始化Service
-	authService := rbacService.NewAuthService(jwtSecret)
+	authService := rbacService.NewAuthService(jwtSecret, roleUseCase)
 	userService := rbacService.NewUserService(userUseCase, authService)
 	roleService := rbacService.NewRoleService(roleUseCase)
 	departmentService := rbacService.NewDepartmentService(deptUseCase)

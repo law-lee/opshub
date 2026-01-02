@@ -54,8 +54,14 @@ func (h *RoleHandler) ListClusterRoles(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
 	// 获取集群的 clientset
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterId))
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -74,10 +80,14 @@ func (h *RoleHandler) ListClusterRoles(c *gin.Context) {
 		return
 	}
 
-	// 转换为前端格式
+	// 返回平台管理的所有角色（内置角色 + 用户自建角色）
 	roleList := make([]map[string]interface{}, 0)
 	for _, role := range roles.Items {
-		roleList = append(roleList, convertClusterRole(role))
+		// 显示带有 opshub 管理标签的角色（包括 default-role=true 和 custom-role=true）
+		if role.Labels["opshub.ydcloud-dy.com/managed-by"] == "opshub" {
+			convertedRole := convertClusterRole(role)
+			roleList = append(roleList, convertedRole)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -115,8 +125,14 @@ func (h *RoleHandler) ListNamespaces(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
 	// 获取集群的 clientset
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterId))
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -189,8 +205,14 @@ func (h *RoleHandler) ListNamespaceRoles(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
 	// 获取集群的 clientset
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterId))
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -209,16 +231,20 @@ func (h *RoleHandler) ListNamespaceRoles(c *gin.Context) {
 		return
 	}
 
-	// 转换为前端格式
+	// 返回平台管理的所有角色（内置角色 + 用户自建角色）
 	roleList := make([]map[string]interface{}, 0)
 	for _, role := range roles.Items {
-		roleList = append(roleList, convertNamespaceRole(role, namespace))
+		// 显示带有 opshub 管理标签的角色（包括 default-role=true 和 custom-role=true）
+		if role.Labels["opshub.ydcloud-dy.com/managed-by"] == "opshub" {
+			convertedRole := convertNamespaceRole(role, namespace)
+			roleList = append(roleList, convertedRole)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
 		"message": "success",
-			"data":    roleList,
+		"data":    roleList,
 	})
 }
 
@@ -255,8 +281,14 @@ func (h *RoleHandler) GetRoleDetail(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
 	// 获取集群的 clientset
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterId))
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -298,6 +330,663 @@ func (h *RoleHandler) GetRoleDetail(c *gin.Context) {
 	})
 }
 
+// CreateDefaultClusterRoles 创建默认的集群角色
+// @Summary 创建默认集群角色
+// @Description 创建 OpsHub 平台使用的默认集群角色
+// @Tags Kubernetes/Role
+// @Accept json
+// @Produce json
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} Response
+// @Router /api/v1/plugins/kubernetes/roles/create-defaults [post]
+func (h *RoleHandler) CreateDefaultClusterRoles(c *gin.Context) {
+	clusterIdStr := c.Query("clusterId")
+	if clusterIdStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "缺少集群ID参数",
+		})
+		return
+	}
+
+	clusterId, err := strconv.ParseUint(clusterIdStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的集群ID",
+		})
+		return
+	}
+
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 获取集群的 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取集群连接失败",
+		})
+		return
+	}
+
+	// 定义默认角色及其权限
+	defaultRoles := getDefaultClusterRoles()
+
+	createdRoles := []string{}
+
+	for _, roleDef := range defaultRoles {
+		// 检查角色是否已存在
+		_, err := clientset.RbacV1().ClusterRoles().Get(c.Request.Context(), roleDef.Name, metav1.GetOptions{})
+		if err == nil {
+			// 角色已存在，先删除再创建（确保标签正确）
+			_ = clientset.RbacV1().ClusterRoles().Delete(c.Request.Context(), roleDef.Name, metav1.DeleteOptions{})
+		}
+
+		// 创建角色
+		_, err = clientset.RbacV1().ClusterRoles().Create(c.Request.Context(), &roleDef, metav1.CreateOptions{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "创建角色失败: " + roleDef.Name + ", " + err.Error(),
+			})
+			return
+		}
+		createdRoles = append(createdRoles, roleDef.Name)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "操作完成",
+		"data": gin.H{
+			"created": createdRoles,
+		},
+	})
+}
+
+// getDefaultClusterRoles 获取默认的集群角色定义
+func getDefaultClusterRoles() []rbacv1.ClusterRole {
+	return []rbacv1.ClusterRole{
+		// cluster-owner - 集群所有者，拥有所有权限
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "cluster-owner",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"*"},
+					Verbs:     []string{"*"},
+				},
+				{
+					NonResourceURLs: []string{"*"},
+					Verbs:           []string{"get", "post", "put", "delete", "options", "patch", "head"},
+				},
+			},
+		},
+		// cluster-viewer - 集群只读权限
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "cluster-viewer",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"*"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// manage-appmarket - 管理应用市场
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-appmarket",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"appmarket.ydcloud-dy.com", "*"},
+					Resources: []string{"*"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-cluster-rbac - 管理集群 RBAC
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-cluster-rbac",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-cluster-storage - 管理集群存储
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-cluster-storage",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses", "csidrivers", "csinodes"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumes"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-crd - 管理自定义资源定义
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-crd",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"apiextensions.k8s.io"},
+					Resources: []string{"customresourcedefinitions"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-namespaces - 管理命名空间
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-namespaces",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"namespaces"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-nodes - 管理节点
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-nodes",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"nodes"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// view-cluster-rbac - 查看集群 RBAC
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-cluster-rbac",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-cluster-storage - 查看集群存储
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-cluster-storage",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses", "csidrivers", "csinodes"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumes"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-crd - 查看 CRD
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-crd",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"apiextensions.k8s.io"},
+					Resources: []string{"customresourcedefinitions"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-events - 查看事件
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-events",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"events"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-namespaces - 查看命名空间
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-namespaces",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"namespaces"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-nodes - 查看节点
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-nodes",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by": "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"nodes"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+	}
+}
+
+// CreateDefaultNamespaceRoles 创建默认的命名空间角色
+// @Summary 创建默认命名空间角色
+// @Description 在指定命名空间创建 OpsHub 平台使用的默认角色
+// @Tags Kubernetes/Role
+// @Accept json
+// @Produce json
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string true "命名空间"
+// @Success 200 {object} Response
+// @Router /api/v1/plugins/kubernetes/roles/create-defaults-namespace [post]
+func (h *RoleHandler) CreateDefaultNamespaceRoles(c *gin.Context) {
+	clusterIdStr := c.Query("clusterId")
+	namespace := c.Query("namespace")
+
+	if clusterIdStr == "" || namespace == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "缺少必需参数",
+		})
+		return
+	}
+
+	clusterId, err := strconv.ParseUint(clusterIdStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的集群ID",
+		})
+		return
+	}
+
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 获取集群的 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取集群连接失败",
+		})
+		return
+	}
+
+	// 定义默认角色及其权限
+	defaultRoles := getDefaultNamespaceRoles(namespace)
+
+	createdRoles := []string{}
+
+	for _, roleDef := range defaultRoles {
+		// 检查角色是否已存在
+		_, err := clientset.RbacV1().Roles(namespace).Get(c.Request.Context(), roleDef.Name, metav1.GetOptions{})
+		if err == nil {
+			// 角色已存在，先删除再创建（确保标签正确）
+			_ = clientset.RbacV1().Roles(namespace).Delete(c.Request.Context(), roleDef.Name, metav1.DeleteOptions{})
+		}
+
+		// 创建角色
+		_, err = clientset.RbacV1().Roles(namespace).Create(c.Request.Context(), &roleDef, metav1.CreateOptions{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "创建角色失败: " + roleDef.Name + ", " + err.Error(),
+			})
+			return
+		}
+		createdRoles = append(createdRoles, roleDef.Name)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "操作完成",
+		"data": gin.H{
+			"created": createdRoles,
+		},
+	})
+}
+
+// getDefaultNamespaceRoles 获取默认的命名空间角色定义
+func getDefaultNamespaceRoles(namespace string) []rbacv1.Role {
+	return []rbacv1.Role{
+		// namespace-owner - 命名空间所有者，拥有所有权限
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "namespace-owner",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"*"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// namespace-viewer - 命名空间查看者，只读权限
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "namespace-viewer",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"*"},
+					Resources: []string{"*"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// manage-workload - 管理工作负载
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-workload",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"apps", "extensions"},
+					Resources: []string{"deployments", "statefulsets", "daemonsets", "replicasets"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{"batch"},
+					Resources: []string{"jobs", "cronjobs"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods", "pods/attach", "pods/exec", "pods/portforward", "pods/log"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-config - 管理配置
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-config",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps", "secrets"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-rbac - 管理命名空间 RBAC
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-rbac",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"roles", "rolebindings"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-service-discovery - 管理服务发现
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-service-discovery",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"services", "endpoints", "endpointslices"},
+					Verbs:     []string{"*"},
+				},
+				{
+					APIGroups: []string{"networking.k8s.io"},
+					Resources: []string{"ingresses", "ingressclasses"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// manage-storage - 管理存储
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "manage-storage",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumeclaims"},
+					Verbs:     []string{"*"},
+				},
+			},
+		},
+		// view-workload - 查看工作负载
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-workload",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"apps", "extensions"},
+					Resources: []string{"deployments", "statefulsets", "daemonsets", "replicasets"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"batch"},
+					Resources: []string{"jobs", "cronjobs"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods", "pods/log"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-config - 查看配置
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-config",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps", "secrets"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-rbac - 查看 RBAC
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-rbac",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"roles", "rolebindings"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-service-discovery - 查看服务发现
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-service-discovery",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"services", "endpoints", "endpointslices"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"networking.k8s.io"},
+					Resources: []string{"ingresses", "ingressclasses"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+		// view-storage - 查看存储
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "view-storage",
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":    "opshub",
+					"opshub.ydcloud-dy.com/default-role": "true",
+				},
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"persistentvolumeclaims"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+			},
+		},
+	}
+}
+
 // DeleteRole 删除角色
 // @Summary 删除角色
 // @Description 删除指定的角色
@@ -331,8 +1020,14 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
 	// 获取集群的 clientset
-	clientset, err := h.clusterService.GetCachedClientset(c.Request.Context(), uint(clusterId))
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -341,11 +1036,36 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 		return
 	}
 
-	// 删除角色
-	if namespace == "" {
+	// 检查是否为集群角色或命名空间角色
+	// 空字符串或 "cluster" 表示集群角色
+	if namespace == "" || namespace == "cluster" {
+		// 集群角色 - 先获取角色信息检查是否可删除
+		role, err := clientset.RbacV1().ClusterRoles().Get(c.Request.Context(), name, metav1.GetOptions{})
+		if err == nil {
+			// 检查是否为代码中定义的默认角色
+			if role.Labels["opshub.ydcloud-dy.com/default-role"] == "true" {
+				c.JSON(http.StatusForbidden, gin.H{
+					"code":    403,
+					"message": "平台默认角色不能删除",
+				})
+				return
+			}
+		}
 		// 删除集群角色
 		err = clientset.RbacV1().ClusterRoles().Delete(c.Request.Context(), name, metav1.DeleteOptions{})
 	} else {
+		// 命名空间角色 - 先获取角色信息检查是否可删除
+		role, err := clientset.RbacV1().Roles(namespace).Get(c.Request.Context(), name, metav1.GetOptions{})
+		if err == nil {
+			// 检查是否为代码中定义的默认角色
+			if role.Labels["opshub.ydcloud-dy.com/default-role"] == "true" {
+				c.JSON(http.StatusForbidden, gin.H{
+					"code":    403,
+					"message": "平台默认角色不能删除",
+				})
+				return
+			}
+		}
 		// 删除命名空间角色
 		err = clientset.RbacV1().Roles(namespace).Delete(c.Request.Context(), name, metav1.DeleteOptions{})
 	}
@@ -375,12 +1095,18 @@ func convertClusterRole(role rbacv1.ClusterRole) map[string]interface{} {
 		labels[key] = value
 	}
 
+	// 判断是否为自定义角色（可删除）
+	// 1. 有 default-role=true 标签的（代码中定义的平台默认角色）不可删除
+	// 2. 有 custom-role=true 标签的（用户在平台上创建的角色）可以删除
+	isCustom := role.Labels["opshub.ydcloud-dy.com/custom-role"] == "true"
+
 	return map[string]interface{}{
 		"name":      role.Name,
 		"namespace": "",
 		"labels":    labels,
 		"age":       age,
 		"rules":     role.Rules,
+		"isCustom":  isCustom,
 	}
 }
 
@@ -395,12 +1121,18 @@ func convertNamespaceRole(role rbacv1.Role, namespace string) map[string]interfa
 		labels[key] = value
 	}
 
+	// 判断是否为自定义角色（可删除）
+	// 1. 有 default-role=true 标签的（代码中定义的平台默认角色）不可删除
+	// 2. 有 custom-role=true 标签的（用户在平台上创建的角色）可以删除
+	isCustom := role.Labels["opshub.ydcloud-dy.com/custom-role"] == "true"
+
 	return map[string]interface{}{
 		"name":      role.Name,
 		"namespace": namespace,
 		"labels":    labels,
 		"age":       age,
 		"rules":     role.Rules,
+		"isCustom":  isCustom,
 	}
 }
 
@@ -460,4 +1192,154 @@ func convertNamespaceRoleDetail(role rbacv1.Role, namespace string) map[string]i
 	detail["rules"] = rules
 
 	return detail
+}
+
+// CreateRoleRequest 创建角色请求
+type CreateRoleRequest struct {
+	Namespace string                `json:"namespace"`
+	Name      string                `json:"name"`
+	Rules     []CreateRoleRule      `json:"rules"`
+}
+
+// CreateRoleRule 角色规则
+type CreateRoleRule struct {
+	APIGroups    []string `json:"apiGroups"`
+	Resources    []string `json:"resources"`
+	ResourceNames []string `json:"resourceNames"`
+	Verbs        []string `json:"verbs"`
+}
+
+// CreateRole 创建角色
+// @Summary 创建角色
+// @Description 创建集群角色或命名空间角色
+// @Tags Kubernetes/Role
+// @Accept json
+// @Produce json
+// @Param clusterId path int true "集群ID"
+// @Param request body CreateRoleRequest true "角色信息"
+// @Success 200 {object} Response
+// @Router /api/v1/plugins/kubernetes/clusters/{clusterId}/roles [post]
+func (h *RoleHandler) CreateRole(c *gin.Context) {
+	clusterIdStr := c.Param("id")
+	if clusterIdStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "缺少集群ID参数",
+		})
+		return
+	}
+
+	clusterId, err := strconv.ParseUint(clusterIdStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "无效的集群ID",
+		})
+		return
+	}
+
+	// 解析请求
+	var req CreateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 验证角色名称
+	if req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "角色名称不能为空",
+		})
+		return
+	}
+
+	if len(req.Rules) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "至少需要一条规则",
+		})
+		return
+	}
+
+	// 获取当前用户 ID
+	currentUserID, ok := GetCurrentUserID(c)
+	if !ok {
+		return
+	}
+
+	// 获取集群的 clientset
+	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterId), currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取集群连接失败",
+		})
+		return
+	}
+
+	// 构建角色规则
+	rules := make([]rbacv1.PolicyRule, len(req.Rules))
+	for i, rule := range req.Rules {
+		rules[i] = rbacv1.PolicyRule{
+			APIGroups:    rule.APIGroups,
+			Resources:    rule.Resources,
+			ResourceNames: rule.ResourceNames,
+			Verbs:        rule.Verbs,
+		}
+	}
+
+	// 判断是集群角色还是命名空间角色
+	if req.Namespace == "" {
+		// 创建集群角色
+		role := &rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: req.Name,
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":  "opshub",
+					"opshub.ydcloud-dy.com/custom-role": "true",
+				},
+			},
+			Rules: rules,
+		}
+
+		_, err = clientset.RbacV1().ClusterRoles().Create(c.Request.Context(), role, metav1.CreateOptions{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "创建集群角色失败: " + err.Error(),
+			})
+			return
+		}
+	} else {
+		// 创建命名空间角色
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      req.Name,
+				Namespace: req.Namespace,
+				Labels: map[string]string{
+					"opshub.ydcloud-dy.com/managed-by":  "opshub",
+					"opshub.ydcloud-dy.com/custom-role": "true",
+				},
+			},
+			Rules: rules,
+		}
+
+		_, err = clientset.RbacV1().Roles(req.Namespace).Create(c.Request.Context(), role, metav1.CreateOptions{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "创建命名空间角色失败: " + err.Error(),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "创建成功",
+	})
 }

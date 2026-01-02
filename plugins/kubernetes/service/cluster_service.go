@@ -31,8 +31,8 @@ type ClusterService struct {
 	clusterBiz *biz.ClusterBiz
 	db         *gorm.DB
 
-	// 缓存已连接的集群 clientset
-	clientsetCache map[uint]*kubernetes.Clientset
+	// 缓存已连接的集群 clientset (key: "clusterID-userID")
+	clientsetCache map[string]*kubernetes.Clientset
 	metricsCache   map[uint]*metricsv.Clientset
 	cacheMutex     sync.RWMutex
 }
@@ -42,7 +42,7 @@ func NewClusterService(db *gorm.DB) *ClusterService {
 	return &ClusterService{
 		clusterBiz:     biz.NewClusterBiz(db),
 		db:             db,
-		clientsetCache: make(map[uint]*kubernetes.Clientset),
+		clientsetCache: make(map[string]*kubernetes.Clientset),
 		metricsCache:   make(map[uint]*metricsv.Clientset),
 	}
 }
@@ -171,10 +171,13 @@ func (s *ClusterService) TestClusterConnection(ctx context.Context, id uint) (st
 	return s.clusterBiz.TestClusterConnection(ctx, id)
 }
 
-// GetCachedClientset 获取缓存的 clientset
+// GetCachedClientset 获取缓存的 clientset（使用管理员权限）
+// 注意：此方法使用集群管理员权限，建议使用 GetClientsetForUser 实现用户级权限控制
 func (s *ClusterService) GetCachedClientset(ctx context.Context, id uint) (*kubernetes.Clientset, error) {
+	cacheKey := fmt.Sprintf("%d-admin", id)
+
 	s.cacheMutex.RLock()
-	clientset, exists := s.clientsetCache[id]
+	clientset, exists := s.clientsetCache[cacheKey]
 	s.cacheMutex.RUnlock()
 
 	if exists {
@@ -189,10 +192,78 @@ func (s *ClusterService) GetCachedClientset(ctx context.Context, id uint) (*kube
 
 	// 存入缓存
 	s.cacheMutex.Lock()
-	s.clientsetCache[id] = clientset
+	s.clientsetCache[cacheKey] = clientset
 	s.cacheMutex.Unlock()
 
 	return clientset, nil
+}
+
+// GetClientsetForUser 获取基于用户权限的 clientset
+// 这个方法会使用用户在 K8s 集群中的 ServiceAccount 凭据创建连接
+// 这样可以实现真正的用户级权限隔离
+func (s *ClusterService) GetClientsetForUser(ctx context.Context, clusterID uint, userID uint) (*kubernetes.Clientset, error) {
+	cacheKey := fmt.Sprintf("%d-%d", clusterID, userID)
+
+	fmt.Printf("🔍 [GetClientsetForUser] clusterID=%d, userID=%d, cacheKey=%s\n", clusterID, userID, cacheKey)
+
+	s.cacheMutex.RLock()
+	clientset, exists := s.clientsetCache[cacheKey]
+	s.cacheMutex.RUnlock()
+
+	if exists {
+		fmt.Printf("✅ [GetClientsetForUser] Using cached clientset for %s\n", cacheKey)
+		return clientset, nil
+	}
+
+	fmt.Printf("🔄 [GetClientsetForUser] Cache miss, creating new clientset for userID=%d\n", userID)
+
+	// 缓存不存在，查询用户的 ServiceAccount 凭据
+	var config model.UserKubeConfig
+	err := s.db.Where("cluster_id = ? AND user_id = ? AND is_active = 1", clusterID, userID).
+		Order("created_at DESC").
+		First(&config).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			fmt.Printf("❌ [GetClientsetForUser] 用户 %d 尚未申请集群 %d 的访问凭据\n", userID, clusterID)
+			return nil, fmt.Errorf("用户尚未申请该集群的访问凭据，请先申请 kubeconfig")
+		}
+		fmt.Printf("❌ [GetClientsetForUser] 查询用户凭据失败: %v\n", err)
+		return nil, fmt.Errorf("查询用户凭据失败: %w", err)
+	}
+
+	fmt.Printf("✅ [GetClientsetForUser] Found SA: %s for userID=%d\n", config.ServiceAccount, userID)
+
+	// 获取集群信息
+	cluster, err := s.clusterBiz.GetCluster(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 先获取管理员 clientset 用于生成用户的 kubeconfig
+	adminClientset, err := s.clusterBiz.GetClusterClientset(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 为用户的 ServiceAccount 生成 kubeconfig
+	kubeConfigContent, err := s.generateKubeConfigForServiceAccount(adminClientset, cluster, config.ServiceAccount)
+	if err != nil {
+		return nil, fmt.Errorf("生成用户 kubeconfig 失败: %w", err)
+	}
+
+	// 使用用户的 kubeconfig 创建 clientset
+	userClientset, err := biz.CreateClientsetFromKubeConfig(kubeConfigContent)
+	if err != nil {
+		return nil, fmt.Errorf("创建用户 clientset 失败: %w", err)
+	}
+
+	// 存入缓存
+	s.cacheMutex.Lock()
+	s.clientsetCache[cacheKey] = userClientset
+	s.cacheMutex.Unlock()
+
+	return userClientset, nil
 }
 
 // GetClusterKubeConfig 获取集群的 KubeConfig（解密后的）
@@ -217,10 +288,19 @@ func (s *ClusterService) ClearClientsetCache(id uint) {
 }
 
 // clearClientsetCache 内部方法：清除缓存
+// 清除所有与该集群相关的 clientset 缓存（包括所有用户的）
 func (s *ClusterService) clearClientsetCache(id uint) {
 	s.cacheMutex.Lock()
-	delete(s.clientsetCache, id)
-	s.cacheMutex.Unlock()
+	defer s.cacheMutex.Unlock()
+
+	// 由于缓存 key 格式为 "clusterID-userID" 或 "clusterID-admin"
+	// 需要遍历并删除所有以该 clusterID 开头的缓存
+	clusterPrefix := fmt.Sprintf("%d-", id)
+	for key := range s.clientsetCache {
+		if strings.HasPrefix(key, clusterPrefix) {
+			delete(s.clientsetCache, key)
+		}
+	}
 }
 
 // toClusterResponse 转换为响应对象
@@ -540,15 +620,16 @@ func (s *ClusterService) RevokeUserKubeConfig(ctx context.Context, clusterID uin
 		return err
 	}
 
-	// 删除 ClusterRoleBinding
+	// 删除 ClusterRoleBinding (如果有的话，例如 admin 用户)
 	crbName := username + "-binding"
 	err = clientset.RbacV1().ClusterRoleBindings().Delete(ctx, crbName, metav1.DeleteOptions{})
-	if err != nil {
-		// ClusterRoleBinding 可能不存在，继续删除 ServiceAccount
+	if err != nil && !k8serrors.IsNotFound(err) {
+		// ClusterRoleBinding 可能不存在（普通用户没有），继续删除 ServiceAccount
+		fmt.Printf("删除 ClusterRoleBinding 警告: %v\n", err)
 	}
 
-	// 删除 ServiceAccount
-	err = clientset.CoreV1().ServiceAccounts("default").Delete(ctx, username, metav1.DeleteOptions{})
+	// 删除 ServiceAccount - 在 opshub-auth namespace 中
+	err = clientset.CoreV1().ServiceAccounts(OpsHubAuthNamespace).Delete(ctx, username, metav1.DeleteOptions{})
 	if err != nil {
 		return fmt.Errorf("删除 ServiceAccount 失败: %w", err)
 	}
