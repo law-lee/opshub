@@ -34,13 +34,13 @@
           <template v-if="scalingStrategy.strategyType === 'RollingUpdate'">
             <div class="form-row">
               <label>最大激增 (Max Surge)</label>
-              <el-input :model-value="scalingStrategy.maxSurge" @update:model-value="updateScalingStrategy('maxSurge', $event)" size="small" placeholder="例如: 25%">
+              <el-input :model-value="scalingStrategy.maxSurge" @update:model-value="updateScalingStrategy('maxSurge', $event)" size="small" placeholder="例如: 25%" />
               <div class="form-tip">滚动更新期间最多可以超出期望副本数的数量，可以是数量或百分比</div>
             </div>
 
             <div class="form-row">
               <label>最大不可用 (Max Unavailable)</label>
-              <el-input :model-value="scalingStrategy.maxUnavailable" @update:model-value="updateScalingStrategy('maxUnavailable', $event)" size="small" placeholder="例如: 25%">
+              <el-input :model-value="scalingStrategy.maxUnavailable" @update:model-value="updateScalingStrategy('maxUnavailable', $event)" size="small" placeholder="例如: 25%" />
               <div class="form-tip">滚动更新期间最多可以不可用的 Pod 数量，可以是数量或百分比</div>
             </div>
           </template>
@@ -105,7 +105,7 @@
             <template v-if="scalingStrategy.strategyType === 'RollingUpdate'">
               <div class="form-row">
                 <label>最大不可用 (Max Unavailable)</label>
-                <el-input :model-value="scalingStrategy.maxUnavailable" @update:model-value="updateScalingStrategy('maxUnavailable', $event)" size="small" placeholder="例如: 1">
+                <el-input :model-value="scalingStrategy.maxUnavailable" @update:model-value="updateScalingStrategy('maxUnavailable', $event)" size="small" placeholder="例如: 1" />
                 <div class="form-tip">滚动更新期间最多可以不可用的 Pod 数量</div>
               </div>
             </template>
