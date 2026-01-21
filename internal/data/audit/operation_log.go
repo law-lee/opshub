@@ -26,7 +26,7 @@ func (r *operationLogRepo) GetByID(ctx context.Context, id uint) (*audit.SysOper
 	return &log, err
 }
 
-func (r *operationLogRepo) List(ctx context.Context, page, pageSize int, username, module, action, startTime, endTime string) ([]*audit.SysOperationLog, int64, error) {
+func (r *operationLogRepo) List(ctx context.Context, page, pageSize int, username, module, action, status, startTime, endTime string) ([]*audit.SysOperationLog, int64, error) {
 	var logs []*audit.SysOperationLog
 	var total int64
 
@@ -40,6 +40,21 @@ func (r *operationLogRepo) List(ctx context.Context, page, pageSize int, usernam
 	}
 	if action != "" {
 		query = query.Where("action = ?", action)
+	}
+	if status != "" {
+		// 处理状态码范围查询
+		switch status {
+		case "2xx":
+			query = query.Where("status >= 200 AND status < 300")
+		case "3xx":
+			query = query.Where("status >= 300 AND status < 400")
+		case "4xx":
+			query = query.Where("status >= 400 AND status < 500")
+		case "5xx":
+			query = query.Where("status >= 500 AND status < 600")
+		default:
+			query = query.Where("status = ?", status)
+		}
 	}
 	if startTime != "" {
 		t, err := time.Parse("2006-01-02", startTime)

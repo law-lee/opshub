@@ -45,12 +45,13 @@
         clearable
         class="filter-select"
       >
-        <el-option label="用户管理" value="用户管理" />
-        <el-option label="角色管理" value="角色管理" />
-        <el-option label="部门管理" value="部门管理" />
-        <el-option label="菜单管理" value="菜单管理" />
-        <el-option label="岗位管理" value="岗位管理" />
-        <el-option label="主机管理" value="主机管理" />
+        <el-option label="系统管理" value="系统管理" />
+        <el-option label="个人信息" value="个人信息" />
+        <el-option label="操作审计" value="操作审计" />
+        <el-option label="资产管理" value="资产管理" />
+        <el-option label="容器管理" value="容器管理" />
+        <el-option label="监控中心" value="监控中心" />
+        <el-option label="任务中心" value="任务中心" />
       </el-select>
       <el-select
         v-model="searchForm.action"
@@ -64,6 +65,17 @@
         <el-option label="删除" value="删除" />
         <el-option label="登录" value="登录" />
         <el-option label="登出" value="登出" />
+      </el-select>
+      <el-select
+        v-model="searchForm.status"
+        placeholder="状态码"
+        clearable
+        class="filter-select"
+      >
+        <el-option label="成功 (2xx)" value="2xx" />
+        <el-option label="重定向 (3xx)" value="3xx" />
+        <el-option label="客户端错误 (4xx)" value="4xx" />
+        <el-option label="服务器错误 (5xx)" value="5xx" />
       </el-select>
       <el-date-picker
         v-model="dateRange"
@@ -95,7 +107,7 @@
           <template #default="{ row }">
             <div class="user-cell">
               <el-icon class="user-icon"><User /></el-icon>
-              <span>{{ row.realName || row.username }}</span>
+              <span>{{ row.realName || row.username || '-' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -176,6 +188,7 @@ const searchForm = reactive({
   username: '',
   module: '',
   action: '',
+  status: '',
   startTime: '',
   endTime: ''
 })
@@ -237,6 +250,7 @@ const handleReset = () => {
   searchForm.username = ''
   searchForm.module = ''
   searchForm.action = ''
+  searchForm.status = ''
   searchForm.startTime = ''
   searchForm.endTime = ''
   dateRange.value = []
@@ -309,7 +323,7 @@ const getMethodType = (method: string) => {
 }
 
 // 实时搜索
-watch([() => searchForm.username, () => searchForm.module, () => searchForm.action], () => {
+watch([() => searchForm.username, () => searchForm.module, () => searchForm.action, () => searchForm.status], () => {
   pagination.page = 1
   loadLogList()
 })

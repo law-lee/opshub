@@ -30,6 +30,11 @@ export const deleteRole = (id: number) => {
   return request.delete(`/api/v1/roles/${id}`)
 }
 
+// 获取角色菜单
+export const getRoleMenus = (id: number) => {
+  return request.get(`/api/v1/roles/${id}`)
+}
+
 // 分配角色菜单
 export const assignRoleMenus = (id: number, menuIds: number[]) => {
   return request.post(`/api/v1/roles/${id}/menus`, { menuIds })

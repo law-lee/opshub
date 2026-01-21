@@ -42,8 +42,7 @@
           <el-option label="全部" value="" />
           <el-option label="阿里云" value="aliyun" />
           <el-option label="腾讯云" value="tencent" />
-          <el-option label="AWS" value="aws" />
-          <el-option label="华为云" value="huawei" />
+          <el-option label="京东云" value="jdcloud" />
         </el-select>
 
         <el-select
@@ -375,8 +374,7 @@ const formRef = ref()
 const providers = [
   { value: 'aliyun', label: '阿里云', short: '阿里' },
   { value: 'tencent', label: '腾讯云', short: '腾讯' },
-  { value: 'aws', label: 'AWS', short: 'AWS' },
-  { value: 'huawei', label: '华为云', short: '华为' }
+  { value: 'jdcloud', label: '京东云', short: '京东' }
 ]
 
 // 当前厂商的区域列表（新增/编辑对话框用）
@@ -438,8 +436,7 @@ const getProviderType = (provider: string) => {
   const typeMap: Record<string, string> = {
     aliyun: 'warning',
     tencent: 'info',
-    aws: 'success',
-    huawei: 'primary'
+    jdcloud: 'danger'
   }
   return typeMap[provider] || ''
 }
@@ -696,17 +693,6 @@ const getLocalRegions = (provider: string): any[] => {
       { value: 'ap-beijing', label: '华北地区 (北京)' },
       { value: 'ap-chengdu', label: '西南地区 (成都)' },
       { value: 'ap-chongqing', label: '西南地区 (重庆)' }
-    ],
-    aws: [
-      { value: 'us-east-1', label: 'US East (N. Virginia)' },
-      { value: 'us-west-2', label: 'US West (Oregon)' },
-      { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' }
-    ],
-    huawei: [
-      { value: 'cn-south-1', label: '华南-广州' },
-      { value: 'cn-east-3', label: '华东-上海' },
-      { value: 'cn-north-1', label: '华北-北京' },
-      { value: 'cn-southwest-2', label: '西南-贵阳' }
     ]
   }
   return localMap[provider] || []
@@ -723,26 +709,30 @@ const handleSelectAll = (checked: boolean) => {
 
 // 获取状态类型
 const getStatusType = (status: string) => {
+  // 统一转为小写进行比较，兼容不同云厂商返回的状态格式
+  const statusLower = status.toLowerCase()
   const typeMap: Record<string, string> = {
-    'Running': 'success',
-    'Starting': 'warning',
-    'Stopping': 'warning',
-    'Stopped': 'info',
-    'Deleted': 'danger'
+    'running': 'success',
+    'starting': 'warning',
+    'stopping': 'warning',
+    'stopped': 'info',
+    'deleted': 'danger'
   }
-  return typeMap[status] || 'info'
+  return typeMap[statusLower] || 'info'
 }
 
 // 获取状态文本
 const getStatusText = (status: string) => {
+  // 统一转为小写进行比较，兼容不同云厂商返回的状态格式
+  const statusLower = status.toLowerCase()
   const textMap: Record<string, string> = {
-    'Running': '运行中',
-    'Starting': '启动中',
-    'Stopping': '停止中',
-    'Stopped': '已停止',
-    'Deleted': '已删除'
+    'running': '运行中',
+    'starting': '启动中',
+    'stopping': '停止中',
+    'stopped': '已停止',
+    'deleted': '已删除'
   }
-  return textMap[status] || status
+  return textMap[statusLower] || status
 }
 
 // 选择变化
@@ -1029,11 +1019,7 @@ onMounted(() => {
 }
 
 .provider-option:nth-child(3) .provider-short {
-  background: linear-gradient(135deg, #ff9900 0%, #ffb84d 100%);
-}
-
-.provider-option:nth-child(4) .provider-short {
-  background: linear-gradient(135deg, #ce0e2d 0%, #e63946 100%);
+  background: linear-gradient(135deg, #e1251b 0%, #f363d6 100%);
 }
 
 .provider-name {

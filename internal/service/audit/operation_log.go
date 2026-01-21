@@ -57,16 +57,33 @@ func toOperationLogListResponse(log *audit.SysOperationLog) OperationLogListResp
 }
 
 // ListOperationLogs 操作日志列表
+// @Summary 获取操作日志列表
+// @Description 分页获取系统操作日志，支持按用户、模块、操作、状态和时间范围筛选
+// @Tags 审计管理-操作日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param username query string false "用户名"
+// @Param module query string false "模块名"
+// @Param action query string false "操作"
+// @Param status query string false "状态"
+// @Param startTime query string false "开始时间"
+// @Param endTime query string false "结束时间"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /audit/operation-logs [get]
 func (s *OperationLogService) ListOperationLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
 	username := c.Query("username")
 	module := c.Query("module")
 	action := c.Query("action")
+	status := c.Query("status")
 	startTime := c.Query("startTime")
 	endTime := c.Query("endTime")
 
-	logs, total, err := s.useCase.List(c.Request.Context(), page, pageSize, username, module, action, startTime, endTime)
+	logs, total, err := s.useCase.List(c.Request.Context(), page, pageSize, username, module, action, status, startTime, endTime)
 	if err != nil {
 		response.ErrorCode(c, http.StatusInternalServerError, "查询失败: "+err.Error())
 		return
@@ -86,6 +103,15 @@ func (s *OperationLogService) ListOperationLogs(c *gin.Context) {
 }
 
 // GetOperationLog 获取操作日志详情
+// @Summary 获取操作日志详情
+// @Description 获取单条操作日志的详细信息
+// @Tags 审计管理-操作日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "操作日志ID"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /audit/operation-logs/{id} [get]
 func (s *OperationLogService) GetOperationLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)

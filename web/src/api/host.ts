@@ -118,3 +118,28 @@ export const importFromExcel = (file: File, type?: string, groupId?: number) => 
 export const batchDeleteHosts = (hostIds: number[]) => {
   return request.post('/api/v1/hosts/batch-delete', { hostIds })
 }
+
+// 文件管理
+export const listHostFiles = (hostId: number, path: string = '~') => {
+  return request.get(`/api/v1/hosts/${hostId}/files`, { params: { path } })
+}
+
+export const uploadHostFile = (hostId: number, file: File, path: string = '~/') => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('path', path)
+  return request.post(`/api/v1/hosts/${hostId}/files/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export const downloadHostFile = (hostId: number, path: string) => {
+  return request.get(`/api/v1/hosts/${hostId}/files/download`, {
+    params: { path },
+    responseType: 'blob'
+  })
+}
+
+export const deleteHostFile = (hostId: number, path: string) => {
+  return request.delete(`/api/v1/hosts/${hostId}/files`, { data: { path } })
+}

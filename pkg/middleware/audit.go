@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ydcloud-dy/opshub/internal/biz/audit"
+	"github.com/ydcloud-dy/opshub/internal/service/rbac"
 	appLogger "github.com/ydcloud-dy/opshub/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -113,10 +114,10 @@ func shouldSkipLog(path string) bool {
 
 // getUserInfo 从上下文中获取用户信息
 func getUserInfo(c *gin.Context) (uint, string, string) {
-	// 从上下文中获取用户信息（在认证中间件中设置）
-	if userID, exists := c.Get("userID"); exists {
+	// 使用 rbac 包中定义的常量键名（与认证中间件一致）
+	if userID, exists := c.Get(rbac.UserIdKey); exists {
 		if uid, ok := userID.(uint); ok {
-			if username, exists := c.Get("username"); exists {
+			if username, exists := c.Get(rbac.UsernameKey); exists {
 				if uname, ok := username.(string); ok {
 					// 尝试获取真实姓名
 					realName := ""
@@ -353,9 +354,6 @@ func getK8sOperationDescription(path string, method string) string {
 func getMonitorOperationDescription(path string, method string) string {
 	if strings.Contains(path, "/domains") {
 		return "域名监控操作"
-	}
-	if strings.Contains(path, "/trouble") {
-		return "故障处理操作"
 	}
 	return "监控中心操作"
 }

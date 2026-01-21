@@ -221,7 +221,7 @@ func (h *AlertHandler) DeleteAlertChannel(c *gin.Context) {
 // @Router /monitor/alerts/receivers [get]
 func (h *AlertHandler) ListAlertReceivers(c *gin.Context) {
 	var receivers []model.AlertReceiver
-	if err := h.db.Preload("User").Find(&receivers).Error; err != nil {
+	if err := h.db.Find(&receivers).Error; err != nil {
 		c.JSON(500, gin.H{
 			"code":    500,
 			"message": "获取告警接收人列表失败",
@@ -256,7 +256,7 @@ func (h *AlertHandler) GetAlertReceiver(c *gin.Context) {
 	}
 
 	var receiver model.AlertReceiver
-	if err := h.db.Preload("User").First(&receiver, id).Error; err != nil {
+	if err := h.db.First(&receiver, id).Error; err != nil {
 		c.JSON(404, gin.H{
 			"code":    404,
 			"message": "告警接收人不存在",
@@ -410,6 +410,234 @@ func (h *AlertHandler) DeleteAlertReceiver(c *gin.Context) {
 	})
 }
 
+// ========== 告警接收人与通道关联管理 ==========
+
+// ListReceiverChannels 获取接收人的通道关联列表
+// @Summary 获取接收人的通道关联列表
+// @Tags AlertReceiverChannel
+// @Accept json
+// @Produce json
+// @Param receiverId path int true "接收人ID"
+// @Success 200 {array} model.AlertReceiverChannel
+// @Router /monitor/alerts/receiver-channels/:receiverId [get]
+func (h *AlertHandler) ListReceiverChannels(c *gin.Context) {
+	var receiverID uint
+	if _, err := fmt.Sscanf(c.Param("receiverId"), "%d", &receiverID); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "无效的接收人ID",
+		})
+		return
+	}
+
+	var channels []model.AlertReceiverChannel
+	if err := h.db.Where("receiver_id = ?", receiverID).Find(&channels).Error; err != nil {
+		c.JSON(500, gin.H{
+			"code":    500,
+			"message": "获取通道关联失败",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "success",
+		"data":    channels,
+	})
+}
+
+// AddReceiverChannel 添加接收人通道关联
+// @Summary 添加接收人通道关联
+// @Tags AlertReceiverChannel
+// @Accept json
+// @Produce json
+// @Param receiverId path int true "接收人ID"
+// @Param req body model.AlertReceiverChannel true "关联信息"
+// @Success 200 {object} model.AlertReceiverChannel
+// @Router /monitor/alerts/receiver-channels/:receiverId [post]
+func (h *AlertHandler) AddReceiverChannel(c *gin.Context) {
+	var receiverID uint
+	if _, err := fmt.Sscanf(c.Param("receiverId"), "%d", &receiverID); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "无效的接收人ID",
+		})
+		return
+	}
+
+	var req struct {
+		ChannelID uint   `json:"channelId" binding:"required"`
+		Config    string `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "请求参数错误",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// 检查接收人和通道是否存在
+	var receiver model.AlertReceiver
+	if err := h.db.First(&receiver, receiverID).Error; err != nil {
+		c.JSON(404, gin.H{
+			"code":    404,
+			"message": "接收人不存在",
+		})
+		return
+	}
+
+	var channel model.AlertChannel
+	if err := h.db.First(&channel, req.ChannelID).Error; err != nil {
+		c.JSON(404, gin.H{
+			"code":    404,
+			"message": "通道不存在",
+		})
+		return
+	}
+
+	// 检查关联是否已存在
+	var existing model.AlertReceiverChannel
+	result := h.db.Where("receiver_id = ? AND channel_id = ?", receiverID, req.ChannelID).First(&existing)
+	if result.RowsAffected > 0 {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "该关联已存在",
+		})
+		return
+	}
+
+	// 创建新关联
+	rc := model.AlertReceiverChannel{
+		ReceiverID: receiverID,
+		ChannelID:  req.ChannelID,
+		Config:     req.Config,
+	}
+
+	if err := h.db.Create(&rc).Error; err != nil {
+		c.JSON(500, gin.H{
+			"code":    500,
+			"message": "添加通道关联失败",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "添加成功",
+		"data":    rc,
+	})
+}
+
+// RemoveReceiverChannel 删除接收人通道关联
+// @Summary 删除接收人通道关联
+// @Tags AlertReceiverChannel
+// @Accept json
+// @Produce json
+// @Param receiverId path int true "接收人ID"
+// @Param channelId path int true "通道ID"
+// @Success 200 {string} string "success"
+// @Router /monitor/alerts/receiver-channels/:receiverId/:channelId [delete]
+func (h *AlertHandler) RemoveReceiverChannel(c *gin.Context) {
+	var receiverID, channelID uint
+	if _, err := fmt.Sscanf(c.Param("receiverId"), "%d", &receiverID); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "无效的接收人ID",
+		})
+		return
+	}
+	if _, err := fmt.Sscanf(c.Param("channelId"), "%d", &channelID); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "无效的通道ID",
+		})
+		return
+	}
+
+	if err := h.db.Where("receiver_id = ? AND channel_id = ?", receiverID, channelID).Delete(&model.AlertReceiverChannel{}).Error; err != nil {
+		c.JSON(500, gin.H{
+			"code":    500,
+			"message": "删除通道关联失败",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "删除成功",
+	})
+}
+
+// UpdateReceiverChannelConfig 更新接收人通道关联配置
+// @Summary 更新接收人通道关联配置
+// @Tags AlertReceiverChannel
+// @Accept json
+// @Produce json
+// @Param receiverId path int true "接收人ID"
+// @Param channelId path int true "通道ID"
+// @Param req body map[string]string true "配置"
+// @Success 200 {object} model.AlertReceiverChannel
+// @Router /monitor/alerts/receiver-channels/:receiverId/:channelId [put]
+func (h *AlertHandler) UpdateReceiverChannelConfig(c *gin.Context) {
+	var receiverID, channelID uint
+	if _, err := fmt.Sscanf(c.Param("receiverId"), "%d", &receiverID); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "无效的接收人ID",
+		})
+		return
+	}
+	if _, err := fmt.Sscanf(c.Param("channelId"), "%d", &channelID); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "无效的通道ID",
+		})
+		return
+	}
+
+	var req struct {
+		Config string `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{
+			"code":    400,
+			"message": "请求参数错误",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	var rc model.AlertReceiverChannel
+	if err := h.db.Where("receiver_id = ? AND channel_id = ?", receiverID, channelID).First(&rc).Error; err != nil {
+		c.JSON(404, gin.H{
+			"code":    404,
+			"message": "通道关联不存在",
+		})
+		return
+	}
+
+	rc.Config = req.Config
+	if err := h.db.Save(&rc).Error; err != nil {
+		c.JSON(500, gin.H{
+			"code":    500,
+			"message": "更新配置失败",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "更新成功",
+		"data":    rc,
+	})
+}
+
 // ========== 告警日志管理 ==========
 
 // ListAlertLogs 获取告警日志列表
@@ -464,10 +692,12 @@ func (h *AlertHandler) ListAlertLogs(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code":    0,
 		"message": "success",
-		"data":    logs,
-		"total":   total,
-		"page":    page,
-		"pageSize": pageSize,
+		"data": gin.H{
+			"list":     logs,
+			"total":    total,
+			"page":     page,
+			"pageSize": pageSize,
+		},
 	})
 }
 

@@ -96,16 +96,16 @@ const router = createRouter({
           meta: { title: '云账号管理' }
         },
         {
+          path: 'asset/terminal-audit',
+          name: 'AssetTerminalAudit',
+          component: () => import('@/views/asset/TerminalAudit.vue'),
+          meta: { title: '终端审计' }
+        },
+        {
           path: 'asset/groups',
           name: 'AssetGroups',
           component: () => import('@/views/asset/Groups.vue'),
           meta: { title: '业务分组' }
-        },
-        {
-          path: 'asset/data',
-          name: 'AssetData',
-          component: () => import('@/views/asset/Data.vue'),
-          meta: { title: '数据管理' }
         },
         {
           path: 'profile',
@@ -118,6 +118,18 @@ const router = createRouter({
           name: 'Terminal',
           component: () => import('@/views/asset/Terminal.vue'),
           meta: { title: 'Web终端', hideSidebar: true }
+        },
+        {
+          path: 'plugin/list',
+          name: 'PluginList',
+          component: () => import('@/views/plugin/PluginList.vue'),
+          meta: { title: '插件列表' }
+        },
+        {
+          path: 'plugin/install',
+          name: 'PluginInstall',
+          component: () => import('@/views/plugin/PluginInstall.vue'),
+          meta: { title: '插件安装' }
         }
       ]
     }

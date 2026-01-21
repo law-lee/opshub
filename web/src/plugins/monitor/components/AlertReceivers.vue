@@ -96,9 +96,14 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="150" fixed="right" align="center">
+        <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
+              <el-tooltip content="配置通道" placement="top">
+                <el-button link class="action-btn action-config" @click="handleConfigChannels(row)">
+                  <el-icon><Setting /></el-icon>
+                </el-button>
+              </el-tooltip>
               <el-tooltip content="编辑" placement="top">
                 <el-button link class="action-btn action-edit" @click="handleEdit(row)">
                   <el-icon><Edit /></el-icon>
@@ -184,25 +189,99 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 通道配置对话框 -->
+    <el-dialog
+      v-model="channelDialogVisible"
+      title="配置告警通道"
+      width="600px"
+      class="channel-config-dialog"
+      :close-on-click-modal="false"
+      @close="handleChannelDialogClose"
+    >
+      <div v-loading="channelLoading" class="channel-config-content">
+        <el-alert
+          title="说明"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px;"
+        >
+          选择该接收人要使用的告警通道。选定后，该接收人在告警时将通过关联的通道接收通知，并在消息中被@提醒。
+        </el-alert>
+
+        <div v-if="availableChannels.length === 0" class="empty-state">
+          <p>暂无可用的告警通道，请先配置告警通道</p>
+        </div>
+
+        <div v-else class="channel-list">
+          <div v-for="channel in availableChannels" :key="channel.id" class="channel-item">
+            <div class="channel-header">
+              <el-checkbox
+                :model-value="isChannelSelected(channel.id)"
+                @change="toggleChannel(channel)"
+              >
+                <span class="channel-name">{{ channel.name }}</span>
+                <el-tag :type="getChannelTagType(channel.channelType)" size="small">
+                  {{ getChannelDisplayName(channel.channelType) }}
+                </el-tag>
+              </el-checkbox>
+            </div>
+            <div v-if="isChannelSelected(channel.id)" class="channel-config">
+              <el-form :model="channelConfigs[channel.id] || {}" label-width="100px" size="small">
+                <div v-if="channel.channelType === 'feishu'">
+                  <p style="font-size: 12px; color: #909399; margin-bottom: 8px;">
+                    在飞书消息中使用接收人的飞书ID进行@提醒。请确保已在接收人信息中填写飞书ID。
+                  </p>
+                </div>
+                <div v-else-if="channel.channelType === 'dingtalk'">
+                  <p style="font-size: 12px; color: #909399; margin-bottom: 8px;">
+                    在钉钉消息中使用接收人的钉钉ID或手机号进行@提醒。请确保已在接收人信息中填写相应字段。
+                  </p>
+                </div>
+                <div v-else-if="channel.channelType === 'wechat'">
+                  <p style="font-size: 12px; color: #909399; margin-bottom: 8px;">
+                    在企业微信消息中使用接收人的企业微信ID进行@提醒。请确保已在接收人信息中填写企业微信ID。
+                  </p>
+                </div>
+              </el-form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="channelDialogVisible = false">取消</el-button>
+          <el-button class="black-button" @click="handleSaveChannels" :loading="channelSubmitting">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus'
 import {
   Plus,
   Refresh,
   Edit,
   Delete,
-  User
+  User,
+  Setting
 } from '@element-plus/icons-vue'
 import {
   getAlertReceivers,
+  getAlertChannels,
   createAlertReceiver,
   updateAlertReceiver,
   deleteAlertReceiver,
-  type AlertReceiver
+  listReceiverChannels,
+  addReceiverChannel,
+  removeReceiverChannel,
+  type AlertReceiver,
+  type AlertChannel
 } from '@/api/alert-config'
 
 const loading = ref(false)
@@ -211,11 +290,20 @@ const dialogTitle = ref('')
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
+// 通道配置相关变量
+const channelDialogVisible = ref(false)
+const channelLoading = ref(false)
+const channelSubmitting = ref(false)
+const availableChannels = ref<AlertChannel[]>([])
+const selectedReceiverChannels = ref<Map<number, boolean>>(new Map())
+const channelConfigs = ref<Record<number, any>>({})
+const currentReceiver = ref<AlertReceiver | null>(null)
+
 // 表格数据
 const tableData = ref<any[]>([])
 
 // 选中的通知方式
-const selectedNotifications = ref<string[]>(['enableEmail', enableWeChat'])
+const selectedNotifications = ref<string[]>(['enableEmail', 'enableWeChat'])
 
 // 表单数据
 const form = reactive<AlertReceiver>({
@@ -260,7 +348,6 @@ const updateSelectionFromForm = () => {
 }
 
 // 监听选中状态变化
-import { watch } from 'vue'
 watch(selectedNotifications, () => {
   updateFormFromSelection()
 })
@@ -385,6 +472,121 @@ const handleSubmit = async () => {
 // 对话框关闭
 const handleDialogClose = () => {
   formRef.value?.resetFields()
+}
+
+// 通道配置相关函数
+const getChannelDisplayName = (channelType: string) => {
+  const names: Record<string, string> = {
+    email: '邮件',
+    webhook: 'Webhook',
+    wechat: '企业微信',
+    dingtalk: '钉钉',
+    feishu: '飞书'
+  }
+  return names[channelType] || channelType
+}
+
+const getChannelTagType = (channelType: string) => {
+  const types: Record<string, string> = {
+    email: 'success',
+    webhook: 'warning',
+    wechat: 'warning',
+    dingtalk: 'danger',
+    feishu: 'info'
+  }
+  return types[channelType] || 'info'
+}
+
+const handleConfigChannels = async (row: AlertReceiver) => {
+  if (!row.id) return
+
+  currentReceiver.value = row
+  channelLoading.value = true
+  try {
+    // 获取所有可用通道
+    const channels = await getAlertChannels()
+    availableChannels.value = channels || []
+
+    // 获取该接收人关联的通道
+    const receiverChannels = await listReceiverChannels(row.id)
+    selectedReceiverChannels.value = new Map()
+    receiverChannels.forEach((rc: any) => {
+      selectedReceiverChannels.value.set(rc.channelId, true)
+      if (rc.config) {
+        channelConfigs.value[rc.channelId] = JSON.parse(rc.config)
+      }
+    })
+
+    channelDialogVisible.value = true
+  } catch (error: any) {
+    ElMessage.error('加载通道配置失败')
+    console.error(error)
+  } finally {
+    channelLoading.value = false
+  }
+}
+
+const isChannelSelected = (channelId: number) => {
+  return selectedReceiverChannels.value.get(channelId) || false
+}
+
+const toggleChannel = (channel: AlertChannel) => {
+  const isSelected = isChannelSelected(channel.id!)
+  selectedReceiverChannels.value.set(channel.id!, !isSelected)
+}
+
+const handleSaveChannels = async () => {
+  if (!currentReceiver.value?.id) return
+
+  channelSubmitting.value = true
+  try {
+    const receiverId = currentReceiver.value.id
+
+    // 获取当前已保存的通道关联
+    const currentRelations = await listReceiverChannels(receiverId)
+    const currentChannelIds = new Set(currentRelations.map((r: any) => r.channelId))
+
+    // 新选中的通道
+    const newChannelIds = new Set(
+      Array.from(selectedReceiverChannels.value.entries())
+        .filter(([_, isSelected]) => isSelected)
+        .map(([channelId]) => channelId)
+    )
+
+    // 删除未选中的关联
+    for (const channelId of currentChannelIds) {
+      if (!newChannelIds.has(channelId)) {
+        await removeReceiverChannel(receiverId, channelId)
+      }
+    }
+
+    // 添加新选中的关联
+    for (const channelId of newChannelIds) {
+      if (!currentChannelIds.has(channelId)) {
+        await addReceiverChannel(receiverId, {
+          channelId,
+          config: channelConfigs.value[channelId]
+            ? JSON.stringify(channelConfigs.value[channelId])
+            : ''
+        })
+      }
+    }
+
+    ElMessage.success('保存成功')
+    channelDialogVisible.value = false
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error('保存失败')
+    console.error(error)
+  } finally {
+    channelSubmitting.value = false
+  }
+}
+
+const handleChannelDialogClose = () => {
+  selectedReceiverChannels.value.clear()
+  channelConfigs.value = {}
+  currentReceiver.value = null
 }
 
 onMounted(() => {
@@ -543,5 +745,77 @@ onMounted(() => {
 :deep(.receiver-edit-dialog .el-dialog__footer) {
   padding: 16px 24px;
   border-top: 1px solid #f0f0f0;
+}
+
+:deep(.channel-config-dialog) {
+  border-radius: 12px;
+}
+
+:deep(.channel-config-dialog .el-dialog__header) {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+:deep(.channel-config-dialog .el-dialog__body) {
+  padding: 24px;
+}
+
+:deep(.channel-config-dialog .el-dialog__footer) {
+  padding: 16px 24px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.channel-config-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #909399;
+}
+
+.channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.channel-item {
+  border: 1px solid #e4e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.2s ease;
+}
+
+.channel-item:hover {
+  border-color: #409eff;
+  background-color: #f5f7fa;
+}
+
+.channel-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.channel-header :deep(.el-checkbox) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.channel-name {
+  font-weight: 500;
+  color: #303133;
+}
+
+.channel-config {
+  padding: 8px 0 0 24px;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 8px;
+  padding-top: 12px;
 }
 </style>

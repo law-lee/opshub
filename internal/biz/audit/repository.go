@@ -8,7 +8,7 @@ import (
 type OperationLogRepo interface {
 	Create(ctx context.Context, log *SysOperationLog) error
 	GetByID(ctx context.Context, id uint) (*SysOperationLog, error)
-	List(ctx context.Context, page, pageSize int, username, module, action, startTime, endTime string) ([]*SysOperationLog, int64, error)
+	List(ctx context.Context, page, pageSize int, username, module, action, status, startTime, endTime string) ([]*SysOperationLog, int64, error)
 	Delete(ctx context.Context, id uint) error
 	DeleteBatch(ctx context.Context, ids []uint) error
 }

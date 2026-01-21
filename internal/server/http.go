@@ -122,7 +122,7 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 	assetGroupService, hostService, terminalManager := assetserver.NewAssetServices(s.db)
 
 	// Asset 路由
-	assetServer := assetserver.NewHTTPServer(assetGroupService, hostService, terminalManager)
+	assetServer := assetserver.NewHTTPServer(assetGroupService, hostService, terminalManager, s.db)
 
 	// API v1 - 需要认证的接口
 	v1 := router.Group("/api/v1")
@@ -160,6 +160,8 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 		pluginInfoGroup.GET("/:name/menus", s.getPluginMenus)
 		pluginInfoGroup.POST("/:name/enable", s.enablePlugin)
 		pluginInfoGroup.POST("/:name/disable", s.disablePlugin)
+		pluginInfoGroup.POST("/upload", s.uploadSrv.UploadPlugin)
+		pluginInfoGroup.DELETE("/:name/uninstall", s.uploadSrv.UninstallPlugin)
 	}
 
 	// 前端静态文件服务（后面会用到）
@@ -192,15 +194,21 @@ func (s *HTTPServer) listPlugins(c *gin.Context) {
 	result := make([]map[string]interface{}, 0, len(plugins))
 
 	for _, p := range plugins {
+		enabled := s.pluginMgr.IsEnabled(p.Name())
+		appLogger.Info("获取插件状态",
+			zap.String("plugin", p.Name()),
+			zap.Bool("enabled", enabled),
+		)
 		result = append(result, map[string]interface{}{
 			"name":        p.Name(),
 			"description": p.Description(),
 			"version":     p.Version(),
 			"author":      p.Author(),
-			"enabled":     s.pluginMgr.IsEnabled(p.Name()),
+			"enabled":     enabled,
 		})
 	}
 
+	appLogger.Info("返回插件列表", zap.Int("count", len(result)))
 	c.JSON(200, gin.H{
 		"code":    0,
 		"message": "success",

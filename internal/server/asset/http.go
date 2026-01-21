@@ -9,20 +9,23 @@ import (
 )
 
 type HTTPServer struct {
-	assetGroupService *assetService.AssetGroupService
-	hostService       *assetService.HostService
-	terminalManager   *TerminalManager
+	assetGroupService    *assetService.AssetGroupService
+	hostService          *assetService.HostService
+	terminalManager      *TerminalManager
+	terminalAuditHandler *TerminalAuditHandler
 }
 
 func NewHTTPServer(
 	assetGroupService *assetService.AssetGroupService,
 	hostService *assetService.HostService,
 	terminalManager *TerminalManager,
+	db *gorm.DB,
 ) *HTTPServer {
 	return &HTTPServer{
-		assetGroupService: assetGroupService,
-		hostService:       hostService,
-		terminalManager:   terminalManager,
+		assetGroupService:    assetGroupService,
+		hostService:          hostService,
+		terminalManager:      terminalManager,
+		terminalAuditHandler: NewTerminalAuditHandler(db),
 	}
 }
 
@@ -52,6 +55,11 @@ func (s *HTTPServer) RegisterRoutes(r *gin.RouterGroup) {
 		hosts.DELETE("/:id", s.hostService.DeleteHost)
 		hosts.POST("/:id/collect", s.hostService.CollectHostInfo)
 		hosts.POST("/:id/test", s.hostService.TestHostConnection)
+		// 文件管理
+		hosts.GET("/:id/files", s.hostService.ListHostFiles)
+		hosts.POST("/:id/files/upload", s.hostService.UploadHostFile)
+		hosts.GET("/:id/files/download", s.hostService.DownloadHostFile)
+		hosts.DELETE("/:id/files", s.hostService.DeleteHostFile)
 	}
 
 	// 凭证管理
@@ -85,6 +93,14 @@ func (s *HTTPServer) RegisterRoutes(r *gin.RouterGroup) {
 		terminal.GET("/:id", s.HandleSSHConnection)
 		terminal.POST("/:id/resize", s.ResizeTerminal)
 	}
+
+	// 终端审计
+	terminalSessions := r.Group("/terminal-sessions")
+	{
+		terminalSessions.GET("", s.terminalAuditHandler.ListTerminalSessions)
+		terminalSessions.GET("/:id/play", s.terminalAuditHandler.PlayTerminalSession)
+		terminalSessions.DELETE("/:id", s.terminalAuditHandler.DeleteTerminalSession)
+	}
 }
 
 // NewAssetServices 创建asset相关的服务
@@ -101,7 +117,7 @@ func NewAssetServices(db *gorm.DB) (
 
 	// 初始化UseCase
 	assetGroupUseCase := assetbiz.NewAssetGroupUseCase(assetGroupRepo)
-	credentialUseCase := assetbiz.NewCredentialUseCase(credentialRepo)
+	credentialUseCase := assetbiz.NewCredentialUseCase(credentialRepo, hostRepo)
 	cloudAccountUseCase := assetbiz.NewCloudAccountUseCase(cloudAccountRepo)
 	hostUseCase := assetbiz.NewHostUseCase(hostRepo, credentialRepo, assetGroupRepo, cloudAccountRepo)
 
@@ -110,7 +126,7 @@ func NewAssetServices(db *gorm.DB) (
 	hostService := assetService.NewHostService(hostUseCase, credentialUseCase, cloudAccountUseCase)
 
 	// 初始化TerminalManager
-	terminalManager := NewTerminalManager(hostUseCase)
+	terminalManager := NewTerminalManager(hostUseCase, db)
 
 	return assetGroupService, hostService, terminalManager
 }

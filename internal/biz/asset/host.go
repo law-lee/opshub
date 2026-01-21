@@ -164,6 +164,7 @@ type CredentialVO struct {
 	Username    string `json:"username"`
 	Description string `json:"description"`
 	CreateTime  string `json:"createTime"`
+	HostCount   int64  `json:"hostCount"` // 使用该凭证的主机数量
 }
 
 // ToModel 转换为模型
@@ -195,7 +196,7 @@ type CloudAccount struct {
 type CloudAccountRequest struct {
 	ID          uint   `json:"id"`
 	Name        string `json:"name" binding:"required,min=2,max=100"`
-	Provider    string `json:"provider" binding:"required,oneof=aliyun tencent aws huawei"`
+	Provider    string `json:"provider" binding:"required,oneof=aliyun tencent aws huawei jdcloud"`
 	AccessKey   string `json:"accessKey"`
 	SecretKey   string `json:"secretKey"`
 	Region      string `json:"region"`

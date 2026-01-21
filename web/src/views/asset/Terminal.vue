@@ -365,7 +365,7 @@ const initTerminal = async (tabId: string, host: any) => {
 
   // 等待DOM完全渲染后再获取准确的终端尺寸
   await nextTick()
-  await new Promise(resolve => setTimeout(resolve, 200))
+  await new Promise(resolve => setTimeout(resolve, 300))
 
   console.log('等待后容器尺寸:', { width: el.clientWidth, height: el.clientHeight })
 
@@ -378,7 +378,7 @@ const initTerminal = async (tabId: string, host: any) => {
   }
 
   // 再次等待并重新适配以确保尺寸正确
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await new Promise(resolve => setTimeout(resolve, 200))
   try {
     fitAddon.fit()
     console.log('二次fit后终端尺寸:', { cols: term.cols, rows: term.rows })
@@ -388,14 +388,14 @@ const initTerminal = async (tabId: string, host: any) => {
 
   const dims = { cols: term.cols, rows: term.rows }
 
-  // 检查cols是否异常小，如果是则使用默认值
-  if (dims.cols < 40) {
-    console.warn('计算出的cols值异常小:', dims.cols, '，使用默认值80')
-    dims.cols = 80
+  // 检查cols是否异常小，如果是则使用合理的默认值
+  if (dims.cols < 80) {
+    console.warn('计算出的cols值偏小:', dims.cols, '，使用默认值120')
+    dims.cols = 120
   }
-  if (dims.rows < 10) {
-    console.warn('计算出的rows值异常小:', dims.rows, '，使用默认值24')
-    dims.rows = 24
+  if (dims.rows < 20) {
+    console.warn('计算出的rows值偏小:', dims.rows, '，使用默认值30')
+    dims.rows = 30
   }
 
   console.log('=== 终端最终尺寸 ===')
@@ -968,7 +968,7 @@ onBeforeUnmount(() => {
 .xterm-container {
   width: 100%;
   height: 100%;
-  padding: 8px;
+  padding: 0;
   box-sizing: border-box;
 }
 

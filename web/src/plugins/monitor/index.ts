@@ -1,16 +1,18 @@
 import type { Plugin, PluginMenuConfig, PluginRouteConfig } from '../types'
 import { pluginManager } from '../manager'
 import DomainMonitor from './components/DomainMonitor.vue'
-import TroubleHandling from './components/TroubleHandling.vue'
+import AlertChannels from './components/AlertChannels.vue'
+import AlertReceivers from './components/AlertReceivers.vue'
+import AlertLogs from './components/AlertLogs.vue'
 
 /**
  * 监控中心插件
- * 提供域名监控、故障处理等功能
+ * 提供域名监控、告警管理等功能
  */
 class MonitorPlugin implements Plugin {
   name = 'monitor'
   prettyName = '监控中心'
-  description = '监控中心插件，提供域名监控、故障处理等功能'
+  description = '监控中心插件，提供域名监控、告警管理等功能'
   version = '1.0.0'
   author = 'OpsHub Team'
 
@@ -54,10 +56,26 @@ class MonitorPlugin implements Plugin {
         parentPath: parentPath,
       },
       {
-        name: '故障处理',
-        path: '/monitor/trouble',
-        icon: 'Warning',
+        name: '告警通道',
+        path: '/monitor/alert-channels',
+        icon: 'Bell',
         sort: 2,
+        hidden: false,
+        parentPath: parentPath,
+      },
+      {
+        name: '告警接收人',
+        path: '/monitor/alert-receivers',
+        icon: 'User',
+        sort: 3,
+        hidden: false,
+        parentPath: parentPath,
+      },
+      {
+        name: '告警日志',
+        path: '/monitor/alert-logs',
+        icon: 'Document',
+        sort: 4,
         hidden: false,
         parentPath: parentPath,
       },
@@ -83,10 +101,22 @@ class MonitorPlugin implements Plugin {
         meta: { title: '域名监控' },
       },
       {
-        path: '/monitor/trouble',
-        name: 'TroubleHandling',
-        component: () => import('./components/TroubleHandling.vue'),
-        meta: { title: '故障处理' },
+        path: '/monitor/alert-channels',
+        name: 'AlertChannels',
+        component: () => import('./components/AlertChannels.vue'),
+        meta: { title: '告警通道' },
+      },
+      {
+        path: '/monitor/alert-receivers',
+        name: 'AlertReceivers',
+        component: () => import('./components/AlertReceivers.vue'),
+        meta: { title: '告警接收人' },
+      },
+      {
+        path: '/monitor/alert-logs',
+        name: 'AlertLogs',
+        component: () => import('./components/AlertLogs.vue'),
+        meta: { title: '告警日志' },
       },
     ]
   }

@@ -25,6 +25,13 @@ type CaptchaResponse struct {
 }
 
 // GetCaptcha 获取验证码
+// @Summary 获取验证码
+// @Description 获取登录用的验证码图片和ID
+// @Tags 认证管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /captcha [get]
 func (s *CaptchaService) GetCaptcha(c *gin.Context) {
 	// 生成验证码配置
 	driver := base64Captcha.NewDriverDigit(
@@ -59,6 +66,15 @@ type VerifyCaptchaRequest struct {
 }
 
 // VerifyCaptcha 验证验证码
+// @Summary 验证验证码
+// @Description 验证用户输入的验证码是否正确
+// @Tags 认证管理
+// @Accept json
+// @Produce json
+// @Param body body VerifyCaptchaRequest true "验证码信息"
+// @Success 200 {object} response.Response{data=object} "验证成功"
+// @Failure 400 {object} response.Response "验证码错误"
+// @Router /captcha/verify [post]
 func (s *CaptchaService) VerifyCaptcha(c *gin.Context) {
 	var req VerifyCaptchaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

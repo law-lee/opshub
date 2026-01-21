@@ -13,139 +13,98 @@
             <div class="stat-info">
               <div class="stat-value">{{ stat.value }}</div>
               <div class="stat-label">{{ stat.label }}</div>
-              <div class="stat-trend" :class="stat.trendClass">
-                <el-icon><ArrowUp v-if="stat.trend === 'up'" /><ArrowDown v-else /></el-icon>
-                {{ stat.trendValue }}
-              </div>
             </div>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 资产详情 & 服务详情 -->
-    <el-row :gutter="20" class="detail-row">
+    <!-- 图表展示区域 -->
+    <el-row :gutter="20" class="chart-row">
       <el-col :span="12">
-        <el-card class="detail-card" shadow="hover">
+        <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span class="card-title">资产详情</span>
-              <el-button type="primary" link size="small">查看全部</el-button>
+              <span class="card-title">主机状态分布</span>
+              <el-button type="primary" link size="small" @click="$router.push('/asset/hosts')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="assets" style="width: 100%" size="small">
-            <el-table-column prop="name" label="资产名称" min-width="150" />
-            <el-table-column prop="type" label="类型" min-width="100">
-              <template #default="{ row }">
-                <el-tag :type="getTypeColor(row.type)" size="small">{{ row.type }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="ip" label="IP地址" min-width="140" />
-            <el-table-column prop="status" label="状态" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.status === '正常' ? 'success' : 'danger'" size="small">
-                  {{ row.status }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="cpu" label="CPU" min-width="80" />
-            <el-table-column prop="memory" label="内存" min-width="80" />
-          </el-table>
+          <div ref="hostStatusChart" class="chart-container"></div>
         </el-card>
       </el-col>
 
       <el-col :span="12">
-        <el-card class="detail-card" shadow="hover">
+        <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span class="card-title">服务详情</span>
-              <el-button type="primary" link size="small">查看全部</el-button>
+              <span class="card-title">K8s集群资源概览</span>
+              <el-button type="primary" link size="small" @click="$router.push('/kubernetes/clusters')">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="services" style="width: 100%" size="small">
-            <el-table-column prop="name" label="服务名称" min-width="150" />
-            <el-table-column prop="port" label="端口" min-width="80" />
-            <el-table-column prop="status" label="状态" width="80">
-              <template #default="{ row }">
-                <el-tag :type="getStatusType(row.status)" size="small">
-                  {{ row.status }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="instances" label="实例数" min-width="80" />
-            <el-table-column prop="uptime" label="运行时间" min-width="150" />
-          </el-table>
+          <div ref="k8sResourceChart" class="chart-container"></div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 发布详情 & 监控告警 -->
-    <el-row :gutter="20" class="detail-row">
+    <el-row :gutter="20" class="chart-row">
       <el-col :span="12">
-        <el-card class="detail-card" shadow="hover">
+        <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span class="card-title">发布详情</span>
-              <el-button type="primary" link size="small">查看全部</el-button>
+              <span class="card-title">操作趋势（最近7天）</span>
+              <el-button type="primary" link size="small" @click="$router.push('/audit/operation-logs')">查看全部</el-button>
             </div>
           </template>
-          <el-timeline>
-            <el-timeline-item
-              v-for="(deploy, index) in deployments"
-              :key="index"
-              :timestamp="deploy.time"
-              :type="deploy.type"
-              placement="top"
-            >
-              <div class="deploy-item">
-                <div class="deploy-header">
-                  <span class="deploy-name">{{ deploy.name }}</span>
-                  <el-tag :type="getDeployStatusType(deploy.status)" size="small">
-                    {{ deploy.status }}
-                  </el-tag>
-                </div>
-                <div class="deploy-info">
-                  <span>版本：{{ deploy.version }}</span>
-                  <span>环境：{{ deploy.env }}</span>
-                </div>
-                <div class="deploy-user">操作人：{{ deploy.user }}</div>
-              </div>
-            </el-timeline-item>
-          </el-timeline>
+          <div ref="operationTrendChart" class="chart-container"></div>
         </el-card>
       </el-col>
 
       <el-col :span="12">
-        <el-card class="detail-card alarm-card" shadow="hover">
+        <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span class="card-title">监控告警</span>
-              <el-button type="primary" link size="small">查看全部</el-button>
+              <span class="card-title">告警统计</span>
+              <el-button type="primary" link size="small" @click="$router.push('/monitor/alert-logs')">查看全部</el-button>
             </div>
           </template>
-          <div class="alarm-list">
-            <div
-              v-for="(alarm, index) in alarms"
-              :key="index"
-              class="alarm-item"
-              :class="'alarm-' + alarm.level"
-            >
-              <div class="alarm-header">
-                <el-icon class="alarm-icon">
-                  <Warning v-if="alarm.level === 'high'" />
-                  <WarningFilled v-else-if="alarm.level === 'medium'" />
-                  <InfoFilled v-else />
-                </el-icon>
-                <span class="alarm-title">{{ alarm.title }}</span>
-                <el-tag :type="getAlarmTagType(alarm.level)" size="small">
-                  {{ getAlarmLevelText(alarm.level) }}
-                </el-tag>
-              </div>
-              <div class="alarm-content">{{ alarm.content }}</div>
-              <div class="alarm-footer">
-                <span class="alarm-time">{{ alarm.time }}</span>
-                <span class="alarm-source">来源：{{ alarm.source }}</span>
-              </div>
+          <div ref="alertStatsChart" class="chart-container"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 快速入口 -->
+    <el-row :gutter="20" class="quick-access-row">
+      <el-col :span="24">
+        <el-card class="quick-access-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span class="card-title">快速入口</span>
+            </div>
+          </template>
+          <div class="quick-access-grid">
+            <div class="quick-item" @click="$router.push('/asset/hosts')">
+              <el-icon :size="32" color="#409EFF"><OfficeBuilding /></el-icon>
+              <span>主机管理</span>
+            </div>
+            <div class="quick-item" @click="$router.push('/kubernetes/clusters')">
+              <el-icon :size="32" color="#67C23A"><Connection /></el-icon>
+              <span>K8s集群</span>
+            </div>
+            <div class="quick-item" @click="$router.push('/audit/operation-logs')">
+              <el-icon :size="32" color="#E6A23C"><Document /></el-icon>
+              <span>操作日志</span>
+            </div>
+            <div class="quick-item" @click="$router.push('/monitor/alert-logs')">
+              <el-icon :size="32" color="#F56C6C"><Warning /></el-icon>
+              <span>告警日志</span>
+            </div>
+            <div class="quick-item" @click="$router.push('/asset/credentials')">
+              <el-icon :size="32" color="#909399"><Key /></el-icon>
+              <span>凭据管理</span>
+            </div>
+            <div class="quick-item" @click="$router.push('/asset/cloud-accounts')">
+              <el-icon :size="32" color="#606266"><Cloudy /></el-icon>
+              <span>云账号</span>
             </div>
           </div>
         </el-card>
@@ -155,214 +114,405 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, nextTick, markRaw } from 'vue'
 import {
   OfficeBuilding,
   Connection,
-  Monitor,
+  Document,
   Warning,
-  ArrowUp,
-  ArrowDown,
-  WarningFilled,
-  InfoFilled,
-  Platform
+  Key,
+  Cloudy
 } from '@element-plus/icons-vue'
+import { getHostList } from '@/api/host'
+import { getClusterList } from '@/api/kubernetes'
+import { getOperationLogList } from '@/api/audit'
+import { getAlertLogs } from '@/api/alert-config'
+import * as echarts from 'echarts'
 
 // 顶部统计数据
 const topStats = ref([
   {
-    label: '资产总数',
-    value: '156',
-    icon: OfficeBuilding,
-    color: '#409EFF',
-    trend: 'up',
-    trendValue: '12',
-    trendClass: 'trend-up'
+    label: '主机总数',
+    value: '0',
+    icon: markRaw(OfficeBuilding),
+    color: '#409EFF'
   },
   {
-    label: '运行服务',
-    value: '42',
-    icon: Platform,
-    color: '#67C23A',
-    trend: 'up',
-    trendValue: '5',
-    trendClass: 'trend-up'
+    label: 'K8s集群',
+    value: '0',
+    icon: markRaw(Connection),
+    color: '#67C23A'
   },
   {
-    label: '今日发布',
-    value: '8',
-    icon: Monitor,
-    color: '#E6A23C',
-    trend: 'down',
-    trendValue: '3',
-    trendClass: 'trend-down'
+    label: '今日操作',
+    value: '0',
+    icon: markRaw(Document),
+    color: '#E6A23C'
   },
   {
     label: '活跃告警',
-    value: '3',
-    icon: Warning,
-    color: '#F56C6C',
-    trend: 'down',
-    trendValue: '15%',
-    trendClass: 'trend-up'
+    value: '0',
+    icon: markRaw(Warning),
+    color: '#F56C6C'
   }
 ])
 
-// 资产详情
-const assets = ref([
-  { name: 'web-server-01', type: '服务器', ip: '192.168.1.10', status: '正常', cpu: '45%', memory: '62%' },
-  { name: 'web-server-02', type: '服务器', ip: '192.168.1.11', status: '正常', cpu: '38%', memory: '55%' },
-  { name: 'db-master', type: '数据库', ip: '192.168.1.20', status: '正常', cpu: '52%', memory: '78%' },
-  { name: 'db-slave-01', type: '数据库', ip: '192.168.1.21', status: '正常', cpu: '35%', memory: '65%' },
-  { name: 'redis-cluster', type: '缓存', ip: '192.168.1.30', status: '异常', cpu: '89%', memory: '92%' },
-  { name: 'nginx-lb', type: '负载均衡', ip: '192.168.1.5', status: '正常', cpu: '22%', memory: '38%' }
-])
+// 图表DOM引用
+const hostStatusChart = ref<HTMLElement>()
+const k8sResourceChart = ref<HTMLElement>()
+const operationTrendChart = ref<HTMLElement>()
+const alertStatsChart = ref<HTMLElement>()
 
-// 服务详情
-const services = ref([
-  { name: 'opshub-api', port: 9876, status: '运行中', instances: 3, uptime: '15天3小时' },
-  { name: 'opshub-web', port: 5173, status: '运行中', instances: 2, uptime: '15天3小时' },
-  { name: 'mysql-master', port: 3306, status: '运行中', instances: 1, uptime: '30天12小时' },
-  { name: 'redis-cache', port: 6379, status: '运行中', instances: 1, uptime: '25天8小时' },
-  { name: 'nginx-proxy', port: 80, status: '运行中', instances: 2, uptime: '45天6小时' },
-  { name: 'prometheus', port: 9090, status: '已停止', instances: 0, uptime: '-' }
-])
+// 数据存储
+const hosts = ref<any[]>([])
+const clusters = ref<any[]>([])
+const operationLogs = ref<any[]>([])
+const alertLogs = ref<any[]>([])
 
-// 发布详情
-const deployments = ref([
-  {
-    name: 'opshub-api',
-    version: 'v1.2.3',
-    env: '生产环境',
-    status: '成功',
-    user: '张三',
-    time: '2025-12-30 12:30:00',
-    type: 'success'
-  },
-  {
-    name: 'opshub-web',
-    version: 'v1.2.3',
-    env: '生产环境',
-    status: '成功',
-    user: '李四',
-    time: '2025-12-30 11:45:00',
-    type: 'success'
-  },
-  {
-    name: 'opshub-api',
-    version: 'v1.2.2',
-    env: '测试环境',
-    status: '成功',
-    user: '王五',
-    time: '2025-12-30 10:20:00',
-    type: 'success'
-  },
-  {
-    name: 'payment-service',
-    version: 'v2.1.0',
-    env: '预发布环境',
-    status: '进行中',
-    user: '赵六',
-    time: '2025-12-30 09:15:00',
-    type: 'primary'
-  },
-  {
-    name: 'user-service',
-    version: 'v1.0.5',
-    env: '生产环境',
-    status: '失败',
-    user: '张三',
-    time: '2025-12-30 08:30:00',
-    type: 'danger'
+// 获取主机列表
+const fetchHosts = async () => {
+  try {
+    const res: any = await getHostList({ page: 1, pageSize: 100 })
+    if (res) {
+      if (res.list && Array.isArray(res.list)) {
+        hosts.value = res.list
+        topStats.value[0].value = String(res.total || res.list.length || 0)
+      } else if (Array.isArray(res)) {
+        hosts.value = res
+        topStats.value[0].value = String(res.length || 0)
+      }
+    }
+    await nextTick()
+    renderHostStatusChart()
+  } catch (error) {
+    console.error('获取主机列表失败:', error)
+    topStats.value[0].value = '0'
   }
-])
-
-// 监控告警
-const alarms = ref([
-  {
-    title: 'CPU使用率过高',
-    content: 'redis-cluster 服务器 CPU 使用率超过 85%',
-    level: 'high',
-    source: 'Prometheus',
-    time: '2025-12-30 12:28:00'
-  },
-  {
-    title: '磁盘空间不足',
-    content: 'web-server-01 磁盘使用率达到 88%，建议及时清理',
-    level: 'medium',
-    source: 'Zabbix',
-    time: '2025-12-30 11:50:00'
-  },
-  {
-    title: '服务响应缓慢',
-    content: 'opshub-api 接口平均响应时间超过 2s',
-    level: 'medium',
-    source: 'Grafana',
-    time: '2025-12-30 10:35:00'
-  },
-  {
-    title: '内存使用率告警',
-    content: 'db-master 内存使用率达到 78%',
-    level: 'low',
-    source: 'Prometheus',
-    time: '2025-12-30 09:20:00'
-  },
-  {
-    title: '网络连接数异常',
-    content: 'nginx-proxy 当前连接数超过阈值',
-    level: 'low',
-    source: 'Zabbix',
-    time: '2025-12-30 08:45:00'
-  }
-])
-
-// 辅助函数
-const getTypeColor = (type: string) => {
-  const colorMap: Record<string, string> = {
-    '服务器': 'primary',
-    '数据库': 'success',
-    '缓存': 'warning',
-    '负载均衡': 'info'
-  }
-  return colorMap[type] || ''
 }
 
-const getStatusType = (status: string) => {
-  const statusMap: Record<string, string> = {
-    '运行中': 'success',
-    '已停止': 'danger',
-    '异常': 'warning'
+// 获取K8s集群列表
+const fetchClusters = async () => {
+  try {
+    const res: any = await getClusterList()
+    if (res) {
+      if (res.list && Array.isArray(res.list)) {
+        clusters.value = res.list
+        topStats.value[1].value = String(res.total || res.list.length || 0)
+      } else if (Array.isArray(res)) {
+        clusters.value = res
+        topStats.value[1].value = String(res.length || 0)
+      }
+    }
+    await nextTick()
+    renderK8sResourceChart()
+  } catch (error) {
+    console.error('获取K8s集群列表失败:', error)
+    topStats.value[1].value = '0'
   }
-  return statusMap[status] || 'info'
 }
 
-const getDeployStatusType = (status: string) => {
-  const statusMap: Record<string, string> = {
-    '成功': 'success',
-    '进行中': 'primary',
-    '失败': 'danger',
-    '待发布': 'info'
+// 获取操作日志列表
+const fetchOperationLogs = async () => {
+  try {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const res: any = await getOperationLogList({ page: 1, pageSize: 500 })
+    if (res) {
+      if (res.list && Array.isArray(res.list)) {
+        operationLogs.value = res.list
+        const todayCount = res.list.filter((log: any) => {
+          const logDate = new Date(log.createdAt)
+          return logDate >= today
+        }).length
+        topStats.value[2].value = String(todayCount)
+      } else if (Array.isArray(res)) {
+        operationLogs.value = res
+        const todayCount = res.filter((log: any) => {
+          const logDate = new Date(log.createdAt)
+          return logDate >= today
+        }).length
+        topStats.value[2].value = String(todayCount)
+      }
+    }
+    await nextTick()
+    renderOperationTrendChart()
+  } catch (error) {
+    console.error('获取操作日志失败:', error)
+    topStats.value[2].value = '0'
   }
-  return statusMap[status] || 'info'
 }
 
-const getAlarmTagType = (level: string) => {
-  const levelMap: Record<string, string> = {
-    'high': 'danger',
-    'medium': 'warning',
-    'low': 'info'
+// 获取告警日志列表
+const fetchAlertLogs = async () => {
+  try {
+    const res: any = await getAlertLogs({ page: 1, pageSize: 100 })
+    if (res) {
+      if (res.list && Array.isArray(res.list)) {
+        alertLogs.value = res.list
+        const activeCount = res.list.filter((log: any) => log.status === 'failed').length
+        topStats.value[3].value = String(activeCount)
+      } else if (Array.isArray(res)) {
+        alertLogs.value = res
+        const activeCount = res.filter((log: any) => log.status === 'failed').length
+        topStats.value[3].value = String(activeCount)
+      }
+    }
+    await nextTick()
+    renderAlertStatsChart()
+  } catch (error) {
+    console.error('获取告警日志失败:', error)
+    topStats.value[3].value = '0'
   }
-  return levelMap[level] || 'info'
 }
 
-const getAlarmLevelText = (level: string) => {
-  const textMap: Record<string, string> = {
-    'high': '严重',
-    'medium': '警告',
-    'low': '提示'
+// 渲染主机状态图表
+const renderHostStatusChart = () => {
+  if (!hostStatusChart.value) return
+
+  const chart = echarts.init(hostStatusChart.value)
+
+  const onlineCount = hosts.value.filter(h => h.status === 1).length
+  const offlineCount = hosts.value.filter(h => h.status !== 1).length
+
+  const option = {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      right: 10,
+      top: 'center'
+    },
+    series: [
+      {
+        name: '主机状态',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['40%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: 'bold'
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: [
+          { value: onlineCount, name: '在线', itemStyle: { color: '#67C23A' } },
+          { value: offlineCount, name: '离线', itemStyle: { color: '#909399' } }
+        ]
+      }
+    ]
   }
-  return textMap[level] || level
+
+  chart.setOption(option)
+
+  // 响应式
+  window.addEventListener('resize', () => chart.resize())
 }
+
+// 渲染K8s资源图表
+const renderK8sResourceChart = () => {
+  if (!k8sResourceChart.value) return
+
+  const chart = echarts.init(k8sResourceChart.value)
+
+  const clusterNames = clusters.value.map(c => c.name || '未命名')
+  const nodeCounts = clusters.value.map(c => c.nodeCount || 0)
+  const podCounts = clusters.value.map(c => c.podCount || 0)
+
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      }
+    },
+    legend: {
+      data: ['节点数', 'Pod数'],
+      top: 10
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '15%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: clusterNames.length > 0 ? clusterNames : ['暂无数据'],
+      axisLabel: {
+        interval: 0,
+        rotate: clusterNames.length > 3 ? 30 : 0
+      }
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '节点数',
+        type: 'bar',
+        data: nodeCounts.length > 0 ? nodeCounts : [0],
+        itemStyle: { color: '#409EFF' },
+        barMaxWidth: 40
+      },
+      {
+        name: 'Pod数',
+        type: 'bar',
+        data: podCounts.length > 0 ? podCounts : [0],
+        itemStyle: { color: '#67C23A' },
+        barMaxWidth: 40
+      }
+    ]
+  }
+
+  chart.setOption(option)
+  window.addEventListener('resize', () => chart.resize())
+}
+
+// 渲染操作趋势图表
+const renderOperationTrendChart = () => {
+  if (!operationTrendChart.value) return
+
+  const chart = echarts.init(operationTrendChart.value)
+
+  // 统计最近7天的操作数
+  const today = new Date()
+  const dates: string[] = []
+  const counts: number[] = []
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today)
+    date.setDate(date.getDate() - i)
+    const dateStr = `${date.getMonth() + 1}/${date.getDate()}`
+    dates.push(dateStr)
+
+    const count = operationLogs.value.filter((log: any) => {
+      const logDate = new Date(log.createdAt)
+      return logDate.toDateString() === date.toDateString()
+    }).length
+
+    counts.push(count)
+  }
+
+  const option = {
+    tooltip: {
+      trigger: 'axis'
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '操作次数',
+        type: 'line',
+        smooth: true,
+        data: counts,
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(230, 162, 60, 0.3)' },
+            { offset: 1, color: 'rgba(230, 162, 60, 0.05)' }
+          ])
+        },
+        itemStyle: { color: '#E6A23C' },
+        lineStyle: { width: 2 }
+      }
+    ]
+  }
+
+  chart.setOption(option)
+  window.addEventListener('resize', () => chart.resize())
+}
+
+// 渲染告警统计图表
+const renderAlertStatsChart = () => {
+  if (!alertStatsChart.value) return
+
+  const chart = echarts.init(alertStatsChart.value)
+
+  const successCount = alertLogs.value.filter((log: any) => log.status === 'success').length
+  const failedCount = alertLogs.value.filter((log: any) => log.status === 'failed').length
+
+  // 按告警类型统计
+  const typeMap = new Map<string, number>()
+  alertLogs.value.forEach((log: any) => {
+    const type = log.alertType || '未知'
+    typeMap.set(type, (typeMap.get(type) || 0) + 1)
+  })
+
+  const typeData = Array.from(typeMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5)
+
+  const option = {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      right: 10,
+      top: 'center',
+      data: typeData.map(d => d.name)
+    },
+    series: [
+      {
+        name: '告警类型',
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['40%', '50%'],
+        data: typeData.length > 0 ? typeData : [{ name: '暂无数据', value: 1 }],
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
+          }
+        }
+      }
+    ]
+  }
+
+  chart.setOption(option)
+  window.addEventListener('resize', () => chart.resize())
+}
+
+// 页面加载时获取数据
+onMounted(() => {
+  fetchHosts()
+  fetchClusters()
+  fetchOperationLogs()
+  fetchAlertLogs()
+})
 </script>
 
 <style scoped>
@@ -414,42 +564,24 @@ const getAlarmLevelText = (level: string) => {
 .stat-label {
   font-size: 14px;
   color: #909399;
-  margin-bottom: 8px;
 }
 
-.stat-trend {
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.trend-up {
-  color: #67C23A;
-}
-
-.trend-down {
-  color: #F56C6C;
-}
-
-.detail-row {
+.chart-row {
   margin-bottom: 20px;
 }
 
-.detail-card {
+.chart-card {
   border-radius: 8px;
   height: 100%;
 }
 
-.detail-card :deep(.el-card__header) {
+.chart-card :deep(.el-card__header) {
   padding: 15px 20px;
   border-bottom: 1px solid #ebeef5;
 }
 
-.detail-card :deep(.el-card__body) {
+.chart-card :deep(.el-card__body) {
   padding: 20px;
-  max-height: 480px;
-  overflow-y: auto;
 }
 
 .card-header {
@@ -464,170 +596,57 @@ const getAlarmLevelText = (level: string) => {
   color: #303133;
 }
 
-/* 部署详情样式 */
-:deep(.el-timeline) {
-  padding-left: 10px;
+.chart-container {
+  width: 100%;
+  height: 300px;
 }
 
-:deep(.el-timeline-item__timestamp) {
-  color: #909399;
-  font-size: 13px;
+.quick-access-row {
+  margin-bottom: 20px;
 }
 
-:deep(.el-timeline-item__wrapper) {
-  padding-left: 28px;
+.quick-access-card {
+  border-radius: 8px;
 }
 
-.deploy-item {
-  margin-bottom: 10px;
-}
-
-.deploy-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.deploy-name {
-  font-weight: 500;
-  color: #303133;
-  font-size: 14px;
-}
-
-.deploy-info {
-  font-size: 13px;
-  color: #606266;
-  margin-bottom: 4px;
-}
-
-.deploy-info span {
-  margin-right: 15px;
-}
-
-.deploy-user {
-  font-size: 12px;
-  color: #909399;
-}
-
-/* 告警样式 */
-.alarm-card :deep(.el-card__body) {
+.quick-access-card :deep(.el-card__header) {
   padding: 15px 20px;
+  border-bottom: 1px solid #ebeef5;
 }
 
-.alarm-list {
-  max-height: 420px;
-  overflow-y: auto;
+.quick-access-card :deep(.el-card__body) {
+  padding: 20px;
 }
 
-.alarm-item {
-  padding: 12px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  border-left: 3px solid;
+.quick-access-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 20px;
+}
+
+.quick-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border-radius: 8px;
   background-color: #f5f7fa;
+  cursor: pointer;
   transition: all 0.3s;
 }
 
-.alarm-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.alarm-item:last-child {
-  margin-bottom: 0;
-}
-
-.alarm-high {
-  border-left-color: #F56C6C;
-  background-color: #fef0f0;
-}
-
-.alarm-medium {
-  border-left-color: #E6A23C;
-  background-color: #fdf6ec;
-}
-
-.alarm-low {
-  border-left-color: #409EFF;
+.quick-item:hover {
   background-color: #ecf5ff;
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.alarm-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.alarm-icon {
-  font-size: 18px;
-}
-
-.alarm-high .alarm-icon {
-  color: #F56C6C;
-}
-
-.alarm-medium .alarm-icon {
-  color: #E6A23C;
-}
-
-.alarm-low .alarm-icon {
-  color: #409EFF;
-}
-
-.alarm-title {
-  flex: 1;
-  font-weight: 500;
-  color: #303133;
+.quick-item span {
+  margin-top: 12px;
   font-size: 14px;
-}
-
-.alarm-content {
-  font-size: 13px;
   color: #606266;
-  line-height: 1.6;
-  margin-bottom: 8px;
-  padding-left: 26px;
-}
-
-.alarm-footer {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #909399;
-  padding-left: 26px;
-}
-
-/* 表格样式优化 */
-:deep(.el-table) {
-  font-size: 13px;
-}
-
-:deep(.el-table th) {
-  background-color: #fafafa;
-}
-
-/* 滚动条美化 */
-.detail-card :deep(.el-card__body),
-.alarm-list {
-  scrollbar-width: thin;
-  scrollbar-color: #dcdfe6 transparent;
-}
-
-.detail-card :deep(.el-card__body)::-webkit-scrollbar,
-.alarm-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.detail-card :deep(.el-card__body)::-webkit-scrollbar-thumb,
-.alarm-list::-webkit-scrollbar-thumb {
-  background-color: #dcdfe6;
-  border-radius: 3px;
-}
-
-.detail-card :deep(.el-card__body)::-webkit-scrollbar-thumb:hover,
-.alarm-list::-webkit-scrollbar-thumb:hover {
-  background-color: #c0c4cc;
+  font-weight: 500;
 }
 
 /* 响应式设计 */
@@ -639,6 +658,21 @@ const getAlarmLevelText = (level: string) => {
   .stat-icon {
     width: 56px;
     height: 56px;
+  }
+
+  .chart-container {
+    height: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .quick-access-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 15px;
+  }
+
+  .quick-item {
+    padding: 15px;
   }
 }
 </style>

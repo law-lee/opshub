@@ -142,7 +142,7 @@
 
         <el-table-column label="检查间隔" width="120" align="center">
           <template #default="{ row }">
-            {{ row.checkInterval }}分钟
+            {{ Math.round(row.checkInterval / 60) }}分钟
           </template>
         </el-table-column>
 
@@ -284,7 +284,7 @@
           </div>
           <div class="info-item">
             <span class="info-label">检查间隔:</span>
-            <span class="info-value">{{ currentDomain.checkInterval }}分钟</span>
+            <span class="info-value">{{ Math.round(currentDomain.checkInterval / 60) }}分钟</span>
           </div>
           <div class="info-item">
             <span class="info-label">最后检查:</span>
@@ -483,7 +483,7 @@ const handleEdit = (row: any) => {
   Object.assign(form, {
     id: row.id,
     domain: row.domain,
-    checkInterval: row.checkInterval,
+    checkInterval: Math.round(row.checkInterval / 60), // 秒转分钟
     enableSSL: row.enableSSL ?? true,
     enableAlert: row.enableAlert ?? false,
     responseThreshold: row.responseThreshold ?? 1000,
@@ -549,11 +549,17 @@ const handleSubmit = async () => {
     if (valid) {
       submitting.value = true
       try {
+        // 转换检查间隔：前端是分钟，后端是秒
+        const submitData = {
+          ...form,
+          checkInterval: form.checkInterval * 60
+        }
+
         if (form.id) {
-          await updateDomainMonitor(form.id, form)
+          await updateDomainMonitor(form.id, submitData)
           ElMessage.success('更新成功')
         } else {
-          const result = await createDomainMonitor(form)
+          const result = await createDomainMonitor(submitData)
           ElMessage.success('创建成功')
           // 创建成功后自动执行一次检查
           try {
@@ -581,6 +587,10 @@ const handleDialogClose = () => {
 
 onMounted(() => {
   loadData()
+  // 每30秒自动刷新数据
+  setInterval(() => {
+    loadData()
+  }, 30000)
 })
 </script>
 

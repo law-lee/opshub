@@ -23,8 +23,8 @@ func (uc *OperationLogUseCase) GetByID(ctx context.Context, id uint) (*SysOperat
 	return uc.repo.GetByID(ctx, id)
 }
 
-func (uc *OperationLogUseCase) List(ctx context.Context, page, pageSize int, username, module, action, startTime, endTime string) ([]*SysOperationLog, int64, error) {
-	return uc.repo.List(ctx, page, pageSize, username, module, action, startTime, endTime)
+func (uc *OperationLogUseCase) List(ctx context.Context, page, pageSize int, username, module, action, status, startTime, endTime string) ([]*SysOperationLog, int64, error) {
+	return uc.repo.List(ctx, page, pageSize, username, module, action, status, startTime, endTime)
 }
 
 func (uc *OperationLogUseCase) Delete(ctx context.Context, id uint) error {

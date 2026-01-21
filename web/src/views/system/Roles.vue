@@ -110,9 +110,14 @@
 
         <el-table-column prop="createTime" label="创建时间" min-width="180" />
 
-        <el-table-column label="操作" width="150" fixed="right" align="center">
+        <el-table-column label="操作" width="220" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
+              <el-tooltip content="授权" placement="top">
+                <el-button link class="action-btn action-permission" @click="handlePermission(row)">
+                  <el-icon><Setting /></el-icon>
+                </el-button>
+              </el-tooltip>
               <el-tooltip content="编辑" placement="top">
                 <el-button link class="action-btn action-edit" @click="handleEdit(row)">
                   <el-icon><Edit /></el-icon>
@@ -186,6 +191,67 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 授权对话框 -->
+    <el-dialog
+      v-model="permissionDialogVisible"
+      title="角色授权"
+      width="50%"
+      class="permission-dialog responsive-dialog"
+      :close-on-click-modal="false"
+      @close="handlePermissionDialogClose"
+    >
+      <el-alert
+        title="提示"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 20px;"
+      >
+        <template #default>
+          为角色 <strong>{{ currentRole.name }}</strong> 分配菜单权限。勾选的菜单及其下属接口将被授权给该角色。
+        </template>
+      </el-alert>
+
+      <div v-loading="menuLoading" style="min-height: 300px;">
+        <el-tree
+          ref="menuTreeRef"
+          :data="menuTree"
+          :props="{ label: 'name', children: 'children' }"
+          show-checkbox
+          node-key="id"
+          :default-checked-keys="selectedMenuIds"
+          :default-expanded-keys="expandedKeys"
+          :check-strictly="false"
+          class="permission-tree"
+        >
+          <template #default="{ node, data }">
+            <div class="tree-node">
+              <el-icon v-if="data.type === 1" class="tree-node-icon folder-icon">
+                <Folder />
+              </el-icon>
+              <el-icon v-else-if="data.type === 2" class="tree-node-icon menu-icon">
+                <Menu />
+              </el-icon>
+              <el-icon v-else class="tree-node-icon button-icon">
+                <Operation />
+              </el-icon>
+              <span class="tree-node-label">{{ data.name }}</span>
+              <el-tag v-if="data.type === 1" size="small" type="info">目录</el-tag>
+              <el-tag v-else-if="data.type === 2" size="small" type="success">菜单</el-tag>
+              <el-tag v-else size="small" type="warning">按钮</el-tag>
+            </div>
+          </template>
+        </el-tree>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="permissionDialogVisible = false">取消</el-button>
+          <el-button class="black-button" @click="handlePermissionSubmit" :loading="submitting">保存授权</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -200,18 +266,32 @@ import {
   UserFilled,
   Search,
   RefreshLeft,
-  Key
+  Key,
+  Setting,
+  Folder,
+  Menu,
+  Operation
 } from '@element-plus/icons-vue'
-import { getRoleList, createRole, updateRole, deleteRole } from '@/api/role'
+import { getRoleList, createRole, updateRole, deleteRole, getRoleMenus, assignRoleMenus } from '@/api/role'
+import { getMenuTree } from '@/api/menu'
 
 // 加载状态
 const loading = ref(false)
 const submitting = ref(false)
+const menuLoading = ref(false)
 
 // 对话框状态
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
+
+// 授权对话框状态
+const permissionDialogVisible = ref(false)
+const currentRole = ref<any>({})
+const menuTree = ref<any[]>([])
+const selectedMenuIds = ref<number[]>([])
+const expandedKeys = ref<number[]>([])
+const menuTreeRef = ref()
 
 // 表单引用
 const formRef = ref<FormInstance>()
@@ -389,6 +469,118 @@ const handleSubmit = async () => {
 const handleDialogClose = () => {
   formRef.value?.resetFields()
   resetForm()
+}
+
+// 打开授权对话框
+const handlePermission = async (row: any) => {
+  currentRole.value = row
+  permissionDialogVisible.value = true
+
+  // 加载菜单树
+  await loadMenuTree()
+
+  // 加载角色已有权限
+  await loadRoleMenus(row.id)
+}
+
+// 加载菜单树
+const loadMenuTree = async () => {
+  menuLoading.value = true
+  try {
+    const res: any = await getMenuTree()
+    menuTree.value = res || []
+
+    // 自动展开所有一级节点
+    expandedKeys.value = menuTree.value.map((item: any) => item.id)
+  } catch (error) {
+    console.error('获取菜单树失败:', error)
+    ElMessage.error('获取菜单树失败')
+  } finally {
+    menuLoading.value = false
+  }
+}
+
+// 加载角色已分配的菜单
+const loadRoleMenus = async (roleId: number) => {
+  menuLoading.value = true
+  try {
+    const res: any = await getRoleMenus(roleId)
+
+    // 提取已分配的菜单ID（只设置叶子节点）
+    const menus = res.menus || []
+    const leafMenuIds = getLeafMenuIds(menus)
+    selectedMenuIds.value = leafMenuIds
+  } catch (error) {
+    console.error('获取角色菜单失败:', error)
+    ElMessage.error('获取角色菜单失败')
+  } finally {
+    menuLoading.value = false
+  }
+}
+
+// 获取叶子节点ID（避免父节点被自动选中）
+const getLeafMenuIds = (menus: any[]): number[] => {
+  const leafIds: number[] = []
+  const allMenuIds = new Set(menus.map((m: any) => m.id))
+
+  // 递归检查每个节点是否为叶子节点
+  const checkLeaf = (menu: any, allMenus: any[]) => {
+    const hasChildren = allMenus.some((m: any) => m.parentId === menu.id)
+    if (!hasChildren) {
+      leafIds.push(menu.id)
+    }
+  }
+
+  // 从菜单树中找出所有叶子节点
+  const flattenMenuTree = (tree: any[]): any[] => {
+    const result: any[] = []
+    const traverse = (nodes: any[]) => {
+      nodes.forEach((node: any) => {
+        result.push(node)
+        if (node.children && node.children.length > 0) {
+          traverse(node.children)
+        }
+      })
+    }
+    traverse(tree)
+    return result
+  }
+
+  const allMenusFlat = flattenMenuTree(menuTree.value)
+  menus.forEach((menu: any) => {
+    checkLeaf(menu, allMenusFlat)
+  })
+
+  return leafIds
+}
+
+// 提交授权
+const handlePermissionSubmit = async () => {
+  if (!menuTreeRef.value) return
+
+  submitting.value = true
+  try {
+    // 获取选中的节点（包括半选中的父节点）
+    const checkedKeys = menuTreeRef.value.getCheckedKeys()
+    const halfCheckedKeys = menuTreeRef.value.getHalfCheckedKeys()
+    const allKeys = [...checkedKeys, ...halfCheckedKeys]
+
+    await assignRoleMenus(currentRole.value.id, allKeys)
+    ElMessage.success('授权成功')
+    permissionDialogVisible.value = false
+  } catch (error: any) {
+    ElMessage.error(error.message || '授权失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 授权对话框关闭事件
+const handlePermissionDialogClose = () => {
+  currentRole.value = {}
+  menuTree.value = []
+  selectedMenuIds.value = []
+  expandedKeys.value = []
 }
 
 onMounted(() => {
@@ -613,6 +805,11 @@ onMounted(() => {
   color: #f56c6c;
 }
 
+.action-permission:hover {
+  background-color: #f0f9ff;
+  color: #67C23A;
+}
+
 .black-button {
   background-color: #000000 !important;
   color: #ffffff !important;
@@ -689,5 +886,57 @@ onMounted(() => {
     max-width: none;
     min-width: auto;
   }
+}
+
+/* 授权对话框样式 */
+.permission-dialog :deep(.el-dialog__body) {
+  padding: 24px;
+}
+
+.permission-tree {
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.permission-tree :deep(.el-tree-node__content) {
+  height: 36px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+}
+
+.permission-tree :deep(.el-tree-node__content:hover) {
+  background-color: #f5f7fa;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.tree-node-icon {
+  font-size: 16px;
+}
+
+.folder-icon {
+  color: #E6A23C;
+}
+
+.menu-icon {
+  color: #409EFF;
+}
+
+.button-icon {
+  color: #67C23A;
+}
+
+.tree-node-label {
+  flex: 1;
+  font-size: 14px;
+  color: #303133;
 }
 </style>

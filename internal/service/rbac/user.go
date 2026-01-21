@@ -63,6 +63,15 @@ type RegisterRequest struct {
 }
 
 // Login 用户登录
+// @Summary 用户登录
+// @Description 用户使用用户名、密码和验证码登录系统
+// @Tags 认证管理
+// @Accept json
+// @Produce json
+// @Param body body LoginRequest true "登录信息"
+// @Success 200 {object} response.Response "登录成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /public/login [post]
 func (s *UserService) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -185,6 +194,15 @@ func (s *UserService) recordLoginLog(username, loginType, loginStatus, ip, userA
 }
 
 // Register 用户注册
+// @Summary 用户注册
+// @Description 新用户使用用户名、密码等信息注册账号
+// @Tags 认证管理
+// @Accept json
+// @Produce json
+// @Param body body RegisterRequest true "注册信息"
+// @Success 200 {object} response.Response{} "注册成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /public/register [post]
 func (s *UserService) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -210,6 +228,15 @@ func (s *UserService) Register(c *gin.Context) {
 }
 
 // GetProfile 获取当前用户信息
+// @Summary 获取当前用户信息
+// @Description 获取登录用户的个人信息（需要Bearer Token认证）
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} response.Response{} "获取成功"
+// @Failure 401 {object} response.Response "未登录"
+// @Router /profile [get]
 func (s *UserService) GetProfile(c *gin.Context) {
 	userID := GetUserID(c)
 	if userID == 0 {
@@ -236,6 +263,16 @@ type ChangePasswordRequest struct {
 }
 
 // ChangePassword 修改自己的密码
+// @Summary 修改用户密码
+// @Description 用户修改自己的登录密码
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body ChangePasswordRequest true "密码信息"
+// @Success 200 {object} response.Response "修改成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /profile/password [put]
 func (s *UserService) ChangePassword(c *gin.Context) {
 	userID := GetUserID(c)
 	if userID == 0 {
@@ -258,6 +295,15 @@ func (s *UserService) ChangePassword(c *gin.Context) {
 }
 
 // CreateUser 创建用户
+// @Summary 创建用户
+// @Description 管理员创建新用户
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body rbac.SysUser true "用户信息"
+// @Success 200 {object} response.Response{} "创建成功"
+// @Router /users [post]
 func (s *UserService) CreateUser(c *gin.Context) {
 	var req rbac.SysUser
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -277,6 +323,16 @@ func (s *UserService) CreateUser(c *gin.Context) {
 }
 
 // UpdateUser 更新用户
+// @Summary 更新用户信息
+// @Description 管理员更新用户信息
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "用户ID"
+// @Param body body rbac.SysUser true "用户信息"
+// @Success 200 {object} response.Response{} "更新成功"
+// @Router /users/{id} [put]
 func (s *UserService) UpdateUser(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -311,6 +367,15 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 }
 
 // DeleteUser 删除用户
+// @Summary 删除用户
+// @Description 管理员删除用户
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "用户ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Router /users/{id} [delete]
 func (s *UserService) DeleteUser(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -328,6 +393,15 @@ func (s *UserService) DeleteUser(c *gin.Context) {
 }
 
 // GetUser 获取用户详情
+// @Summary 获取用户详情
+// @Description 获取单个用户的详细信息
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "用户ID"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /users/{id} [get]
 func (s *UserService) GetUser(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -349,6 +423,18 @@ func (s *UserService) GetUser(c *gin.Context) {
 }
 
 // ListUsers 用户列表
+// @Summary 获取用户列表
+// @Description 分页获取用户列表，支持按关键字和部门筛选
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键字"
+// @Param departmentId query int false "部门ID"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /users [get]
 func (s *UserService) ListUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -379,6 +465,17 @@ type AssignUserRolesRequest struct {
 	RoleIDs []uint `json:"roleIds" binding:"required"`
 }
 
+// AssignUserRoles 分配用户角色
+// @Summary 分配用户角色
+// @Description 为用户分配角色
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "用户ID"
+// @Param body body AssignUserRolesRequest true "角色IDs"
+// @Success 200 {object} response.Response "分配成功"
+// @Router /users/{id}/roles [post]
 func (s *UserService) AssignUserRoles(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -406,6 +503,17 @@ type AssignUserPositionsRequest struct {
 	PositionIDs []uint `json:"positionIds"`
 }
 
+// AssignUserPositions 分配用户岗位
+// @Summary 分配用户岗位
+// @Description 为用户分配岗位
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "用户ID"
+// @Param body body AssignUserPositionsRequest true "岗位IDs"
+// @Success 200 {object} response.Response "分配成功"
+// @Router /users/{id}/positions [post]
 func (s *UserService) AssignUserPositions(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -434,6 +542,16 @@ type ResetPasswordRequest struct {
 }
 
 // ResetPassword 重置用户密码
+// @Summary 重置用户密码
+// @Description 管理员重置用户密码
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "用户ID"
+// @Param body body ResetPasswordRequest true "新密码"
+// @Success 200 {object} response.Response "重置成功"
+// @Router /users/{id}/password/reset [post]
 func (s *UserService) ResetPassword(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)

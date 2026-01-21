@@ -134,7 +134,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Lock, Document, Delete } from '@element-plus/icons-vue'
 import { getNetworkPolicies, getNetworkPolicyYAML, updateNetworkPolicyYAML, createNetworkPolicyYAML, createNetworkPolicy, deleteNetworkPolicy, getNamespaces, type NetworkPolicyDetailInfo } from '@/api/kubernetes'
-import { load } from 'js-yaml'
+import { load, dump } from 'js-yaml'
 
 const props = defineProps<{
   clusterId?: number
@@ -249,7 +249,7 @@ const handleEditYAML = async (policy: NetworkPolicyDetailInfo) => {
     // 保存原始 JSON 数据
     originalJsonData.value = response.items || response
     // 转换为 YAML 格式
-    const yaml = jsonToYaml(originalJsonData.value)
+    const yaml = dump(originalJsonData.value, { indent: 2, lineWidth: -1 })
     yamlContent.value = yaml
     yamlDialogVisible.value = true
   } catch (error) {
@@ -258,30 +258,6 @@ const handleEditYAML = async (policy: NetworkPolicyDetailInfo) => {
   }
 }
 
-const jsonToYaml = (obj: any, indent = 0): string => {
-  const spaces = '  '.repeat(indent)
-  let result = ''
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      result += `${spaces}- ${jsonToYaml(item, indent).trim()}\n`
-    }
-  } else if (typeof obj === 'object' && obj !== null) {
-    for (const [key, value] of Object.entries(obj)) {
-      if (value === null || value === undefined) {
-        result += `${spaces}${key}: null\n`
-      } else if (typeof value === 'object') {
-        result += `${spaces}${key}:\n${jsonToYaml(value, indent + 1)}`
-      } else {
-        result += `${spaces}${key}: ${value}\n`
-      }
-    }
-  } else {
-    result = `${obj}\n`
-  }
-
-  return result
-}
 
 // 使用 js-yaml 库解析 YAML
 const yamlToJson = (yaml: string): any => {
@@ -298,8 +274,8 @@ const handleSaveYAML = async () => {
 
   saving.value = true
   try {
-    // 尝试将 YAML 转回 JSON，如果失败则使用原始 JSON
-    let jsonData = originalJsonData.value
+    // 尝试将 YAML 转回 JSON
+    let jsonData
     try {
       jsonData = yamlToJson(yamlContent.value)
       // 确保基本的元数据存在
@@ -319,8 +295,10 @@ const handleSaveYAML = async () => {
         jsonData.kind = 'NetworkPolicy'
       }
     } catch (e) {
-      console.warn('YAML 解析失败，使用原始 JSON:', e)
-      jsonData = originalJsonData.value
+      console.error('YAML 解析失败:', e)
+      ElMessage.error('YAML 格式错误，请检查缩进和语法')
+      saving.value = false
+      return
     }
 
     await updateNetworkPolicyYAML(

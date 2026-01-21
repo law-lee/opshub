@@ -23,6 +23,7 @@ type HostRepo interface {
 	GetByGroupID(ctx context.Context, groupID uint) ([]*Host, error)
 	GetByIP(ctx context.Context, ip string) (*Host, error)
 	GetByCloudInstanceID(ctx context.Context, instanceID string) (*Host, error)
+	CountByCredentialID(ctx context.Context, credentialID uint) (int64, error)
 }
 
 type CredentialRepo interface {

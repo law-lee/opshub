@@ -3,13 +3,20 @@ package asset
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
+	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
+	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
 	"github.com/xuri/excelize/v2"
 	"github.com/ydcloud-dy/opshub/pkg/collector"
 	sshclient "github.com/ydcloud-dy/opshub/pkg/ssh"
@@ -454,11 +461,15 @@ func (uc *CredentialUseCase) GetByIDDecrypted(ctx context.Context, id uint) (*Cr
 
 // CredentialUseCase 凭证用例
 type CredentialUseCase struct {
-	repo CredentialRepo
+	repo     CredentialRepo
+	hostRepo HostRepo
 }
 
-func NewCredentialUseCase(repo CredentialRepo) *CredentialUseCase {
-	return &CredentialUseCase{repo: repo}
+func NewCredentialUseCase(repo CredentialRepo, hostRepo HostRepo) *CredentialUseCase {
+	return &CredentialUseCase{
+		repo:     repo,
+		hostRepo: hostRepo,
+	}
 }
 
 // Create 创建凭证
@@ -532,6 +543,9 @@ func (uc *CredentialUseCase) List(ctx context.Context, page, pageSize int, keywo
 			typeText = "密钥"
 		}
 
+		// 统计使用该凭证的主机数量
+		usedCount, _ := uc.hostRepo.CountByCredentialID(ctx, cred.ID)
+
 		vo := &CredentialVO{
 			ID:          cred.ID,
 			Name:        cred.Name,
@@ -540,6 +554,7 @@ func (uc *CredentialUseCase) List(ctx context.Context, page, pageSize int, keywo
 			Username:    cred.Username,
 			Description: cred.Description,
 			CreateTime:  cred.CreatedAt.Format("2006-01-02 15:04:05"),
+			HostCount:   usedCount,
 		}
 		vos = append(vos, vo)
 	}
@@ -561,6 +576,9 @@ func (uc *CredentialUseCase) GetAll(ctx context.Context) ([]*CredentialVO, error
 			typeText = "密钥"
 		}
 
+		// 统计使用该凭证的主机数量
+		usedCount, _ := uc.hostRepo.CountByCredentialID(ctx, cred.ID)
+
 		vo := &CredentialVO{
 			ID:          cred.ID,
 			Name:        cred.Name,
@@ -569,6 +587,7 @@ func (uc *CredentialUseCase) GetAll(ctx context.Context) ([]*CredentialVO, error
 			Username:    cred.Username,
 			Description: cred.Description,
 			CreateTime:  cred.CreatedAt.Format("2006-01-02 15:04:05"),
+			HostCount:   usedCount,
 		}
 		vos = append(vos, vo)
 	}
@@ -684,10 +703,8 @@ func (uc *CloudAccountUseCase) GetRegions(ctx context.Context, accountID uint) (
 		regions, err = uc.listAliyunRegions(account)
 	case "tencent":
 		regions, err = uc.listTencentRegions(account)
-	case "aws":
-		regions, err = uc.listAWSRegions(account)
-	case "huawei":
-		regions, err = uc.listHuaweiRegions(account)
+	case "jdcloud":
+		regions, err = uc.listJDCloudRegions(account)
 	default:
 		return nil, fmt.Errorf("暂不支持该云平台")
 	}
@@ -723,12 +740,6 @@ func (uc *CloudAccountUseCase) GetInstances(ctx context.Context, accountID uint,
 		instances, err = uc.listAliyunInstances(account, region)
 	case "tencent":
 		instances, err = uc.listTencentInstances(account, region)
-	case "aws":
-		// TODO: AWS instances list not implemented
-		return nil, fmt.Errorf("AWS平台暂未实现")
-	case "huawei":
-		// TODO: Huawei instances list not implemented
-		return nil, fmt.Errorf("华为云平台暂未实现")
 	default:
 		return nil, fmt.Errorf("暂不支持该云平台")
 	}
@@ -945,54 +956,59 @@ func (uc *CloudAccountUseCase) listAliyunRegions(account *CloudAccount) ([]Cloud
 
 // listTencentRegions 获取腾讯云区域列表
 func (uc *CloudAccountUseCase) listTencentRegions(account *CloudAccount) ([]CloudRegion, error) {
-	// TODO: 实现腾讯云SDK调用获取区域列表
-	return []CloudRegion{
-		{Value: "ap-guangzhou", Label: "华南地区 (广州)"},
-		{Value: "ap-shanghai", Label: "华东地区 (上海)"},
-		{Value: "ap-nanjing", Label: "华东地区 (南京)"},
-		{Value: "ap-beijing", Label: "华北地区 (北京)"},
-		{Value: "ap-chengdu", Label: "西南地区 (成都)"},
-		{Value: "ap-chongqing", Label: "西南地区 (重庆)"},
-		{Value: "ap-hongkong", Label: "中国香港"},
-		{Value: "ap-singapore", Label: "东南亚 (新加坡)"},
-		{Value: "ap-tokyo", Label: "日本 (东京)"},
-		{Value: "ap-seoul", Label: "韩国 (首尔)"},
-		{Value: "na-siliconvalley", Label: "美国西部 (硅谷)"},
-		{Value: "na-ashburn", Label: "美国东部 (弗吉尼亚)"},
-		{Value: "eu-frankfurt", Label: "欧洲 (法兰克福)"},
-	}, nil
+	// 创建腾讯云客户端
+	cred := common.NewCredential(account.AccessKey, account.SecretKey)
+	cpf := profile.NewClientProfile()
+	cpf.HttpProfile.Endpoint = "cvm.tencentcloudapi.com"
+
+	// 使用默认区域 ap-guangzhou 来查询区域列表
+	client, err := v20170312.NewClient(cred, "ap-guangzhou", cpf)
+	if err != nil {
+		return nil, fmt.Errorf("创建腾讯云客户端失败: %w", err)
+	}
+
+	// DescribeRegions 请求
+	request := v20170312.NewDescribeRegionsRequest()
+
+	response, err := client.DescribeRegions(request)
+	if err != nil {
+		return nil, fmt.Errorf("获取腾讯云区域列表失败: %w", err)
+	}
+
+	var regions []CloudRegion
+	if response.Response.RegionSet != nil {
+		for _, region := range response.Response.RegionSet {
+			regionName := ""
+			if region.RegionName != nil {
+				regionName = *region.RegionName
+			}
+			regionID := ""
+			if region.Region != nil {
+				regionID = *region.Region
+			}
+
+			// 只返回可用的区域
+			if region.RegionState != nil && *region.RegionState == "AVAILABLE" {
+				regions = append(regions, CloudRegion{
+					Value: regionID,
+					Label: regionName,
+				})
+			}
+		}
+	}
+
+	return regions, nil
 }
 
-// listAWSRegions 获取AWS区域列表
-func (uc *CloudAccountUseCase) listAWSRegions(account *CloudAccount) ([]CloudRegion, error) {
-	// TODO: 实现AWS SDK调用获取区域列表
+// listJDCloudRegions 获取京东云区域列表
+func (uc *CloudAccountUseCase) listJDCloudRegions(account *CloudAccount) ([]CloudRegion, error) {
+	// 京东云区域列表
 	return []CloudRegion{
-		{Value: "us-east-1", Label: "US East (N. Virginia)"},
-		{Value: "us-east-2", Label: "US East (Ohio)"},
-		{Value: "us-west-1", Label: "US West (N. California)"},
-		{Value: "us-west-2", Label: "US West (Oregon)"},
-		{Value: "ap-southeast-1", Label: "Asia Pacific (Singapore)"},
-		{Value: "ap-southeast-2", Label: "Asia Pacific (Sydney)"},
-		{Value: "ap-northeast-1", Label: "Asia Pacific (Tokyo)"},
-		{Value: "ap-northeast-2", Label: "Asia Pacific (Seoul)"},
-		{Value: "ap-south-1", Label: "Asia Pacific (Mumbai)"},
-		{Value: "eu-central-1", Label: "Europe (Frankfurt)"},
-		{Value: "eu-west-1", Label: "Europe (Ireland)"},
-	}, nil
-}
-
-// listHuaweiRegions 获取华为云区域列表
-func (uc *CloudAccountUseCase) listHuaweiRegions(account *CloudAccount) ([]CloudRegion, error) {
-	// TODO: 实现华为云SDK调用获取区域列表
-	return []CloudRegion{
-		{Value: "cn-south-1", Label: "华南-广州"},
-		{Value: "cn-east-3", Label: "华东-上海"},
 		{Value: "cn-north-1", Label: "华北-北京"},
-		{Value: "cn-north-4", Label: "华北-乌兰察布"},
-		{Value: "cn-southwest-2", Label: "西南-贵阳"},
+		{Value: "cn-east-1", Label: "华东-宿迁"},
+		{Value: "cn-south-1", Label: "华南-广州"},
+		{Value: "cn-southwest-1", Label: "西南-成都"},
 		{Value: "ap-southeast-1", Label: "中国香港"},
-		{Value: "ap-southeast-2", Label: "亚太-曼谷"},
-		{Value: "ap-southeast-3", Label: "亚太-新加坡"},
 	}, nil
 }
 
@@ -1061,30 +1077,145 @@ func (uc *CloudAccountUseCase) listAliyunInstances(account *CloudAccount, region
 	return allInstances, nil
 }
 
-// listTencentInstances 获取腾讯云实例列表（占位实现）
+// listTencentInstances 获取腾讯云实例列表
 func (uc *CloudAccountUseCase) listTencentInstances(account *CloudAccount, region string) ([]CloudInstance, error) {
-	// TODO: 实现腾讯云SDK调用
-	// 返回模拟数据用于测试
-	return []CloudInstance{
-		{InstanceID: "ins-12345678", Name: "tencent-web-01", PublicIP: "119.29.1.100", PrivateIP: "10.0.1.10", OS: "CentOS 7.6", Status: "Running"},
-		{InstanceID: "ins-87654321", Name: "tencent-api-01", PublicIP: "119.29.1.101", PrivateIP: "10.0.1.11", OS: "Ubuntu 20.04", Status: "Running"},
-	}, nil
+	// 创建腾讯云CVM客户端
+	cred := common.NewCredential(account.AccessKey, account.SecretKey)
+	cpf := profile.NewClientProfile()
+	cpf.HttpProfile.Endpoint = "cvm.tencentcloudapi.com"
+
+	client, err := v20170312.NewClient(cred, region, cpf)
+	if err != nil {
+		return nil, fmt.Errorf("创建腾讯云客户端失败: %w", err)
+	}
+
+	// DescribeInstances 请求
+	request := v20170312.NewDescribeInstancesRequest()
+	limit := int64(100)
+	request.Limit = &limit
+
+	var allInstances []CloudInstance
+	offset := int64(0)
+
+	for {
+		request.Offset = &offset
+		response, err := client.DescribeInstances(request)
+		if err != nil {
+			return nil, fmt.Errorf("获取腾讯云实例失败: %w", err)
+		}
+
+		if response.Response.InstanceSet == nil || len(response.Response.InstanceSet) == 0 {
+			break
+		}
+
+		for _, inst := range response.Response.InstanceSet {
+			var publicIP, privateIP string
+			if len(inst.PublicIpAddresses) > 0 && inst.PublicIpAddresses[0] != nil {
+				publicIP = *inst.PublicIpAddresses[0]
+			}
+			if len(inst.PrivateIpAddresses) > 0 && inst.PrivateIpAddresses[0] != nil {
+				privateIP = *inst.PrivateIpAddresses[0]
+			}
+
+			var osName string
+			if inst.OsName != nil {
+				osName = *inst.OsName
+			}
+
+			var instanceID, instanceName, status string
+			if inst.InstanceId != nil {
+				instanceID = *inst.InstanceId
+			}
+			if inst.InstanceName != nil {
+				instanceName = *inst.InstanceName
+			}
+			if inst.InstanceState != nil {
+				status = *inst.InstanceState
+			}
+
+			allInstances = append(allInstances, CloudInstance{
+				InstanceID: instanceID,
+				Name:       instanceName,
+				PublicIP:   publicIP,
+				PrivateIP:  privateIP,
+				OS:         osName,
+				Status:     status,
+			})
+		}
+
+		if len(response.Response.InstanceSet) < 100 {
+			break
+		}
+		offset += 100
+		if offset >= 1000 { // 最多获取1000个实例
+			break
+		}
+	}
+
+	return allInstances, nil
 }
 
-// listAWSInstances 获取AWS实例列表（占位实现）
-func (uc *CloudAccountUseCase) listAWSInstances(account *CloudAccount, region string) ([]CloudInstance, error) {
-	// TODO: 实现AWS SDK调用
-	return []CloudInstance{
-		{InstanceID: "i-0123456789abcdef0", Name: "aws-web-server", PublicIP: "54.123.45.67", PrivateIP: "10.0.1.10", OS: "Amazon Linux 2", Status: "Running"},
-	}, nil
-}
 
-// listHuaweiInstances 获取华为云实例列表（占位实现）
-func (uc *CloudAccountUseCase) listHuaweiInstances(account *CloudAccount, region string) ([]CloudInstance, error) {
-	// TODO: 实现华为云SDK调用
-	return []CloudInstance{
-		{InstanceID: "i-12345678-1234-1234-1234-123456789012", Name: "huawei-server-01", PublicIP: "119.8.1.100", PrivateIP: "192.168.1.10", OS: "EulerOS 2.0", Status: "Running"},
-	}, nil
+// listJDCloudInstances 获取京东云实例列表
+func (uc *CloudAccountUseCase) listJDCloudInstances(account *CloudAccount, region string) ([]CloudInstance, error) {
+	// 京东云使用 DescribeInstances API
+	url := fmt.Sprintf("https://vm.%s.jdcloud-api.com/v2/regions/%s/instances?pageSize=100", region, region)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+account.SecretKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("调用京东云API失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("京东云API返回错误: %s", string(body))
+	}
+
+	// 解析京东云API响应
+	var result struct {
+		Result struct {
+			Instances []struct {
+				InstanceID string `json:"instanceId"`
+				Name       string `json:"name"`
+				Status     string `json:"status"`
+				PrimaryIP  string `json:"primaryIpAddress"`
+				PrivateIP  string `json:"privateIpAddress"`
+				OSName     string `json:"osName"`
+			} `json:"instances"`
+		} `json:"result"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("解析京东云响应失败: %w", err)
+	}
+
+	var instances []CloudInstance
+	for _, inst := range result.Result.Instances {
+		instances = append(instances, CloudInstance{
+			InstanceID: inst.InstanceID,
+			Name:       inst.Name,
+			PublicIP:   inst.PrimaryIP,
+			PrivateIP:  inst.PrivateIP,
+			OS:         inst.OSName,
+			Status:     inst.Status,
+		})
+	}
+
+	return instances, nil
 }
 
 // ExcelImportResult Excel导入结果
@@ -1369,3 +1500,181 @@ func (uc *HostUseCase) ImportFromExcelWithType(ctx context.Context, excelData []
 	return result, nil
 }
 
+
+// ListFiles 列出主机目录下的文件
+func (uc *HostUseCase) ListFiles(ctx context.Context, hostID uint, remotePath string) ([]*sshclient.FileInfo, error) {
+	// 打印接收到的原始路径，用于调试
+	fmt.Printf("[DEBUG] ListFiles 接收到的路径: %q\n", remotePath)
+
+	host, err := uc.hostRepo.GetByID(ctx, hostID)
+	if err != nil {
+		return nil, fmt.Errorf("获取主机信息失败: %w", err)
+	}
+
+	if host.CredentialID == 0 {
+		return nil, fmt.Errorf("主机未配置凭证")
+	}
+
+	credential, err := uc.credentialRepo.GetByIDDecrypted(ctx, host.CredentialID)
+	if err != nil {
+		return nil, fmt.Errorf("获取凭证失败: %w", err)
+	}
+
+	sshClient, err := uc.createSSHClient(host, credential)
+	if err != nil {
+		return nil, fmt.Errorf("创建SSH连接失败: %w", err)
+	}
+	defer sshClient.Close()
+
+	// 如果路径以 ~ 开头，替换为用户主目录
+	if strings.HasPrefix(remotePath, "~") {
+		homeDir, err := sshClient.Execute("echo $HOME")
+		if err != nil {
+			return nil, fmt.Errorf("获取用户主目录失败: %w", err)
+		}
+		homeDir = strings.TrimSpace(homeDir)
+		remotePath = strings.Replace(remotePath, "~", homeDir, 1)
+		fmt.Printf("[DEBUG] 转换后的路径: %q\n", remotePath)
+	}
+
+	// 检查路径是否存在
+	statInfo, err := sshClient.StatFile(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("路径不存在或无权限访问: %s, 错误: %w", remotePath, err)
+	}
+
+	if !statInfo.IsDir {
+		return nil, fmt.Errorf("路径不是目录: %s", remotePath)
+	}
+
+	fmt.Printf("[DEBUG] 准备列出目录: %q\n", remotePath)
+	files, err := sshClient.ListDir(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("列出目录失败: %w", err)
+	}
+
+	return files, nil
+}
+
+// UploadFile 上传文件到主机
+func (uc *HostUseCase) UploadFile(ctx context.Context, hostID uint, reader io.Reader, remotePath, filename string) error {
+	host, err := uc.hostRepo.GetByID(ctx, hostID)
+	if err != nil {
+		return fmt.Errorf("获取主机信息失败: %w", err)
+	}
+
+	if host.CredentialID == 0 {
+		return fmt.Errorf("主机未配置凭证")
+	}
+
+	credential, err := uc.credentialRepo.GetByIDDecrypted(ctx, host.CredentialID)
+	if err != nil {
+		return fmt.Errorf("获取凭证失败: %w", err)
+	}
+
+	sshClient, err := uc.createSSHClient(host, credential)
+	if err != nil {
+		return fmt.Errorf("创建SSH连接失败: %w", err)
+	}
+	defer sshClient.Close()
+
+	// 如果路径以 ~ 开头，替换为用户主目录
+	if strings.HasPrefix(remotePath, "~") {
+		homeDir, err := sshClient.Execute("echo $HOME")
+		if err != nil {
+			return fmt.Errorf("获取用户主目录失败: %w", err)
+		}
+		homeDir = strings.TrimSpace(homeDir)
+		remotePath = strings.Replace(remotePath, "~", homeDir, 1)
+	}
+
+	// 构造完整的远程文件路径
+	fullPath := filepath.Join(remotePath, filename)
+
+	// 上传文件
+	if err := sshClient.UploadFromReader(reader, fullPath); err != nil {
+		return fmt.Errorf("上传文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// DownloadFile 从主机下载文件
+func (uc *HostUseCase) DownloadFile(ctx context.Context, hostID uint, remotePath string, writer io.Writer) error {
+	host, err := uc.hostRepo.GetByID(ctx, hostID)
+	if err != nil {
+		return fmt.Errorf("获取主机信息失败: %w", err)
+	}
+
+	if host.CredentialID == 0 {
+		return fmt.Errorf("主机未配置凭证")
+	}
+
+	credential, err := uc.credentialRepo.GetByIDDecrypted(ctx, host.CredentialID)
+	if err != nil {
+		return fmt.Errorf("获取凭证失败: %w", err)
+	}
+
+	sshClient, err := uc.createSSHClient(host, credential)
+	if err != nil {
+		return fmt.Errorf("创建SSH连接失败: %w", err)
+	}
+	defer sshClient.Close()
+
+	// 如果路径以 ~ 开头，替换为用户主目录
+	if strings.HasPrefix(remotePath, "~") {
+		homeDir, err := sshClient.Execute("echo $HOME")
+		if err != nil {
+			return fmt.Errorf("获取用户主目录失败: %w", err)
+		}
+		homeDir = strings.TrimSpace(homeDir)
+		remotePath = strings.Replace(remotePath, "~", homeDir, 1)
+	}
+
+	// 下载文件
+	if err := sshClient.DownloadToWriter(remotePath, writer); err != nil {
+		return fmt.Errorf("下载文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteFile 删除主机上的文件
+func (uc *HostUseCase) DeleteFile(ctx context.Context, hostID uint, remotePath string) error {
+	host, err := uc.hostRepo.GetByID(ctx, hostID)
+	if err != nil {
+		return fmt.Errorf("获取主机信息失败: %w", err)
+	}
+
+	if host.CredentialID == 0 {
+		return fmt.Errorf("主机未配置凭证")
+	}
+
+	credential, err := uc.credentialRepo.GetByIDDecrypted(ctx, host.CredentialID)
+	if err != nil {
+		return fmt.Errorf("获取凭证失败: %w", err)
+	}
+
+	sshClient, err := uc.createSSHClient(host, credential)
+	if err != nil {
+		return fmt.Errorf("创建SSH连接失败: %w", err)
+	}
+	defer sshClient.Close()
+
+	// 如果路径以 ~ 开头，替换为用户主目录
+	if strings.HasPrefix(remotePath, "~") {
+		homeDir, err := sshClient.Execute("echo $HOME")
+		if err != nil {
+			return fmt.Errorf("获取用户主目录失败: %w", err)
+		}
+		homeDir = strings.TrimSpace(homeDir)
+		remotePath = strings.Replace(remotePath, "~", homeDir, 1)
+	}
+
+	// 删除文件
+	if err := sshClient.RemoveFile(remotePath); err != nil {
+		return fmt.Errorf("删除文件失败: %w", err)
+	}
+
+	return nil
+}

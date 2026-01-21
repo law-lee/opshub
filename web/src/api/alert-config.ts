@@ -73,6 +73,33 @@ export const deleteAlertReceiver = (id: number) => {
   return request.delete(`/api/v1/plugins/monitor/alerts/receivers/${id}`)
 }
 
+// ========== 告警接收人与通道关联 ==========
+
+export interface ReceiverChannelRelation {
+  id?: number
+  receiverId: number
+  channelId: number
+  channelType?: string
+  config?: string
+  createdAt?: string
+}
+
+export const listReceiverChannels = (receiverId: number) => {
+  return request.get(`/api/v1/plugins/monitor/alerts/receiver-channels/${receiverId}`)
+}
+
+export const addReceiverChannel = (receiverId: number, data: { channelId: number; config?: string }) => {
+  return request.post(`/api/v1/plugins/monitor/alerts/receiver-channels/${receiverId}`, data)
+}
+
+export const removeReceiverChannel = (receiverId: number, channelId: number) => {
+  return request.delete(`/api/v1/plugins/monitor/alerts/receiver-channels/${receiverId}/${channelId}`)
+}
+
+export const updateReceiverChannelConfig = (receiverId: number, channelId: number, data: { config: string }) => {
+  return request.put(`/api/v1/plugins/monitor/alerts/receiver-channels/${receiverId}/${channelId}`, data)
+}
+
 // ========== 告警日志 ==========
 
 export interface AlertLog {

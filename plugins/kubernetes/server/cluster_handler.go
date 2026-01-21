@@ -34,7 +34,6 @@ func NewClusterHandler(db *gorm.DB) *ClusterHandler {
 // @Tags Kubernetes/Cluster
 // @Accept json
 // @Produce json
-// @Param request body service.CreateClusterRequest true "集群信息"
 // @Success 200 {object} Response
 // @Router /api/v1/kubernetes/clusters [post]
 func (h *ClusterHandler) CreateCluster(c *gin.Context) {
@@ -86,7 +85,6 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "集群ID"
-// @Param request body service.UpdateClusterRequest true "集群信息"
 // @Success 200 {object} Response
 // @Router /api/v1/kubernetes/clusters/{id} [put]
 func (h *ClusterHandler) UpdateCluster(c *gin.Context) {
@@ -320,7 +318,6 @@ func (h *ClusterHandler) GetClusterConfig(c *gin.Context) {
 // @Tags Kubernetes/Cluster
 // @Accept json
 // @Produce json
-// @Param request body service.GenerateKubeConfigRequest true "集群ID"
 // @Success 200 {object} Response
 // @Router /api/v1/plugins/kubernetes/clusters/kubeconfig [post]
 func (h *ClusterHandler) GenerateKubeConfig(c *gin.Context) {
@@ -387,7 +384,6 @@ func (h *ClusterHandler) GenerateKubeConfig(c *gin.Context) {
 // @Tags Kubernetes/Cluster
 // @Accept json
 // @Produce json
-// @Param request body service.GenerateKubeConfigRequest true "集群ID和用户名"
 // @Success 200 {object} Response
 // @Router /api/v1/plugins/kubernetes/clusters/kubeconfig [delete]
 func (h *ClusterHandler) RevokeKubeConfig(c *gin.Context) {
@@ -448,7 +444,6 @@ func (h *ClusterHandler) RevokeKubeConfig(c *gin.Context) {
 // @Tags Kubernetes/Cluster
 // @Accept json
 // @Produce json
-// @Param request body service.RevokeCredentialRequest true "集群ID、ServiceAccount 和用户名"
 // @Success 200 {object} Response
 // @Router /api/v1/plugins/kubernetes/clusters/kubeconfig/revoke [delete]
 func (h *ClusterHandler) RevokeCredentialFully(c *gin.Context) {
@@ -492,7 +487,6 @@ func (h *ClusterHandler) RevokeCredentialFully(c *gin.Context) {
 // @Tags Kubernetes/Cluster
 // @Accept json
 // @Produce json
-// @Param request body service.GetSAKubeConfigRequest true "集群ID和ServiceAccount名称"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/plugins/kubernetes/clusters/kubeconfig/sa [post]
 func (h *ClusterHandler) GetServiceAccountKubeConfig(c *gin.Context) {

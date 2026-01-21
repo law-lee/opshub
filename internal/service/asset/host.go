@@ -2,6 +2,7 @@ package asset
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,6 +28,15 @@ func NewHostService(hostUseCase *asset.HostUseCase, credentialUseCase *asset.Cre
 }
 
 // CreateHost 创建主机
+// @Summary 创建主机
+// @Description 创建新的主机资源
+// @Tags 资产管理-主机
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body asset.HostRequest true "主机信息"
+// @Success 200 {object} response.Response{} "创建成功"
+// @Router /asset-hosts [post]
 func (s *HostService) CreateHost(c *gin.Context) {
 	var req asset.HostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -44,6 +54,16 @@ func (s *HostService) CreateHost(c *gin.Context) {
 }
 
 // UpdateHost 更新主机
+// @Summary 更新主机信息
+// @Description 更新已有的主机信息
+// @Tags 资产管理-主机
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "主机ID"
+// @Param body body asset.HostRequest true "主机信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Router /asset-hosts/{id} [put]
 func (s *HostService) UpdateHost(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -68,6 +88,15 @@ func (s *HostService) UpdateHost(c *gin.Context) {
 }
 
 // DeleteHost 删除主机
+// @Summary 删除主机
+// @Description 删除指定的主机资源
+// @Tags 资产管理-主机
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "主机ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Router /asset-hosts/{id} [delete]
 func (s *HostService) DeleteHost(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -85,6 +114,15 @@ func (s *HostService) DeleteHost(c *gin.Context) {
 }
 
 // GetHost 获取主机详情
+// @Summary 获取主机详情
+// @Description 获取单个主机的详细信息
+// @Tags 资产管理-主机
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "主机ID"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /asset-hosts/{id} [get]
 func (s *HostService) GetHost(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -103,6 +141,18 @@ func (s *HostService) GetHost(c *gin.Context) {
 }
 
 // ListHosts 主机列表
+// @Summary 获取主机列表
+// @Description 分页获取主机列表，支持搜索和按分组筛选
+// @Tags 资产管理-主机
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键字"
+// @Param groupId query int false "分组ID"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /asset-hosts [get]
 func (s *HostService) ListHosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -133,6 +183,15 @@ func (s *HostService) ListHosts(c *gin.Context) {
 }
 
 // CreateCredential 创建凭证
+// @Summary 创建凭证
+// @Description 创建新的凭证用于主机连接
+// @Tags 资产管理-凭证
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body asset.CredentialRequest true "凭证信息"
+// @Success 200 {object} response.Response{} "创建成功"
+// @Router /credentials [post]
 func (s *HostService) CreateCredential(c *gin.Context) {
 	var req asset.CredentialRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -150,6 +209,16 @@ func (s *HostService) CreateCredential(c *gin.Context) {
 }
 
 // UpdateCredential 更新凭证
+// @Summary 更新凭证
+// @Description 更新已有的凭证信息
+// @Tags 资产管理-凭证
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "凭证ID"
+// @Param body body asset.CredentialRequest true "凭证信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Router /credentials/{id} [put]
 func (s *HostService) UpdateCredential(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -174,6 +243,15 @@ func (s *HostService) UpdateCredential(c *gin.Context) {
 }
 
 // DeleteCredential 删除凭证
+// @Summary 删除凭证
+// @Description 删除指定的凭证
+// @Tags 资产管理-凭证
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "凭证ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Router /credentials/{id} [delete]
 func (s *HostService) DeleteCredential(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -191,6 +269,15 @@ func (s *HostService) DeleteCredential(c *gin.Context) {
 }
 
 // GetCredential 获取凭证详情
+// @Summary 获取凭证详情
+// @Description 获取单个凭证的详细信息（包含解密的私钥）
+// @Tags 资产管理-凭证
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "凭证ID"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /credentials/{id} [get]
 func (s *HostService) GetCredential(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -210,6 +297,17 @@ func (s *HostService) GetCredential(c *gin.Context) {
 }
 
 // ListCredentials 凭证列表
+// @Summary 获取凭证列表
+// @Description 分页获取凭证列表，支持搜索
+// @Tags 资产管理-凭证
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键字"
+// @Success 200 {object} response.Response{} "获取成功"
+// @Router /credentials [get]
 func (s *HostService) ListCredentials(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -600,4 +698,123 @@ func (s *HostService) ImportFromExcel(c *gin.Context) {
 	}
 
 	response.Success(c, result)
+}
+
+// ListHostFiles 列出主机文件
+func (s *HostService) ListHostFiles(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "无效的主机ID")
+		return
+	}
+
+	// 获取目录路径参数，默认为用户主目录
+	remotePath := c.DefaultQuery("path", "~")
+
+	files, err := s.hostUseCase.ListFiles(c.Request.Context(), uint(id), remotePath)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取文件列表失败: "+err.Error())
+		return
+	}
+
+	response.Success(c, files)
+}
+
+// UploadHostFile 上传文件到主机
+func (s *HostService) UploadHostFile(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "无效的主机ID")
+		return
+	}
+
+	// 获取上传的文件
+	file, err := c.FormFile("file")
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "请选择要上传的文件")
+		return
+	}
+
+	// 获取远程路径参数
+	remotePath := c.PostForm("path")
+	if remotePath == "" {
+		remotePath = "~/"
+	}
+
+	// 打开文件
+	src, err := file.Open()
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "打开文件失败")
+		return
+	}
+	defer src.Close()
+
+	// 上传文件
+	if err := s.hostUseCase.UploadFile(c.Request.Context(), uint(id), src, remotePath, file.Filename); err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "上传文件失败: "+err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "文件上传成功", nil)
+}
+
+// DownloadHostFile 从主机下载文件
+func (s *HostService) DownloadHostFile(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "无效的主机ID")
+		return
+	}
+
+	// 获取文件路径参数
+	remotePath := c.Query("path")
+	if remotePath == "" {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定文件路径")
+		return
+	}
+
+	// 获取文件名
+	fileName := remotePath
+	if idx := strings.LastIndex(remotePath, "/"); idx >= 0 {
+		fileName = remotePath[idx+1:]
+	}
+
+	// 设置响应头
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	c.Header("Content-Transfer-Encoding", "binary")
+
+	// 下载文件
+	if err := s.hostUseCase.DownloadFile(c.Request.Context(), uint(id), remotePath, c.Writer); err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "下载文件失败: "+err.Error())
+		return
+	}
+}
+
+// DeleteHostFile 删除主机文件
+func (s *HostService) DeleteHostFile(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "无效的主机ID")
+		return
+	}
+
+	var req struct {
+		Path string `json:"path" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "参数错误: "+err.Error())
+		return
+	}
+
+	if err := s.hostUseCase.DeleteFile(c.Request.Context(), uint(id), req.Path); err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "删除文件失败: "+err.Error())
+		return
+	}
+
+	response.SuccessWithMessage(c, "文件删除成功", nil)
 }

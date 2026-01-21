@@ -338,7 +338,7 @@ const loadData = async () => {
     if (searchForm.status) params.status = searchForm.status
 
     const result = await getAlertLogs(params)
-    tableData.value = result?.data || []
+    tableData.value = result?.list || []
     pagination.total = result?.total || 0
   } catch (error: any) {
     ElMessage.error('加载数据失败')

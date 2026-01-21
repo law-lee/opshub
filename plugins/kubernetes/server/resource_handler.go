@@ -4922,6 +4922,14 @@ func (h *ResourceHandler) UpdateWorkloadYAML(c *gin.Context) {
 			})
 			return
 		}
+		// 清除不可变字段，避免更新冲突
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "resourceVersion")
 	}
 
 	// 转换为JSON用于PATCH
@@ -5731,6 +5739,9 @@ func (h *ResourceHandler) UpdateServiceYAML(c *gin.Context) {
 		return
 	}
 
+	fmt.Printf("🔍 [UpdateServiceYAML] 收到请求 - namespace=%s, name=%s\n", namespace, name)
+	fmt.Printf("🔍 [UpdateServiceYAML] 原始请求数据: %+v\n", jsonData)
+
 	// 提取 clusterId
 	clusterIDFloat, ok := jsonData["clusterId"].(float64)
 	if !ok {
@@ -5763,42 +5774,122 @@ func (h *ResourceHandler) UpdateServiceYAML(c *gin.Context) {
 		return
 	}
 
-	// 获取现有 Service 以保留资源版本等信息
-	existingSvc, err := clientset.CoreV1().Services(namespace).Get(c.Request.Context(), name, metav1.GetOptions{})
+	// 获取现有 Service 以比对
+	existingService, err := clientset.CoreV1().Services(namespace).Get(c.Request.Context(), name, metav1.GetOptions{})
 	if err != nil {
+		fmt.Printf("❌ [UpdateServiceYAML] 获取现有 Service 失败: %v\n", err)
 		HandleK8sError(c, err, "服务")
 		return
 	}
 
-	// 将 jsonData 转换为 Service 对象
-	var service v1.Service
-	serviceData, err := json.Marshal(jsonData)
+	fmt.Printf("🔍 [UpdateServiceYAML] 现有 Service 类型: %s, ClusterIP: %s\n", existingService.Spec.Type, existingService.Spec.ClusterIP)
+
+	// 验证资源名称
+	if metadata, ok := jsonData["metadata"].(map[string]interface{}); ok {
+		if jsonName, ok := metadata["name"].(string); ok && jsonName != name {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "资源名称与URL中的不一致",
+			})
+			return
+		}
+		if jsonNamespace, ok := metadata["namespace"].(string); ok && jsonNamespace != namespace {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "命名空间与URL中的不一致",
+			})
+			return
+		}
+		// 清除不可变字段，避免更新冲突
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "resourceVersion")
+		delete(metadata, "managedFields")
+	}
+
+	// 清理 spec 中的字段
+	if spec, ok := jsonData["spec"].(map[string]interface{}); ok {
+		// 获取新的 Service 类型
+		newType := spec["type"]
+		if newType == nil {
+			newType = string(existingService.Spec.Type)
+		}
+
+		fmt.Printf("🔍 [UpdateServiceYAML] 新的 Service 类型: %v\n", newType)
+
+		// Service 类型特定的字段清理
+		switch newType {
+		case "ClusterIP":
+			// ClusterIP类型：删除NodePort/LoadBalancer特有字段
+			if ports, ok := spec["ports"].([]interface{}); ok {
+				for _, port := range ports {
+					if portMap, ok := port.(map[string]interface{}); ok {
+						delete(portMap, "nodePort")
+					}
+				}
+			}
+			delete(spec, "externalTrafficPolicy")
+			delete(spec, "healthCheckNodePort")
+			delete(spec, "allocateLoadBalancerNodePorts")
+			delete(spec, "loadBalancerSourceRanges")
+			delete(spec, "loadBalancerIP")
+			delete(spec, "loadBalancerClass")
+		case "NodePort":
+			// NodePort类型：删除LoadBalancer特有字段
+			delete(spec, "healthCheckNodePort")
+			delete(spec, "allocateLoadBalancerNodePorts")
+			delete(spec, "loadBalancerSourceRanges")
+			delete(spec, "loadBalancerIP")
+			delete(spec, "loadBalancerClass")
+		case "LoadBalancer":
+			// LoadBalancer 类型保留大部分字段
+		case "ExternalName":
+			// ExternalName类型：删除ClusterIP相关字段
+			delete(spec, "clusterIP")
+			delete(spec, "clusterIPs")
+			delete(spec, "ports")
+			delete(spec, "selector")
+			delete(spec, "externalTrafficPolicy")
+			delete(spec, "healthCheckNodePort")
+			delete(spec, "allocateLoadBalancerNodePorts")
+			delete(spec, "loadBalancerSourceRanges")
+		}
+
+		// 清除状态相关的只读字段
+		delete(spec, "loadBalancerIP") // 已废弃
+		delete(spec, "sessionAffinityConfig") // 如果为空则删除
+	}
+
+	// 删除 status 字段（只读）
+	delete(jsonData, "status")
+
+	fmt.Printf("🔍 [UpdateServiceYAML] 清理后的数据: %+v\n", jsonData)
+
+	// 转换为 JSON 用于 PATCH
+	patchData, err := json.Marshal(jsonData)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
-			"message": "序列化数据失败: " + err.Error(),
+			"message": "序列化Patch数据失败: " + err.Error(),
 		})
 		return
 	}
 
-	err = json.Unmarshal(serviceData, &service)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "解析 Service 数据失败: " + err.Error(),
-		})
-		return
-	}
+	fmt.Printf("🔍 [UpdateServiceYAML] Patch 数据: %s\n", string(patchData))
 
-	// 保留资源版本，确保更新成功
-	service.ResourceVersion = existingSvc.ResourceVersion
-
-	// 使用 Update 而不是 Patch，这样可以完全替换资源包括删除数组元素
-	_, err = clientset.CoreV1().Services(namespace).Update(c.Request.Context(), &service, metav1.UpdateOptions{})
+	// 使用 Patch 方法更新，避免不可变字段冲突
+	updatedService, err := clientset.CoreV1().Services(namespace).Patch(c.Request.Context(), name, types.MergePatchType, patchData, metav1.PatchOptions{})
 	if err != nil {
+		fmt.Printf("❌ [UpdateServiceYAML] Patch 失败: %v\n", err)
 		HandleK8sError(c, err, "服务")
 		return
 	}
+
+	fmt.Printf("✅ [UpdateServiceYAML] 更新成功 - 新类型: %s, ClusterIP: %s\n", updatedService.Spec.Type, updatedService.Spec.ClusterIP)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
@@ -6228,6 +6319,9 @@ func (h *ResourceHandler) UpdateIngressYAML(c *gin.Context) {
 		return
 	}
 
+	fmt.Printf("🔍 [UpdateIngressYAML] 收到请求 - namespace=%s, name=%s\n", namespace, name)
+	fmt.Printf("🔍 [UpdateIngressYAML] 原始请求数据: %+v\n", jsonData)
+
 	// 提取 clusterId
 	clusterIDFloat, ok := jsonData["clusterId"].(float64)
 	if !ok {
@@ -6276,7 +6370,21 @@ func (h *ResourceHandler) UpdateIngressYAML(c *gin.Context) {
 			})
 			return
 		}
+		// 清除不可变字段，避免更新冲突
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "resourceVersion")
+		delete(metadata, "managedFields")
 	}
+
+	// 删除 status 字段（只读）
+	delete(jsonData, "status")
+
+	fmt.Printf("🔍 [UpdateIngressYAML] 清理后的数据: %+v\n", jsonData)
 
 	// 转换为 JSON 用于 PATCH
 	patchData, err := json.Marshal(jsonData)
@@ -6288,11 +6396,16 @@ func (h *ResourceHandler) UpdateIngressYAML(c *gin.Context) {
 		return
 	}
 
-	_, err = clientset.NetworkingV1().Ingresses(namespace).Patch(c.Request.Context(), name, types.MergePatchType, patchData, metav1.PatchOptions{})
+	fmt.Printf("🔍 [UpdateIngressYAML] Patch 数据: %s\n", string(patchData))
+
+	updatedIngress, err := clientset.NetworkingV1().Ingresses(namespace).Patch(c.Request.Context(), name, types.MergePatchType, patchData, metav1.PatchOptions{})
 	if err != nil {
+		fmt.Printf("❌ [UpdateIngressYAML] Patch 失败: %v\n", err)
 		HandleK8sError(c, err, "Ingress")
 		return
 	}
+
+	fmt.Printf("✅ [UpdateIngressYAML] 更新成功 - Ingress: %s/%s\n", updatedIngress.Namespace, updatedIngress.Name)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
@@ -6851,6 +6964,9 @@ func (h *ResourceHandler) UpdateEndpointYAML(c *gin.Context) {
 		return
 	}
 
+	fmt.Printf("🔍 [UpdateEndpointYAML] 收到请求 - namespace=%s, name=%s\n", namespace, name)
+	fmt.Printf("🔍 [UpdateEndpointYAML] 原始请求数据: %+v\n", jsonData)
+
 	// 提取 clusterId
 	clusterIDFloat, ok := jsonData["clusterId"].(float64)
 	if !ok {
@@ -6883,9 +6999,27 @@ func (h *ResourceHandler) UpdateEndpointYAML(c *gin.Context) {
 		return
 	}
 
+	// 清理 metadata 中的不可变字段
+	if metadata, ok := jsonData["metadata"].(map[string]interface{}); ok {
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "managedFields")
+		// 注意：Endpoints 需要保留 resourceVersion，会在后面设置
+	}
+
+	// 删除 status 字段（只读）
+	delete(jsonData, "status")
+
+	fmt.Printf("🔍 [UpdateEndpointYAML] 清理后的数据: %+v\n", jsonData)
+
 	// 获取现有 Endpoint 以保留资源版本等信息
 	existingEp, err := clientset.CoreV1().Endpoints(namespace).Get(c.Request.Context(), name, metav1.GetOptions{})
 	if err != nil {
+		fmt.Printf("❌ [UpdateEndpointYAML] 获取现有 Endpoint 失败: %v\n", err)
 		HandleK8sError(c, err, "端点")
 		return
 	}
@@ -6901,8 +7035,11 @@ func (h *ResourceHandler) UpdateEndpointYAML(c *gin.Context) {
 		return
 	}
 
+	fmt.Printf("🔍 [UpdateEndpointYAML] 序列化的 Endpoint 数据: %s\n", string(endpointData))
+
 	err = json.Unmarshal(endpointData, &endpoint)
 	if err != nil {
+		fmt.Printf("❌ [UpdateEndpointYAML] 解析 Endpoints 数据失败: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "解析 Endpoints 数据失败: " + err.Error(),
@@ -6912,13 +7049,19 @@ func (h *ResourceHandler) UpdateEndpointYAML(c *gin.Context) {
 
 	// 保留资源版本，确保更新成功
 	endpoint.ResourceVersion = existingEp.ResourceVersion
+	endpoint.UID = existingEp.UID
+
+	fmt.Printf("🔍 [UpdateEndpointYAML] 准备更新 - ResourceVersion=%s, Subsets=%+v\n", endpoint.ResourceVersion, endpoint.Subsets)
 
 	// 更新 Endpoint
-	_, err = clientset.CoreV1().Endpoints(namespace).Update(c.Request.Context(), &endpoint, metav1.UpdateOptions{})
+	updatedEp, err := clientset.CoreV1().Endpoints(namespace).Update(c.Request.Context(), &endpoint, metav1.UpdateOptions{})
 	if err != nil {
+		fmt.Printf("❌ [UpdateEndpointYAML] Update 失败: %v\n", err)
 		HandleK8sError(c, err, "端点")
 		return
 	}
+
+	fmt.Printf("✅ [UpdateEndpointYAML] 更新成功 - Endpoint: %s/%s, Subsets count=%d\n", updatedEp.Namespace, updatedEp.Name, len(updatedEp.Subsets))
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
@@ -7289,6 +7432,14 @@ func (h *ResourceHandler) UpdateNetworkPolicyYAML(c *gin.Context) {
 			})
 			return
 		}
+		// 清除不可变字段，避免更新冲突
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "resourceVersion")
 	}
 
 	// 转换为 JSON 用于 PATCH
@@ -8044,9 +8195,9 @@ func (h *ResourceHandler) UpdateConfigMapYAML(c *gin.Context) {
 		return
 	}
 
-	// 直接解析请求体为 ConfigMap 对象
-	var configMap v1.ConfigMap
-	if err := c.ShouldBindJSON(&configMap); err != nil {
+	// 解析请求体为 map，以便清除不可变字段
+	var jsonData map[string]interface{}
+	if err := c.ShouldBindJSON(&jsonData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "解析请求体失败: " + err.Error(),
@@ -8054,12 +8205,44 @@ func (h *ResourceHandler) UpdateConfigMapYAML(c *gin.Context) {
 		return
 	}
 
-	// 确保名称一致
-	configMap.Name = name
-	configMap.Namespace = namespace
+	// 验证并清除metadata中的不可变字段
+	if metadata, ok := jsonData["metadata"].(map[string]interface{}); ok {
+		if jsonName, ok := metadata["name"].(string); ok && jsonName != name {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "资源名称与URL中的不一致",
+			})
+			return
+		}
+		if jsonNamespace, ok := metadata["namespace"].(string); ok && jsonNamespace != namespace {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "命名空间与URL中的不一致",
+			})
+			return
+		}
+		// 清除不可变字段
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "resourceVersion")
+	}
 
-	// 更新 ConfigMap
-	_, err = clientset.CoreV1().ConfigMaps(namespace).Update(c.Request.Context(), &configMap, metav1.UpdateOptions{})
+	// 转换为 JSON 用于 PATCH
+	patchData, err := json.Marshal(jsonData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "序列化Patch数据失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 使用 Patch 方法更新，避免不可变字段冲突
+	_, err = clientset.CoreV1().ConfigMaps(namespace).Patch(c.Request.Context(), name, types.MergePatchType, patchData, metav1.PatchOptions{})
 	if err != nil {
 		HandleK8sError(c, err, "ConfigMap")
 		return
@@ -8299,9 +8482,9 @@ func (h *ResourceHandler) UpdateSecretYAML(c *gin.Context) {
 		return
 	}
 
-	// 直接解析请求体为 Secret 对象
-	var secret v1.Secret
-	if err := c.ShouldBindJSON(&secret); err != nil {
+	// 解析请求体为 map，以便清除不可变字段
+	var jsonData map[string]interface{}
+	if err := c.ShouldBindJSON(&jsonData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "解析请求体失败: " + err.Error(),
@@ -8309,12 +8492,44 @@ func (h *ResourceHandler) UpdateSecretYAML(c *gin.Context) {
 		return
 	}
 
-	// 确保名称一致
-	secret.Name = name
-	secret.Namespace = namespace
+	// 验证并清除metadata中的不可变字段
+	if metadata, ok := jsonData["metadata"].(map[string]interface{}); ok {
+		if jsonName, ok := metadata["name"].(string); ok && jsonName != name {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "资源名称与URL中的不一致",
+			})
+			return
+		}
+		if jsonNamespace, ok := metadata["namespace"].(string); ok && jsonNamespace != namespace {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "命名空间与URL中的不一致",
+			})
+			return
+		}
+		// 清除不可变字段
+		delete(metadata, "uid")
+		delete(metadata, "selfLink")
+		delete(metadata, "creationTimestamp")
+		delete(metadata, "deletionTimestamp")
+		delete(metadata, "deletionGracePeriodSeconds")
+		delete(metadata, "generation")
+		delete(metadata, "resourceVersion")
+	}
 
-	// 更新 Secret
-	_, err = clientset.CoreV1().Secrets(namespace).Update(c.Request.Context(), &secret, metav1.UpdateOptions{})
+	// 转换为 JSON 用于 PATCH
+	patchData, err := json.Marshal(jsonData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "序列化Patch数据失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 使用 Patch 方法更新，避免不可变字段冲突
+	_, err = clientset.CoreV1().Secrets(namespace).Patch(c.Request.Context(), name, types.MergePatchType, patchData, metav1.PatchOptions{})
 	if err != nil {
 		HandleK8sError(c, err, "Secret")
 		return

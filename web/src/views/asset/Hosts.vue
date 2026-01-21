@@ -320,12 +320,17 @@
               </template>
             </el-table-column>
 
-            <el-table-column label="操作" width="130" fixed="right" align="center">
+            <el-table-column label="操作" width="170" fixed="right" align="center">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <el-tooltip content="采集信息" placement="top">
                     <el-button link class="action-btn action-refresh" @click="handleCollectHost(row)">
                       <el-icon><Refresh /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip content="文件管理" placement="top">
+                    <el-button link class="action-btn action-files" @click="handleFileManager(row)">
+                      <el-icon><Folder /></el-icon>
                     </el-button>
                   </el-tooltip>
                   <el-tooltip content="编辑" placement="top">
@@ -1223,6 +1228,13 @@
       </template>
     </el-dialog>
 
+    <!-- 文件浏览器对话框 -->
+    <HostFileBrowser
+      v-model:visible="fileBrowserVisible"
+      :hostId="selectedHostId"
+      :hostName="selectedHostName"
+    />
+
   </div>
 </template>
 
@@ -1266,6 +1278,7 @@ import {
   Coin,
   Files
 } from '@element-plus/icons-vue'
+import HostFileBrowser from './components/HostFileBrowser.vue'
 import {
   getGroupTree,
   createGroup,
@@ -1323,6 +1336,9 @@ const excelImportVisible = ref(false)
 const cloudImportVisible = ref(false)
 const showCredentialDialog = ref(false)
 const showCloudAccountDialog = ref(false)
+const fileBrowserVisible = ref(false)
+const selectedHostId = ref(0)
+const selectedHostName = ref('')
 
 // 主机详情
 const showHostDetailDialog = ref(false)
@@ -1379,6 +1395,9 @@ const hostForm = reactive({
   name: '',
   groupId: null as number | null,
   type: 'self',
+  cloudProvider: '',
+  cloudInstanceId: '',
+  cloudAccountId: null as number | null,
   sshUser: 'root',
   ip: '',
   port: 22,
@@ -2258,6 +2277,10 @@ const handleEditHost = async (row: any) => {
     id: row.id,
     name: row.name,
     groupId: row.groupId,
+    type: row.type || 'self',
+    cloudProvider: row.cloudProvider || '',
+    cloudInstanceId: row.cloudInstanceId || '',
+    cloudAccountId: row.cloudAccountId || null,
     sshUser: row.sshUser,
     ip: row.ip,
     port: row.port,
@@ -2266,6 +2289,13 @@ const handleEditHost = async (row: any) => {
     description: row.description
   })
   directImportVisible.value = true
+}
+
+// 文件管理
+const handleFileManager = (row: any) => {
+  selectedHostId.value = row.id
+  selectedHostName.value = row.name
+  fileBrowserVisible.value = true
 }
 
 // 显示主机详情
@@ -3071,6 +3101,11 @@ onMounted(() => {
 .action-refresh:hover {
   background-color: #e8f4ff;
   color: #409eff;
+}
+
+.action-files:hover {
+  background-color: #fdf6ec;
+  color: #e6a23c;
 }
 
 .hostname-cell {
@@ -4292,3 +4327,10 @@ onMounted(() => {
   background: #f56c6c;
 }
 </style>
+
+// 文件管理
+const handleFileManager = (row: any) => {
+  selectedHostId.value = row.id
+  selectedHostName.value = row.name
+  fileBrowserVisible.value = true
+}

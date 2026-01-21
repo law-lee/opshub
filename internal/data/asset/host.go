@@ -138,6 +138,13 @@ func (r *hostRepo) GetByCloudInstanceID(ctx context.Context, instanceID string) 
 	return &host, nil
 }
 
+// CountByCredentialID 统计使用指定凭证的主机数量
+func (r *hostRepo) CountByCredentialID(ctx context.Context, credentialID uint) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&asset.Host{}).Where("credential_id = ?", credentialID).Count(&count).Error
+	return count, err
+}
+
 // credentialRepo 凭证仓库
 type credentialRepo struct {
 	db           *gorm.DB

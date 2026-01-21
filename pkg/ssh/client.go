@@ -3,8 +3,12 @@ package sshclient
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -127,4 +131,226 @@ func (c *Client) ExecuteWithTimeout(command string, timeout time.Duration) (stri
 func (c *Client) TestConnection() error {
 	_, err := c.Execute("echo ok")
 	return err
+}
+
+// NewSFTPClient 创建SFTP客户端
+func (c *Client) NewSFTPClient() (*sftp.Client, error) {
+	return sftp.NewClient(c.client)
+}
+
+// FileInfo 文件信息
+type FileInfo struct {
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	Mode    string `json:"mode"`
+	IsDir   bool   `json:"isDir"`
+	ModTime string `json:"modTime"`
+}
+
+// ListDir 列出目录内容
+func (c *Client) ListDir(remotePath string) ([]*FileInfo, error) {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	files, err := sftpClient.ReadDir(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("读取目录失败: %w", err)
+	}
+
+	var fileList []*FileInfo
+	for _, file := range files {
+		fileInfo := &FileInfo{
+			Name:    file.Name(),
+			Size:    file.Size(),
+			Mode:    file.Mode().String(),
+			IsDir:   file.IsDir(),
+			ModTime: file.ModTime().Format("2006-01-02 15:04:05"),
+		}
+		fileList = append(fileList, fileInfo)
+	}
+
+	return fileList, nil
+}
+
+// UploadFile 上传文件
+func (c *Client) UploadFile(localPath, remotePath string) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	// 打开本地文件
+	localFile, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("打开本地文件失败: %w", err)
+	}
+	defer localFile.Close()
+
+	// 创建远程文件
+	remoteFile, err := sftpClient.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("创建远程文件失败: %w", err)
+	}
+	defer remoteFile.Close()
+
+	// 复制文件内容
+	_, err = io.Copy(remoteFile, localFile)
+	if err != nil {
+		return fmt.Errorf("上传文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// UploadFromReader 从 Reader 上传文件
+func (c *Client) UploadFromReader(reader io.Reader, remotePath string) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	// 创建远程文件
+	remoteFile, err := sftpClient.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("创建远程文件失败: %w", err)
+	}
+	defer remoteFile.Close()
+
+	// 复制文件内容
+	_, err = io.Copy(remoteFile, reader)
+	if err != nil {
+		return fmt.Errorf("上传文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// DownloadFile 下载文件
+func (c *Client) DownloadFile(remotePath, localPath string) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	// 打开远程文件
+	remoteFile, err := sftpClient.Open(remotePath)
+	if err != nil {
+		return fmt.Errorf("打开远程文件失败: %w", err)
+	}
+	defer remoteFile.Close()
+
+	// 创建本地文件
+	localFile, err := os.Create(localPath)
+	if err != nil {
+		return fmt.Errorf("创建本地文件失败: %w", err)
+	}
+	defer localFile.Close()
+
+	// 复制文件内容
+	_, err = io.Copy(localFile, remoteFile)
+	if err != nil {
+		return fmt.Errorf("下载文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// DownloadToWriter 下载文件到 Writer
+func (c *Client) DownloadToWriter(remotePath string, writer io.Writer) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	// 打开远程文件
+	remoteFile, err := sftpClient.Open(remotePath)
+	if err != nil {
+		return fmt.Errorf("打开远程文件失败: %w", err)
+	}
+	defer remoteFile.Close()
+
+	// 复制文件内容
+	_, err = io.Copy(writer, remoteFile)
+	if err != nil {
+		return fmt.Errorf("下载文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveFile 删除文件
+func (c *Client) RemoveFile(remotePath string) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	err = sftpClient.Remove(remotePath)
+	if err != nil {
+		return fmt.Errorf("删除文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// MkDir 创建目录
+func (c *Client) MkDir(remotePath string) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	err = sftpClient.Mkdir(remotePath)
+	if err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+
+	return nil
+}
+
+// MkdirAll 递归创建目录
+func (c *Client) MkdirAll(remotePath string) error {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	err = sftpClient.MkdirAll(remotePath)
+	if err != nil {
+		return fmt.Errorf("递归创建目录失败: %w", err)
+	}
+
+	return nil
+}
+
+// StatFile 获取文件信息
+func (c *Client) StatFile(remotePath string) (*FileInfo, error) {
+	sftpClient, err := c.NewSFTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("创建SFTP客户端失败: %w", err)
+	}
+	defer sftpClient.Close()
+
+	fileInfo, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("获取文件信息失败: %w", err)
+	}
+
+	return &FileInfo{
+		Name:    filepath.Base(remotePath),
+		Size:    fileInfo.Size(),
+		Mode:    fileInfo.Mode().String(),
+		IsDir:   fileInfo.IsDir(),
+		ModTime: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
+	}, nil
 }

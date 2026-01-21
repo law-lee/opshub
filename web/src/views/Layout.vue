@@ -119,7 +119,13 @@ import {
   Files,
   Lock,
   View,
-  Odometer
+  Odometer,
+  Tickets,
+  List,
+  Grid,
+  Cloudy,
+  Grape,
+  House
 } from '@element-plus/icons-vue'
 import { getUserMenu } from '@/api/menu'
 import { pluginManager } from '@/plugins/manager'
@@ -174,7 +180,13 @@ const iconMap: Record<string, any> = {
   'Files': Files,
   'Lock': Lock,
   'View': View,
-  'Odometer': Odometer
+  'Odometer': Odometer,
+  'Tickets': Tickets,
+  'List': List,
+  'Grid': Grid,
+  'Cloudy': Cloudy,
+  'Grape': Grape,
+  'House': House
 }
 
 // 获取图标组件
@@ -182,10 +194,28 @@ const getIcon = (iconName: string) => {
   return iconMap[iconName] || Menu
 }
 
-// 从插件管理器构建菜单
-const buildPluginMenus = () => {
+// 从插件管理器构建菜单（只包含已启用的插件）
+const buildPluginMenus = async () => {
   const pluginMenus: any[] = []
-  const plugins = pluginManager.getInstalled()
+  const allPlugins = pluginManager.getAll() // 获取所有注册的插件
+
+  // 从后端API获取插件启用状态
+  let enabledPluginNames: Set<string> = new Set()
+  try {
+    const { listPlugins } = await import('@/api/plugin')
+    const backendPlugins = await listPlugins()
+    enabledPluginNames = new Set(
+      backendPlugins
+        .filter((p: any) => p.enabled)
+        .map((p: any) => p.name)
+    )
+    console.log('[Layout] 后端已启用的插件:', Array.from(enabledPluginNames))
+  } catch (error) {
+    console.error('[Layout] 获取插件启用状态失败，默认显示所有插件菜单:', error)
+    // 如果获取失败，显示所有已安装的插件菜单
+    const installedPlugins = pluginManager.getInstalled()
+    enabledPluginNames = new Set(installedPlugins.map(p => p.name))
+  }
 
   // 从 localStorage 加载自定义排序
   const PLUGIN_MENU_SORT_KEY = 'opshub_plugin_menu_sort'
@@ -204,10 +234,16 @@ const buildPluginMenus = () => {
   })()
 
   console.log('=== 开始构建插件菜单 ===')
-  console.log('已安装的插件数量:', plugins.length)
-  console.log('已安装的插件列表:', plugins.map(p => p.name))
+  console.log('所有插件数量:', allPlugins.length)
+  console.log('已启用的插件数量:', enabledPluginNames.size)
 
-  plugins.forEach(plugin => {
+  allPlugins.forEach(plugin => {
+    // 只处理已启用的插件
+    if (!enabledPluginNames.has(plugin.name)) {
+      console.log(`跳过未启用的插件: ${plugin.name}`)
+      return
+    }
+
     console.log(`处理插件: ${plugin.name}`)
     if (plugin.getMenus) {
       const menus = plugin.getMenus()
@@ -392,8 +428,8 @@ const loadMenu = async () => {
       console.log('[Layout] 获取系统菜单失败，仅显示插件菜单:', error)
     }
 
-    // 2. 获取插件菜单
-    const pluginMenus = buildPluginMenus()
+    // 2. 获取插件菜单（现在是异步的）
+    const pluginMenus = await buildPluginMenus()
     console.log('[Layout] 插件菜单:', pluginMenus)
 
     // 3. 展平系统菜单树(因为系统菜单可能是嵌套结构)

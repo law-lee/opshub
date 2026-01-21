@@ -82,6 +82,25 @@ func (AlertReceiver) TableName() string {
 	return "alert_receivers"
 }
 
+// AlertReceiverChannel 告警接收人与通道的关联关系
+type AlertReceiverChannel struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	ReceiverID  uint      `gorm:"index;not null" json:"receiverId"`    // 接收人ID
+	ChannelID   uint      `gorm:"index;not null" json:"channelId"`     // 通道ID
+	Receiver    *AlertReceiver `gorm:"foreignKey:ReceiverID;constraint:OnDelete:CASCADE" json:"-"`
+	Channel     *AlertChannel  `gorm:"foreignKey:ChannelID;constraint:OnDelete:CASCADE" json:"-"`
+	CreatedAt   time.Time `json:"createdAt"`
+
+	// 在关联时使用的附加配置（JSON格式）
+	// 用于存储通道特定的接收人配置，如飞书的user_id或phone等
+	Config      string    `gorm:"type:text" json:"config"`
+}
+
+// TableName 指定表名
+func (AlertReceiverChannel) TableName() string {
+	return "alert_receiver_channels"
+}
+
 // AlertLog 告警日志
 type AlertLog struct {
 	ID              uint      `gorm:"primarykey" json:"id"`

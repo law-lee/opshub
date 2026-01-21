@@ -134,7 +134,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Document, Delete, Coin } from '@element-plus/icons-vue'
-import { load } from 'js-yaml'
+import { load, dump } from 'js-yaml'
 import {
   getPersistentVolumeClaims,
   getPersistentVolumeClaimYAML,
@@ -267,7 +267,7 @@ const handleEditYAML = async (pvc: PVCInfo) => {
   try {
     const response = await getPersistentVolumeClaimYAML(props.clusterId, pvc.namespace, pvc.name)
     originalJsonData.value = response
-    const yaml = jsonToYaml(originalJsonData.value)
+    const yaml = dump(originalJsonData.value, { indent: 2, lineWidth: -1 })
     yamlContent.value = yaml
     yamlDialogVisible.value = true
   } catch (error) {
@@ -276,30 +276,6 @@ const handleEditYAML = async (pvc: PVCInfo) => {
   }
 }
 
-const jsonToYaml = (obj: any, indent = 0): string => {
-  const spaces = '  '.repeat(indent)
-  let result = ''
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      result += `${spaces}- ${jsonToYaml(item, indent).trim()}\n`
-    }
-  } else if (typeof obj === 'object' && obj !== null) {
-    for (const [key, value] of Object.entries(obj)) {
-      if (value === null || value === undefined) {
-        result += `${spaces}${key}: null\n`
-      } else if (typeof value === 'object') {
-        result += `${spaces}${key}:\n${jsonToYaml(value, indent + 1)}`
-      } else {
-        result += `${spaces}${key}: ${value}\n`
-      }
-    }
-  } else {
-    result = `${obj}\n`
-  }
-
-  return result
-}
 
 const yamlToJson = (yaml: string): any => {
   try {
@@ -315,7 +291,7 @@ const handleSaveYAML = async () => {
 
   saving.value = true
   try {
-    let jsonData = originalJsonData.value
+    let jsonData
     try {
       jsonData = yamlToJson(yamlContent.value)
       if (!jsonData.metadata) {
@@ -334,8 +310,10 @@ const handleSaveYAML = async () => {
         jsonData.kind = 'PersistentVolumeClaim'
       }
     } catch (e) {
-      console.warn('YAML 解析失败，使用原始 JSON:', e)
-      jsonData = originalJsonData.value
+      console.error('YAML 解析失败:', e)
+      ElMessage.error('YAML 格式错误，请检查缩进和语法')
+      saving.value = false
+      return
     }
 
     await updatePersistentVolumeClaimYAML(
