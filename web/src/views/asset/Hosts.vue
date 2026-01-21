@@ -16,7 +16,11 @@
           <el-icon style="margin-right: 6px;"><Monitor /></el-icon>
           终端
         </el-button>
-        <el-dropdown @command="handleImportCommand" class="import-dropdown">
+        <el-dropdown
+          v-if="userHasEditPermission"
+          @command="handleImportCommand"
+          class="import-dropdown"
+        >
           <el-button class="black-button">
             <el-icon style="margin-right: 6px;"><Plus /></el-icon>
             新增主机
@@ -1389,6 +1393,7 @@ const isExpandAll = ref(false)
 // 主机列表数据
 const hostList = ref([])
 const hostPermissions = ref<Map<number, number>>(new Map()) // 存储每个主机的用户权限
+const userHasEditPermission = ref(false) // 用户是否有任何主机的编辑权限
 const credentialList = ref([])
 const cloudAccountList = ref([])
 
@@ -1678,17 +1683,25 @@ const loadHostList = async () => {
     // 加载每个主机的用户权限
     if (hostList.value && hostList.value.length > 0) {
       const permissionsMap = new Map<number, number>()
+      let hasEditPerm = false
       for (const host of hostList.value) {
         try {
           const permRes = await getUserHostPermissions(host.id)
           if (permRes && permRes.permissions !== undefined) {
             permissionsMap.set(host.id, permRes.permissions)
+            // 检查是否有编辑权限
+            if ((permRes.permissions & PERMISSION.EDIT) > 0) {
+              hasEditPerm = true
+            }
           }
         } catch (err) {
           console.error(`获取主机 ${host.id} 的权限失败:`, err)
         }
       }
       hostPermissions.value = permissionsMap
+      userHasEditPermission.value = hasEditPerm
+    } else {
+      userHasEditPermission.value = false
     }
   } catch (error) {
     console.error('获取主机列表失败:', error)
