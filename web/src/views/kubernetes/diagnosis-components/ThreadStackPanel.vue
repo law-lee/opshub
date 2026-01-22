@@ -270,7 +270,6 @@ const loadThreadList = async () => {
     }
   } catch (error: any) {
     ElMessage.error('获取线程列表失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loadingThreads.value = false
   }
@@ -306,7 +305,6 @@ const getThreadStackData = async () => {
     }
   } catch (error: any) {
     ElMessage.error('获取线程堆栈失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -334,7 +332,6 @@ const getBlockedThreads = async () => {
     threadId.value = ''
   } catch (error: any) {
     ElMessage.error('获取阻塞线程失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loadingBlocked.value = false
   }
@@ -362,7 +359,6 @@ const getBusyThreads = async () => {
     threadId.value = ''
   } catch (error: any) {
     ElMessage.error('获取繁忙线程失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loadingBusy.value = false
   }

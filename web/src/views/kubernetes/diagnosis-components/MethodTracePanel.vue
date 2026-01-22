@@ -240,7 +240,6 @@ const startTrace = async () => {
     })
 
     ws.onopen = () => {
-      console.log('WebSocket connected')
       // 发送 trace 命令
       const command = buildTraceCommand()
       rawOutput.value = `[INFO] 执行命令: ${command}\n\n`
@@ -283,7 +282,6 @@ const startTrace = async () => {
     }
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
       rawOutput.value += '\n[ERROR] WebSocket 连接错误\n'
       tracing.value = false
       starting.value = false
@@ -291,7 +289,6 @@ const startTrace = async () => {
     }
 
     ws.onclose = () => {
-      console.log('WebSocket closed')
       tracing.value = false
       starting.value = false
       rawOutput.value += '\n[INFO] 追踪已停止\n'
@@ -300,7 +297,6 @@ const startTrace = async () => {
   } catch (error: any) {
     ElMessage.error('启动追踪失败: ' + (error.message || '未知错误'))
     starting.value = false
-    console.error(error)
   }
 }
 

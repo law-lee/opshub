@@ -208,7 +208,6 @@ const loadNamespaceRoles = async () => {
         // 重新加载角色列表
         roles = await getNamespaceRoles(props.clusterId, selectedNamespace.value)
       } catch (createError) {
-        console.error('Failed to create default namespace roles:', createError)
       }
     }
 

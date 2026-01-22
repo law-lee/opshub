@@ -516,7 +516,6 @@ const loadPodDetail = async () => {
     // 后端现在返回标准格式 {code: 0, message: "success", data: pod}
     podData.value = response.data.data
   } catch (error: any) {
-    console.error('获取 Pod 详情失败:', error)
     ElMessage.error(error.response?.data?.message || '获取 Pod 详情失败')
   } finally {
     loading.value = false
@@ -535,7 +534,6 @@ const loadPodEvents = async () => {
     )
     events.value = response.data.events || []
   } catch (error: any) {
-    console.error('获取 Pod 事件失败:', error)
   }
 }
 

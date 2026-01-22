@@ -398,7 +398,6 @@ const loadNamespaces = async () => {
     const data = await getNamespaces(props.clusterId)
     namespaces.value = data || []
   } catch (error) {
-    console.error('获取命名空间列表失败:', error)
   }
 }
 
@@ -415,7 +414,6 @@ const loadConfigMaps = async () => {
     })
     configMapList.value = response.data.data || []
   } catch (error) {
-    console.error('获取 ConfigMap 列表失败:', error)
     configMapList.value = []
     // 不显示错误提示，避免频繁弹出
   } finally {
@@ -471,7 +469,6 @@ const handleEditForm = async (row: ConfigMapInfo) => {
       }
     )
 
-    console.log('获取ConfigMap详情响应:', response.data)
 
     // 获取ConfigMap对象，可能是items或yaml字段
     let configMap: any = response.data?.data?.items || response.data?.data?.yaml
@@ -481,7 +478,6 @@ const handleEditForm = async (row: ConfigMapInfo) => {
       configMap = yaml.load(configMap)
     }
 
-    console.log('解析后的ConfigMap:', configMap)
 
     if (!configMap || !configMap.metadata) {
       ElMessage.error('获取ConfigMap数据失败')
@@ -498,12 +494,10 @@ const handleEditForm = async (row: ConfigMapInfo) => {
       annotations: configMap.metadata?.annotations ? Object.entries(configMap.metadata.annotations).map(([key, value]) => ({ key, value })) : []
     }
 
-    console.log('填充的表单数据:', formData.value)
 
     isEditMode.value = true
     formDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 ConfigMap 详情失败:', error)
     ElMessage.error(`获取详情失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -534,7 +528,6 @@ const handleEditYAML = async (row: ConfigMapInfo) => {
       yamlDialogVisible.value = true
     }
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -583,7 +576,6 @@ const handleSaveYAML = async () => {
     await loadConfigMaps()
     emit('refresh')
   } catch (error: any) {
-    console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     saving.value = false
@@ -605,8 +597,6 @@ const handleSaveForm = async () => {
   try {
     const token = localStorage.getItem('token')
 
-    console.log('保存表单 - clusterId:', props.clusterId)
-    console.log('保存表单 - formData:', formData.value)
 
     // 构建 ConfigMap 对象
     const configMapObj: any = {
@@ -660,8 +650,6 @@ const handleSaveForm = async () => {
 
     if (isEditMode.value) {
       // 编辑模式：使用 PUT 请求
-      console.log('发送PUT请求，URL:', `/api/v1/plugins/kubernetes/resources/configmaps/${formData.value.namespace}/${formData.value.name}/yaml`)
-      console.log('clusterId:', props.clusterId)
       await axios.put(
         `/api/v1/plugins/kubernetes/resources/configmaps/${formData.value.namespace}/${formData.value.name}/yaml`,
         configMapObj,
@@ -673,8 +661,6 @@ const handleSaveForm = async () => {
       ElMessage.success('更新成功')
     } else {
       // 创建模式：使用 POST 请求
-      console.log('发送POST请求，URL:', `/api/v1/plugins/kubernetes/resources/configmaps/${formData.value.namespace}/yaml`)
-      console.log('clusterId:', props.clusterId)
       await axios.post(
         `/api/v1/plugins/kubernetes/resources/configmaps/${formData.value.namespace}/yaml`,
         configMapObj,
@@ -690,7 +676,6 @@ const handleSaveForm = async () => {
     await loadConfigMaps()
     emit('refresh')
   } catch (error: any) {
-    console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     saving.value = false
@@ -724,7 +709,6 @@ const handleDelete = async (row: ConfigMapInfo) => {
     emit('refresh')
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除失败:', error)
       ElMessage.error(`删除失败: ${error.response?.data?.message || error.message}`)
     }
   }

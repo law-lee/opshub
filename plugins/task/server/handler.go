@@ -361,8 +361,6 @@ func (h *Handler) ExecuteTask(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&jobTask).Error; err != nil {
-		// 记录详细的错误信息
-		fmt.Printf("创建任务记录失败: %v\n", err)
 		response.ErrorCode(c, http.StatusInternalServerError, fmt.Sprintf("创建任务记录失败: %v", err))
 		return
 	}

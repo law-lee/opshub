@@ -434,7 +434,6 @@ const loadUsers = async () => {
     userList.value = res.list || []
     pagination.total = res.total || 0
   } catch (error) {
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -446,7 +445,6 @@ const loadDepartmentTree = async () => {
     const res = await getDepartmentTree()
     departmentTree.value = res || []
   } catch (error) {
-    console.error(error)
   }
 }
 
@@ -455,41 +453,26 @@ const loadRoleOptions = async () => {
   try {
     roleOptions.value = []  // 先清空
     const res = await getAllRoles()
-    console.log('=== 加载角色选项 ===')
-    console.log('API返回的角色数据:', res)
-    console.log('roleOptions.value:', res || [])
     roleOptions.value = res || []
-    console.log('角色数量:', roleOptions.value.length)
   } catch (error) {
-    console.error('加载角色失败:', error)
   }
 }
 
 // 加载岗位选项
 const loadPositionOptions = async () => {
   try {
-    console.log('=== 加载岗位选项 ===')
     positionOptions.value = []  // 先清空
     const res = await getPositionList({ page: 1, pageSize: 1000 })
     const list = res.list || []
-    console.log('API返回的岗位数据:', res)
-    console.log('岗位列表:', list)
     if (list.length > 0) {
-      console.log('第一个岗位数据:', list[0])
-      console.log('第一个岗位的ID:', list[0].ID || list[0].id)
-      console.log('第一个岗位的postName:', list[0].postName)
     }
     positionOptions.value = list
   } catch (error) {
-    console.error('加载岗位失败:', error)
   }
 }
 
 // 岗位选择变化
 const handlePositionChange = (value: any) => {
-  console.log('=== 岗位选择变化 ===')
-  console.log('新值:', value)
-  console.log('userForm.positionIds:', userForm.positionIds)
 }
 
 // 构建部门路径
@@ -550,27 +533,14 @@ const handleEdit = (row: any) => {
   dialogTitle.value = '编辑用户'
 
   // 调试：打印原始数据
-  console.log('=== 编辑用户调试信息 ===')
-  console.log('用户名:', row.username)
-  console.log('row.roleIds:', row.roleIds)
-  console.log('row.roles:', row.roles)
-  console.log('row.roles 长度:', row.roles?.length)
-  console.log('row.positionIds:', row.positionIds)
-  console.log('row.positions:', row.positions)
-  console.log('row.positions 长度:', row.positions?.length)
   if (row.roles && Array.isArray(row.roles)) {
-    console.log('row.roles 详细内容:', JSON.stringify(row.roles, null, 2))
     row.roles.forEach((r: any, index: number) => {
-      console.log(`角色${index}:`, r, 'ID:', r.ID || r.id, 'Name:', r.name)
     })
   }
   if (row.positions && Array.isArray(row.positions)) {
-    console.log('row.positions 详细内容:', JSON.stringify(row.positions, null, 2))
     row.positions.forEach((p: any, index: number) => {
-      console.log(`岗位${index}:`, p, 'ID:', p.ID || p.id, 'Name:', p.postName)
     })
   }
-  console.log('========================')
 
   // 正确处理ID字段，兼容大小写
   userForm.id = Number(row.ID || row.id)
@@ -599,8 +569,6 @@ const handleEdit = (row: any) => {
     userForm.roleIds = []
   }
 
-  console.log('最终 userForm.roleIds:', userForm.roleIds)
-  console.log('最终 userForm.positionIds:', userForm.positionIds)
 
   userForm.bio = row.bio || ''
   dialogVisible.value = true
@@ -616,7 +584,6 @@ const handleDelete = async (row: any) => {
     loadUsers()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error(error)
     }
   }
 }
@@ -640,7 +607,6 @@ const handleResetPasswordSubmit = async () => {
         ElMessage.success('密码重置成功')
         resetPasswordVisible.value = false
       } catch (error) {
-        console.error(error)
       } finally {
         resetPasswordLoading.value = false
       }
@@ -669,7 +635,6 @@ const handleSubmit = async () => {
         const roleIds = (userForm.roleIds || []).filter((id: any) => id != null)
         const positionIds = (userForm.positionIds || []).filter((id: any) => id != null)
 
-        console.log('提交的数据:', {
           roleIds,
           positionIds,
           rawPositionIds: userForm.positionIds
@@ -709,7 +674,6 @@ const handleSubmit = async () => {
         dialogVisible.value = false
         loadUsers()
       } catch (error) {
-        console.error(error)
         ElMessage.error('操作失败')
       } finally {
         submitLoading.value = false
@@ -737,14 +701,9 @@ const handleDialogClose = () => {
 
 // 监控岗位选项和选择的变化
 watch(positionOptions, (newVal) => {
-  console.log('=== positionOptions 变化 ===')
-  console.log('新值:', newVal)
 }, { deep: true })
 
 watch(() => userForm.positionIds, (newVal) => {
-  console.log('=== userForm.positionIds 变化 ===')
-  console.log('新值:', newVal)
-  console.log('类型:', typeof newVal)
 })
 
 onMounted(() => {

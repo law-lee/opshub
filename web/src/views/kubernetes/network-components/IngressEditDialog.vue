@@ -426,7 +426,6 @@ const openEdit = async (ingress: IngressInfo, nsList: any[]) => {
       addRule()
     }
   } catch (error) {
-    console.error('获取 Ingress 详情失败:', error)
     ElMessage.error('获取 Ingress 详情失败')
   }
 }
@@ -578,7 +577,6 @@ const loadSecrets = async () => {
       s.type === 'kubernetes.io/tls' || s.type === 'cert-manager.io/v1alpha1'
     )
   } catch (error) {
-    console.error('获取 Secret 列表失败:', error)
   }
 }
 
@@ -589,7 +587,6 @@ const loadServices = async () => {
     const data = await getServices(props.clusterId, formData.value.namespace)
     servicesList.value = data || []
   } catch (error) {
-    console.error('获取 Service 列表失败:', error)
   }
 }
 
@@ -773,7 +770,6 @@ const handleSave = async () => {
     emit('success')
     handleClose()
   } catch (error) {
-    console.error('保存失败:', error)
     ElMessage.error('保存失败')
   } finally {
     saving.value = false

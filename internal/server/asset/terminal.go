@@ -187,7 +187,6 @@ func (tm *TerminalManager) CreateSession(ctx context.Context, hostID uint, userI
 	recordingDir := "./data/terminal-recordings"
 	recorder, err := NewAsciinemaRecorder(recordingDir, int(cols), int(rows))
 	if err != nil {
-		fmt.Printf("创建录制器失败: %v\n", err)
 		// 录制失败不影响终端连接，继续
 		recorder = nil
 	}

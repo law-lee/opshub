@@ -85,7 +85,7 @@ const loadClusters = async () => {
       selectedClusterId.value = list[0].id
     }
   } catch (error) {
-    console.error('加载集群列表失败:', error)
+    // 错误处理
   }
 }
 

@@ -584,7 +584,6 @@ const loadClusterStats = async () => {
     const data = await getClusterStats(clusterId.value)
     clusterStats.value = data
   } catch (error: any) {
-    console.error('加载统计信息失败:', error)
     throw error // 抛出错误，让 Promise.all 捕获
   }
 }
@@ -595,7 +594,6 @@ const loadNetworkInfo = async () => {
     const data = await getClusterNetworkInfo(clusterId.value)
     networkInfo.value = data
   } catch (error: any) {
-    console.error('加载网络信息失败:', error)
     throw error
   }
 }
@@ -604,9 +602,6 @@ const loadNetworkInfo = async () => {
 const loadComponentInfo = async () => {
   try {
     const data = await getClusterComponentInfo(clusterId.value)
-    console.log('[ClusterDetail] 组件信息响应:', data)
-    console.log('[ClusterDetail] components 数量:', data?.components?.length || 0)
-    console.log('[ClusterDetail] components 详情:', data?.components)
 
     // 手动触发响应式更新
     componentInfo.value = {
@@ -615,14 +610,10 @@ const loadComponentInfo = async () => {
       storage: data?.storage || []
     }
 
-    console.log('[ClusterDetail] componentInfo.value:', componentInfo.value)
-    console.log('[ClusterDetail] componentInfo.value.components.length:', componentInfo.value.components.length)
 
     // 强制触发重新渲染
     await nextTick()
-    console.log('[ClusterDetail] nextTick 后 components.length:', componentInfo.value.components.length)
   } catch (error: any) {
-    console.error('加载组件信息失败:', error)
     throw error
   }
 }
@@ -634,7 +625,6 @@ const loadNodes = async () => {
     const data = await getNodes(clusterId.value)
     nodeList.value = data || []
   } catch (error: any) {
-    console.error('加载节点信息失败:', error)
     throw error
   } finally {
     nodesLoading.value = false
@@ -648,7 +638,6 @@ const loadEvents = async () => {
     const data = await getClusterEvents(clusterId.value)
     eventList.value = data || []
   } catch (error: any) {
-    console.error('加载事件信息失败:', error)
     throw error
   } finally {
     eventsLoading.value = false

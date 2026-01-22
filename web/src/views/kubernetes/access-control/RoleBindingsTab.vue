@@ -200,7 +200,6 @@ const handleEdit = async (row: RoleBindingInfo) => {
     })
     yamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -257,11 +256,9 @@ const handleDelete = async (row: RoleBindingInfo) => {
     try {
       await loadData()
     } catch (refreshError) {
-      console.error('刷新列表失败:', refreshError)
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除 RoleBinding 失败:', error)
       ElMessage.error(error.response?.data?.message || '删除失败')
     }
   }
@@ -293,7 +290,6 @@ const handleSaveYAML = async () => {
     yamlDialogVisible.value = false
     await loadData()
   } catch (error: any) {
-    console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     saving.value = false

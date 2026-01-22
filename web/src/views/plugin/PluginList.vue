@@ -152,28 +152,23 @@ const loadPlugins = async () => {
   try {
     // 从前端插件管理器获取所有已注册的插件
     const allPlugins = pluginManager.getAll()
-    console.log('[PluginList] 前端插件列表:', allPlugins.map(p => ({ name: p.name, desc: p.description })))
 
     // 同时从后端API获取插件启用状态
     try {
       const { listPlugins } = await import('@/api/plugin')
       const backendPlugins = await listPlugins()
-      console.log('[PluginList] 后端插件数据:', backendPlugins)
 
       // 合并前端插件和后端状态
       plugins.value = allPlugins.map(plugin => {
         const backendPlugin = backendPlugins.find((p: any) => p.name === plugin.name)
-        console.log(`[PluginList] 匹配插件 ${plugin.name}:`, backendPlugin)
         return {
           ...plugin,
           enabled: backendPlugin?.enabled ?? false,
           loading: false
         }
       })
-      console.log('[PluginList] 最终插件列表:', plugins.value.map(p => ({ name: p.name, enabled: p.enabled })))
     } catch (error) {
       // 如果后端API失败，仍然显示前端插件，默认状态为未启用
-      console.error('[PluginList] 获取后端插件状态失败:', error)
       plugins.value = allPlugins.map(plugin => ({
         ...plugin,
         enabled: false,
@@ -182,7 +177,6 @@ const loadPlugins = async () => {
     }
   } catch (error) {
     ElMessage.error('加载插件列表失败')
-    console.error('[PluginList] 加载插件列表失败:', error)
   } finally {
     loading.value = false
   }
@@ -281,7 +275,9 @@ const handleGoToInstall = () => {
   router.push('/plugin/install')
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 等待一小段时间确保插件完全加载
+  await new Promise(resolve => setTimeout(resolve, 100))
   loadPlugins()
 })
 </script>

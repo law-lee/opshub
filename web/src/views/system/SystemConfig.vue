@@ -136,7 +136,6 @@ const loadConfig = async () => {
       Object.assign(config, JSON.parse(savedConfig))
     }
   } catch (error) {
-    console.error('加载配置失败:', error)
   }
 }
 
@@ -148,7 +147,6 @@ const handleSave = async () => {
     await new Promise(resolve => setTimeout(resolve, 500))
     ElMessage.success('保存成功')
   } catch (error) {
-    console.error('保存配置失败:', error)
     ElMessage.error('保存失败')
   } finally {
     saving.value = false

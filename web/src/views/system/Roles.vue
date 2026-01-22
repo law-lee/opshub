@@ -377,7 +377,6 @@ const loadRoles = async () => {
     roleList.value = res.list || []
     pagination.total = res.total || 0
   } catch (error) {
-    console.error('获取角色列表失败:', error)
     ElMessage.error('获取角色列表失败')
   } finally {
     loading.value = false
@@ -494,7 +493,6 @@ const loadMenuTree = async () => {
     // 自动展开所有一级节点（使用大写ID）
     expandedKeys.value = menuTree.value.map((item: any) => item.ID || item.id).filter(id => id)
   } catch (error) {
-    console.error('获取菜单树失败:', error)
     ElMessage.error('获取菜单树失败')
   } finally {
     menuLoading.value = false
@@ -506,22 +504,18 @@ const loadRoleMenus = async (roleId: number) => {
   menuLoading.value = true
   try {
     const res: any = await getRoleMenus(roleId)
-    console.log('角色菜单数据:', res)
 
     // 提取已分配的菜单ID
     const menus = res.menus || []
-    console.log('已分配的菜单:', menus)
 
     // 获取所有菜单ID
     const allMenuIds = menus.map((m: any) => m.ID || m.id).filter((id: number) => id && id > 0)
-    console.log('所有菜单IDs:', allMenuIds)
 
     selectedMenuIds.value = allMenuIds
 
     // 只设置叶子节点为选中状态，避免父节点被自动选中所有子节点
     // 从menuTree中获取所有菜单，判断哪些是叶子节点
     const leafMenuIds = getLeafMenuIdsFromTree(menuTree.value, allMenuIds)
-    console.log('叶子节点IDs:', leafMenuIds)
 
     // 使用 nextTick 确保树形控件已渲染完成后再设置选中状态
     await nextTick()
@@ -530,7 +524,6 @@ const loadRoleMenus = async (roleId: number) => {
       menuTreeRef.value.setCheckedKeys(leafMenuIds, false)
     }
   } catch (error) {
-    console.error('获取角色菜单失败:', error)
     ElMessage.error('获取角色菜单失败')
   } finally {
     menuLoading.value = false
@@ -613,25 +606,19 @@ const handlePermissionSubmit = async () => {
     // 获取选中的节点（包括半选中的父节点）
     const checkedKeys = menuTreeRef.value.getCheckedKeys()
     const halfCheckedKeys = menuTreeRef.value.getHalfCheckedKeys()
-    console.log('完全选中的节点:', checkedKeys)
-    console.log('半选中的节点:', halfCheckedKeys)
 
     const allKeys = [...checkedKeys, ...halfCheckedKeys]
-    console.log('合并后的节点:', allKeys)
 
     // 过滤掉无效的ID（0或undefined）并去重
     const validKeys = [...new Set(allKeys.filter((key: number) => key && key > 0))]
-    console.log('有效的节点:', validKeys)
 
     // 注意：后端返回的是大写ID
     const roleId = currentRole.value.ID || currentRole.value.id
-    console.log('提交授权 - 角色ID:', roleId, '菜单IDs:', validKeys)
 
     await assignRoleMenus(roleId, validKeys)
     ElMessage.success('授权成功')
     permissionDialogVisible.value = false
   } catch (error: any) {
-    console.error('授权失败:', error)
     ElMessage.error(error.message || '授权失败')
   } finally {
     submitting.value = false

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -95,19 +94,15 @@ func (h *ResourceHandler) handleGetClientsetError(c *gin.Context, err error) boo
 	if err == nil {
 		return false
 	}
-	// 打印错误信息用于调试
-	fmt.Printf("🔍 [handleGetClientsetError] 错误信息: %s\n", err.Error())
 
 	// 检查是否是"用户尚未申请凭据"错误
 	if strings.Contains(err.Error(), "尚未申请") || strings.Contains(err.Error(), "凭据") {
-		fmt.Printf("❌ [handleGetClientsetError] 返回 403\n")
 		c.JSON(http.StatusForbidden, gin.H{
 			"code":    403,
 			"message": "您尚未申请该集群的访问凭据，请在集群管理页面申请 kubeconfig 后再访问",
 		})
 		return true
 	}
-	fmt.Printf("⚠️ [handleGetClientsetError] 不是凭据错误，返回 false\n")
 	return false
 }
 
@@ -338,13 +333,9 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 		return
 	}
 
-	// 调试日志
-	fmt.Printf("🔍 DEBUG [ListNodes]: clusterID=%d, currentUserID=%d\n", clusterID, currentUserID)
-
 	// 使用用户的凭据获取 clientset（实现权限隔离）
 	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
-		fmt.Printf("❌ DEBUG [ListNodes]: GetClientsetForUser failed for userID=%d: %v\n", currentUserID, err)
 		if h.handleGetClientsetError(c, err) {
 			return
 		}
@@ -355,8 +346,6 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("✅ DEBUG [ListNodes]: Successfully got clientset for userID=%d\n", currentUserID)
-
 	nodes, err := clientset.CoreV1().Nodes().List(c.Request.Context(), metav1.ListOptions{})
 	if err != nil {
 		HandleK8sError(c, err, "节点")
@@ -366,7 +355,6 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 	// 获取metrics clientset
 	metricsClient, err := h.clusterService.GetCachedMetricsClientset(c.Request.Context(), uint(clusterID))
 	if err != nil {
-		fmt.Printf("❌ DEBUG [ListNodes]: GetCachedMetricsClientset failed: %v\n", err)
 		// 继续执行，只是没有metrics数据
 		metricsClient = nil
 	}
@@ -376,15 +364,10 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 	if metricsClient != nil {
 		allNodeMetrics, err := metricsClient.MetricsV1beta1().NodeMetricses().List(c.Request.Context(), metav1.ListOptions{})
 		if err == nil {
-			fmt.Printf("✅ DEBUG [ListNodes]: Successfully got %d node metrics\n", len(allNodeMetrics.Items))
 			for _, nm := range allNodeMetrics.Items {
 				nodeMetricsMap[nm.Name] = &nm
 			}
-		} else {
-			fmt.Printf("❌ DEBUG [ListNodes]: Failed to get node metrics: %v\n", err)
 		}
-	} else {
-		fmt.Printf("⚠️  DEBUG [ListNodes]: metricsClient is nil\n")
 	}
 
 	// 获取所有Pod以计算每个节点的Pod数量
@@ -518,10 +501,6 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 		if nodeMetrics, ok := nodeMetricsMap[node.Name]; ok {
 			nodeInfo.CPUUsed = nodeMetrics.Usage.Cpu().MilliValue()
 			nodeInfo.MemoryUsed = nodeMetrics.Usage.Memory().Value()
-			fmt.Printf("📊 DEBUG [ListNodes]: Node %s - CPUUsed: %d millicores, MemoryUsed: %d bytes\n",
-				node.Name, nodeInfo.CPUUsed, nodeInfo.MemoryUsed)
-		} else {
-			fmt.Printf("⚠️  DEBUG [ListNodes]: No metrics found for node %s\n", node.Name)
 		}
 
 		nodeInfos = append(nodeInfos, nodeInfo)
@@ -557,7 +536,6 @@ func (h *ResourceHandler) GetNodeMetrics(c *gin.Context) {
 	// 获取客户端
 	clientset, err := h.clusterService.GetClientsetForUser(c.Request.Context(), uint(clusterID), currentUserID)
 	if err != nil {
-		fmt.Printf("❌ DEBUG [GetNodeMetrics]: GetClientsetForUser failed for userID=%d: %v\n", currentUserID, err)
 		if h.handleGetClientsetError(c, err) {
 			return
 		}
@@ -1266,13 +1244,6 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 
 		componentMap := make(map[string]ComponentInfo)
 
-		// 调试日志：打印 kube-system 命名空间下的所有 Pod
-		log.Printf("[GetComponentInfo] kube-system namespace has %d pods", len(pods.Items))
-		for _, pod := range pods.Items {
-			log.Printf("[GetComponentInfo] Found pod: %s (OwnerReferences: %d)",
-				pod.Name, len(pod.OwnerReferences))
-		}
-
 		for _, pod := range pods.Items {
 			podName := strings.ToLower(pod.Name)
 			var componentName string
@@ -1321,8 +1292,6 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 						componentKey = "cloud-controller"
 					}
 					componentName = name
-					log.Printf("[GetComponentInfo] Matched pod %s to component %s (pattern: %s)",
-						pod.Name, componentName, pattern)
 					break
 				}
 			}
@@ -1354,22 +1323,16 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 				Version: version,
 				Status:  status,
 			}
-			log.Printf("[GetComponentInfo] Added component: %s (version: %s, status: %s)",
-				componentName, version, status)
 		}
 
 		// 转换为切片
 		for _, comp := range componentMap {
 			componentInfo.Components = append(componentInfo.Components, comp)
 		}
-		log.Printf("[GetComponentInfo] Total components found from pods: %d", len(componentInfo.Components))
-	} else {
-		log.Printf("[GetComponentInfo] Failed to list pods in kube-system: %v", err)
 	}
 
 	// 如果没有检测到控制平面组件，可能是二进制部署的集群（systemd 启动）
 	// 尝试通过节点标签和版本信息来推断
-	log.Printf("[GetComponentInfo] Checking for binary deployment cluster...")
 
 	// 检查是否已经有控制平面组件（API Server, Scheduler, Controller Manager, etcd）
 	hasControlPlanePods := false
@@ -1382,31 +1345,23 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 	}
 
 	if !hasControlPlanePods {
-		log.Printf("[GetComponentInfo] No control plane pods found, checking for binary deployment...")
-
 		// 获取集群版本信息
 		serverVersion, err := clientset.Discovery().ServerVersion()
 		if err == nil {
-			k8sVersion := serverVersion.GitVersion
-			log.Printf("[GetComponentInfo] Kubernetes version: %s", k8sVersion)
-
 			// 获取所有节点
 			nodes, err := clientset.CoreV1().Nodes().List(c.Request.Context(), metav1.ListOptions{})
 			if err == nil {
 				hasControlPlaneNode := false
 				for _, node := range nodes.Items {
 					nodeName := strings.ToLower(node.Name)
-					log.Printf("[GetComponentInfo] Checking node: %s", node.Name)
 
 					// 检查节点是否是 master/control-plane 节点
 					if _, hasControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]; hasControlPlane {
-						log.Printf("[GetComponentInfo] Found control-plane node by label: %s", node.Name)
 						hasControlPlaneNode = true
 						break
 					}
 					// 兼容旧的标签
 					if _, hasMaster := node.Labels["node-role.kubernetes.io/master"]; hasMaster {
-						log.Printf("[GetComponentInfo] Found master node by label: %s", node.Name)
 						hasControlPlaneNode = true
 						break
 					}
@@ -1416,7 +1371,6 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 						strings.Contains(nodeName, "control-plane") ||
 						strings.Contains(nodeName, "control") ||
 						strings.Contains(nodeName, "mgr") {
-						log.Printf("[GetComponentInfo] Found control-plane node by name pattern: %s", node.Name)
 						hasControlPlaneNode = true
 						break
 					}
@@ -1424,8 +1378,6 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 
 				// 如果检测到控制平面节点但没有找到控制平面 Pod，说明是二进制部署
 				if hasControlPlaneNode {
-					log.Printf("[GetComponentInfo] Detected binary deployment cluster, adding components...")
-
 					// 添加 API Server
 					componentInfo.Components = append(componentInfo.Components, ComponentInfo{
 						Name:    "API Server",
@@ -1453,10 +1405,6 @@ func (h *ResourceHandler) GetClusterComponentInfo(c *gin.Context) {
 						Version: "unknown",
 						Status:  "Running",
 					})
-
-					log.Printf("[GetComponentInfo] Added 4 control plane components for binary deployment")
-				} else {
-					log.Printf("[GetComponentInfo] No control-plane node found, skipping binary deployment detection")
 				}
 			}
 		}
@@ -3156,7 +3104,6 @@ func (h *ResourceHandler) NodeShellWebSocket(c *gin.Context) {
 	// 升级到 WebSocket 连接
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
@@ -8840,7 +8787,6 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 	// 升级到 WebSocket 连接
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
@@ -8894,7 +8840,6 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 	recordingDir := "./data/terminal-recordings"
 	recorder, err := NewAsciinemaRecorder(recordingDir, 120, 30)
 	if err != nil {
-		log.Printf("创建录制器失败: %v", err)
 		// 录制失败不影响终端使用，只是不录制
 		recorder = nil
 	}
@@ -8923,9 +8868,6 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				if err != websocket.ErrCloseSent {
-					log.Printf("🐚 WebSocket read error: %v", err)
-				}
 				return
 			}
 			wsReader.data <- message
@@ -8933,7 +8875,6 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 	}()
 
 	// 流式处理
-	log.Printf("🔧 开始流式处理，recorder是否为nil: %v", recorder == nil)
 	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  wsReader,
 		Stdout: wsWriter,
@@ -8941,25 +8882,16 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 		Tty:    true,
 	})
 
-	if err != nil {
-		log.Printf("🐚 Executor error: %v", err)
-	}
-
-	log.Printf("🔧 Executor StreamWithContext 完成，等待 goroutine 结束")
 	// 等待读取 goroutine 结束
 	<-done
-	log.Printf("🔧 Goroutine 已结束，开始检查 recorder")
 
 	// 关闭录制器并保存会话记录
 	if recorder != nil {
-		log.Printf("✅ Recorder 不为空，准备保存会话记录")
 		duration := recorder.GetDuration()
 		fileSize := recorder.GetFileSize()
 		recordingPath := recorder.GetRecordingPath()
 
-		if err := recorder.Close(); err != nil {
-			log.Printf("关闭录制器失败: %v", err)
-		}
+		recorder.Close()
 
 		// 获取集群名称
 		var cluster models.Cluster
@@ -8970,7 +8902,6 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 				clusterName = cluster.Name
 			}
 		} else {
-			log.Printf("⚠️ 查询集群信息失败: %v, clusterID=%d", err, clusterID)
 			clusterName = fmt.Sprintf("Cluster-%d", clusterID)
 		}
 
@@ -8989,16 +8920,8 @@ func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 			Status:        model.SessionStatusCompleted,
 		}
 
-		if err := h.db.Create(&session).Error; err != nil {
-			log.Printf("❌ 保存终端会话记录失败: %v", err)
-		} else {
-			log.Printf("✅ 终端会话已保存: ID=%d, clusterID=%d, 时长=%ds, 大小=%d bytes", session.ID, clusterID, duration, fileSize)
-		}
-	} else {
-		log.Printf("⚠️  录制器为空，跳过保存会话记录")
+		h.db.Create(&session)
 	}
-
-	log.Printf("🐚 WebSocket connection closed for pod %s/%s\n", namespace, podName)
 }
 
 // PauseWorkload 暂停/恢复工作负载

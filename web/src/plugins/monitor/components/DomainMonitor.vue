@@ -456,7 +456,6 @@ const loadData = async () => {
     stats.value = statsData || { total: 0, normal: 0, abnormal: 0, paused: 0 }
   } catch (error: any) {
     ElMessage.error('加载数据失败')
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -503,7 +502,6 @@ const handleView = async (row: any) => {
     detailDialogVisible.value = true
   } catch (error: any) {
     ElMessage.error('获取详情失败')
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -518,7 +516,6 @@ const handleCheck = async (row: any) => {
     await loadData()
   } catch (error: any) {
     ElMessage.error('检查失败')
-    console.error(error)
   } finally {
     row.checking = false
   }
@@ -535,7 +532,6 @@ const handleDelete = async (row: any) => {
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
-      console.error(error)
     }
   } finally {
     loading.value = false
@@ -565,14 +561,13 @@ const handleSubmit = async () => {
           try {
             await checkDomain(result.id)
           } catch (checkError) {
-            console.warn('首次检查失败，但监控已创建:', checkError)
+            // First check failed, but monitor was created
           }
         }
         dialogVisible.value = false
         await loadData()
       } catch (error: any) {
         ElMessage.error(error.response?.data?.message || '操作失败')
-        console.error(error)
       } finally {
         submitting.value = false
       }

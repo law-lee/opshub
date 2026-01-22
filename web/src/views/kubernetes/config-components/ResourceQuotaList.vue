@@ -245,7 +245,6 @@ const loadNamespaces = async () => {
     const data = await getNamespaces(props.clusterId)
     namespaces.value = data || []
   } catch (error) {
-    console.error('获取命名空间列表失败:', error)
   }
 }
 
@@ -262,7 +261,6 @@ const loadResourceQuotas = async () => {
     })
     resourceQuotaList.value = response.data.data || []
   } catch (error) {
-    console.error('获取 ResourceQuota 列表失败:', error)
     resourceQuotaList.value = []
   } finally {
     loading.value = false
@@ -292,7 +290,6 @@ const handleEditYAML = async (row: ResourceQuotaInfo) => {
     yamlContent.value = response.data.data?.yaml || ''
     yamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -337,7 +334,6 @@ const handleSaveYAML = async () => {
       await loadResourceQuotas()
       emit('refresh')
     } catch (error: any) {
-      console.error('创建失败:', error)
       ElMessage.error(`创建失败: ${error.response?.data?.message || error.message}`)
     } finally {
       saving.value = false
@@ -365,7 +361,6 @@ const handleSaveYAML = async () => {
       await loadResourceQuotas()
       emit('refresh')
     } catch (error: any) {
-      console.error('保存失败:', error)
       ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
     } finally {
       saving.value = false
@@ -400,7 +395,6 @@ const handleDelete = async (row: ResourceQuotaInfo) => {
     emit('refresh')
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除失败:', error)
       ElMessage.error(`删除失败: ${error.response?.data?.message || error.message}`)
     }
   }

@@ -141,7 +141,6 @@ const loadData = async () => {
     const data = await getRoles(props.clusterId, props.namespace)
     roles.value = data || []
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取 Role 列表失败')
   } finally {
     loading.value = false
@@ -192,7 +191,6 @@ const handleEdit = async (row: RoleInfo) => {
     })
     yamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -249,11 +247,9 @@ const handleDelete = async (row: RoleInfo) => {
     try {
       await loadData()
     } catch (refreshError) {
-      console.error('刷新列表失败:', refreshError)
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除 Role 失败:', error)
       ElMessage.error(error.response?.data?.message || '删除失败')
     }
   }
@@ -285,7 +281,6 @@ const handleSaveYAML = async () => {
     yamlDialogVisible.value = false
     await loadData()
   } catch (error: any) {
-    console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     saving.value = false

@@ -299,12 +299,9 @@ const loadSessions = async () => {
   loading.value = true
   try {
     const response = await request.get(`/api/v1/plugins/kubernetes/terminal/sessions`)
-    console.log('🔍 终端会话响应:', response)
     // 响应拦截器已经返回了 res.data，所以 response 直接就是数组
     sessionList.value = response || []
-    console.log('🔍 sessionList 设置后:', sessionList.value)
   } catch (error: any) {
-    console.error('获取终端会话列表失败:', error)
     sessionList.value = []
     // 如果是404或空列表，显示友好的提示
     if (error.response?.status === 404 || error.response?.data?.data?.length === 0) {
@@ -335,7 +332,6 @@ const handlePlay = async (row: TerminalSession) => {
       }
     })
 
-    console.log('📼 录制文件内容:', response.data)
 
     // 将数据转换为字符串并创建 blob
     let jsonString: string
@@ -354,7 +350,6 @@ const handlePlay = async (row: TerminalSession) => {
 
     playDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取录制文件失败:', error)
     ElMessage.error('获取录制文件失败')
   }
 }
@@ -387,7 +382,6 @@ const handleDelete = async (row: TerminalSession) => {
     await loadSessions()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除失败:', error)
       ElMessage.error(`删除失败: ${error.response?.data?.message || error.message}`)
     }
   }

@@ -147,9 +147,6 @@ export function registerPluginRoutes() {
   // 修改为使用 getInstalled() 以保持与菜单构建的一致性
   const plugins = pluginManager.getInstalled()
 
-  console.log('[Router] 开始注册插件路由')
-  console.log('[Router] 已安装的插件数量:', plugins.length)
-
   for (const plugin of plugins) {
     if (plugin.getRoutes) {
       const routes = plugin.getRoutes()
@@ -158,39 +155,26 @@ export function registerPluginRoutes() {
       routes.forEach(route => {
         router.addRoute('Layout', route)
       })
-
-      console.log(`[Router] 插件 ${plugin.name} 路由注册成功, 路由数量:`, routes.length)
-    } else {
-      console.log(`[Router] 插件 ${plugin.name} 没有提供路由配置`)
     }
   }
-
-  console.log('[Router] 插件路由注册完成')
 }
 
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
-  console.log('路由守卫 - 目标路径:', to.path)
-  console.log('路由守卫 - 当前路径:', from.path)
-  console.log('路由守卫 - Token:', token)
 
   // 如果访问登录页，且已登录，则跳转到首页
   if (to.path === '/login') {
     if (token) {
-      console.log('已登录访问登录页，跳转到首页')
       next('/')
     } else {
-      console.log('未登录访问登录页，继续')
       next()
     }
   } else {
     // 访问其他页面，需要检查登录状态
     if (!token) {
-      console.log('未登录，跳转到登录页')
       next('/login')
     } else {
-      console.log('已登录，继续访问')
       next()
     }
   }

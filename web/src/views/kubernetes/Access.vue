@@ -247,7 +247,6 @@ const loadClusters = async () => {
       await loadNamespaces()
     }
   } catch (error) {
-    console.error('加载集群列表失败:', error)
   }
 }
 
@@ -275,7 +274,6 @@ const loadNamespaces = async () => {
       selectedNamespace.value = namespaceList.value[0].name
     }
   } catch (error) {
-    console.error('加载命名空间列表失败:', error)
   }
 }
 

@@ -277,11 +277,9 @@ const loadJvmInfo = async () => {
     jvmInfo.value = parseJvmOutput(output)
 
     if (Object.keys(jvmInfo.value).length === 0 && output) {
-      console.warn('解析JVM信息失败，原始输出:', output)
     }
   } catch (error: any) {
     ElMessage.error('获取JVM信息失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loading.value = false
   }

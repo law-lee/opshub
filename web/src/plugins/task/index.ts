@@ -15,14 +15,12 @@ class TaskPlugin implements Plugin {
    * 安装插件
    */
   async install() {
-    console.log('Task 插件安装中...')
   }
 
   /**
    * 卸载插件
    */
   async uninstall() {
-    console.log('Task 插件卸载中...')
   }
 
   /**
@@ -118,8 +116,6 @@ class TaskPlugin implements Plugin {
 
 // 创建并注册插件实例
 const plugin = new TaskPlugin()
-console.log('[Task Plugin] 正在注册插件...')
 pluginManager.register(plugin)
-console.log('[Task Plugin] 插件注册完成')
 
 export default plugin

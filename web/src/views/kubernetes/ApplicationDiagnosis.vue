@@ -325,7 +325,6 @@ const restoreState = async () => {
       }
     }
   } catch (e) {
-    console.error('恢复状态失败:', e)
   }
 }
 
@@ -335,7 +334,6 @@ const loadClusters = async () => {
     const res = await getClusterList()
     clusters.value = res || []
   } catch (error) {
-    console.error('加载集群失败:', error)
   }
 }
 
@@ -346,7 +344,6 @@ const loadNamespaces = async () => {
     const res = await getNamespaces(selectedCluster.value)
     namespaces.value = res || []
   } catch (error) {
-    console.error('加载命名空间失败:', error)
   }
 }
 
@@ -357,7 +354,6 @@ const loadPods = async () => {
     const res = await getPods(selectedCluster.value, selectedNamespace.value)
     pods.value = res || []
   } catch (error) {
-    console.error('加载Pod失败:', error)
   }
 }
 
@@ -370,7 +366,6 @@ const loadContainers = async () => {
     const initContainers = res?.spec?.initContainers?.map((c: any) => c.name) || []
     containers.value = [...containerList, ...initContainers]
   } catch (error) {
-    console.error('加载Pod详情失败:', error)
   }
 }
 
@@ -391,7 +386,6 @@ const loadProcesses = async () => {
       ElMessage.warning('未检测到Java进程，请确保容器中有运行的Java应用')
     }
   } catch (error: any) {
-    console.error('获取Java进程失败:', error)
     processes.value = []
     if (error.message && !error.message.includes('exit code')) {
       ElMessage.error('获取Java进程失败: ' + (error.message || '未知错误'))
@@ -510,7 +504,6 @@ const handleAttach = async () => {
     ElMessage.success('连接成功')
   } catch (error: any) {
     ElMessage.error('连接失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     attaching.value = false
   }

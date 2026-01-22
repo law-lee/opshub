@@ -110,7 +110,7 @@ type SysMenu struct {
 	Sort        int           `gorm:"type:int;default:0;comment:排序" json:"sort"`
 	Visible     int           `gorm:"type:tinyint;default:1;comment:是否显示 1:显示 0:隐藏" json:"visible"`
 	Status      int           `gorm:"type:tinyint;default:1;comment:状态 1:启用 0:禁用" json:"status"`
-	Roles       []SysRole     `gorm:"many2many:sys_role_menus" json:"-"`
+	Roles       []SysRole     `gorm:"many2many:sys_role_menu" json:"-"`
 }
 
 // SysUserRole 用户角色关联表

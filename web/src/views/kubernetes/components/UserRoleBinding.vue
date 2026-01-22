@@ -506,7 +506,6 @@ const handleApiGroupsChange = async () => {
     const resources = await getResourcesByAPIGroup(props.cluster.id, createForm.value.apiGroups)
     availableResources.value = resources || []
   } catch (error) {
-    console.error('Failed to load resources:', error)
   }
 }
 
@@ -538,7 +537,6 @@ const loadRoles = async () => {
     const apiGroups = await getAPIGroups(props.cluster.id)
     availableAPIGroups.value = apiGroups || []
   } catch (error) {
-    console.error('Failed to load roles:', error)
     ElMessage.error('加载角色失败')
   } finally {
     loading.value = false
@@ -555,7 +553,6 @@ const handleViewRoleDetail = async (namespace: string, roleName: string) => {
     currentRoleDetail.value = detail
     detailDialogVisible.value = true
   } catch (error) {
-    console.error('Failed to load role detail:', error)
     ElMessage.error('加载角色详情失败')
   } finally {
     loading.value = false
@@ -709,7 +706,6 @@ const handleDeleteNamespaceRole = async (roleName: string) => {
         await deleteRole(props.cluster.id, ns.name, roleName)
       } catch (error) {
         // 忽略单个命名空间的删除失败
-        console.log(`Failed to delete role from ${ns.name}:`, error)
       }
     }
 

@@ -290,12 +290,9 @@ const loadCredentialList = async () => {
     }
 
     const res = await getCredentialList(params)
-    console.log('loadCredentialList - res:', res)
-    console.log('loadCredentialList - res.list:', res.list)
     credentialList.value = res.list || []
     pagination.total = res.total || 0
   } catch (error) {
-    console.error('获取凭证列表失败:', error)
     ElMessage.error('获取凭证列表失败')
   } finally {
     loading.value = false
@@ -333,13 +330,10 @@ const handleAdd = () => {
 
 // 编辑凭证
 const handleEdit = async (row: any) => {
-  console.log('handleEdit - row:', row)
-  console.log('handleEdit - row.id:', row.id)
 
   // 获取完整的凭证信息（包括解密后的私钥）
   try {
     const credential = await getCredential(row.id)
-    console.log('handleEdit - credential:', credential)
 
     Object.assign(form, {
       id: credential.id,
@@ -351,9 +345,7 @@ const handleEdit = async (row: any) => {
       passphrase: credential.passphrase || '',
       description: credential.description || ''
     })
-    console.log('handleEdit - form after assign:', form)
   } catch (error) {
-    console.error('获取凭证详情失败:', error)
     ElMessage.error('获取凭证详情失败')
     return
   }

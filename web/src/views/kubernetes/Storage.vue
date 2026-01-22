@@ -131,7 +131,6 @@ const loadClusters = async () => {
       }
     }
   } catch (error) {
-    console.error('获取集群列表失败:', error)
   }
 }
 

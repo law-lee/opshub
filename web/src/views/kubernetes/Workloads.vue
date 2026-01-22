@@ -1927,7 +1927,6 @@ const loadClusters = async () => {
       await loadWorkloads()
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取集群列表失败')
   }
 }
@@ -1947,7 +1946,6 @@ const loadNamespaces = async () => {
     )
     namespaceList.value = response.data.data || []
   } catch (error) {
-    console.error(error)
     namespaceList.value = []
   }
 }
@@ -2002,14 +2000,10 @@ const handleSearch = () => {
 
 // YAML创建工作负载
 const handleAddWorkloadYAML = () => {
-  console.log('🔍 handleAddWorkloadYAML called')
-  console.log('🔍 selectedClusterId:', selectedClusterId.value)
-  console.log('🔍 selectedType:', selectedType.value)
 
   if (!selectedClusterId.value && clusterList.value.length > 0) {
     // 如果没有选择集群但有集群列表，自动选择第一个
     selectedClusterId.value = clusterList.value[0].id
-    console.log('🔍 Auto-selected first cluster:', selectedClusterId.value)
   }
 
   if (!selectedClusterId.value) {
@@ -2024,19 +2018,14 @@ const handleAddWorkloadYAML = () => {
   selectedWorkloadType.value = workloadType
   createYamlContent.value = workloadTemplates[workloadType] || workloadTemplates.Deployment
   createWorkloadDialogVisible.value = true
-  console.log('🔍 Creating', workloadType, 'createWorkloadDialogVisible set to true')
 }
 
 // 表单创建工作负载
 const handleAddWorkloadForm = async () => {
-  console.log('🔍 handleAddWorkloadForm called')
-  console.log('🔍 selectedClusterId:', selectedClusterId.value)
-  console.log('🔍 selectedType:', selectedType.value)
 
   if (!selectedClusterId.value && clusterList.value.length > 0) {
     // 如果没有选择集群但有集群列表，自动选择第一个
     selectedClusterId.value = clusterList.value[0].id
-    console.log('🔍 Auto-selected first cluster:', selectedClusterId.value)
   }
 
   if (!selectedClusterId.value) {
@@ -2112,13 +2101,11 @@ const handleAddWorkloadForm = async () => {
     restartPolicy: (workloadType === 'Job' || workloadType === 'CronJob') ? 'OnFailure' : 'Always'
   }
 
-  console.log('🔍 Loading nodes...')
   // 加载节点列表
   await loadNodes()
 
   activeEditTab.value = 'containers'
   editDialogVisible.value = true
-  console.log('🔍 editDialogVisible set to true, creating', workloadType)
 }
 
 // 创建工作负载（YAML方式）
@@ -2143,7 +2130,6 @@ const handleCreateFromYaml = async () => {
     createWorkloadDialogVisible.value = false
     loadWorkloads()
   } catch (error: any) {
-    console.error(error)
     const errorMsg = error.response?.data?.message || '创建工作负载失败'
     ElMessage.error(errorMsg)
   } finally {
@@ -2186,7 +2172,6 @@ const loadWorkloads = async () => {
     // 更新每个类型的数量
     updateWorkloadTypeCounts(allWorkloads)
   } catch (error) {
-    console.error(error)
     workloadList.value = []
     ElMessage.error('获取工作负载列表失败')
   } finally {
@@ -2275,7 +2260,6 @@ const fetchPodDetailsForMenu = async (podName: string, namespace: string) => {
     // 后端现在返回标准格式 {code: 0, message: "success", data: pod}
     podMenuData.value = response.data.data
   } catch (error: any) {
-    console.error('获取 Pod 详情失败:', error)
     ElMessage.error('获取 Pod 详情失败: ' + (error.response?.data?.message || error.message))
     podMenuData.value = null
   } finally {
@@ -2324,7 +2308,6 @@ const handleDeletePod = async (podName: string, namespace: string) => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除 Pod 失败:', error)
       ElMessage.error(error.response?.data?.message || '删除 Pod 失败')
     }
   }
@@ -2410,7 +2393,6 @@ const handleBatchDelete = async () => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量删除失败:', error)
       ElMessage.error('批量删除失败')
     }
   } finally {
@@ -2444,7 +2426,6 @@ const handleBatchRestart = async () => {
       type: w.type || selectedType.value
     }))
 
-    console.log('批量重启的工作负载列表:', workloadData)
 
     const response = await axios.post(
       '/api/v1/plugins/kubernetes/resources/workloads/batch/restart',
@@ -2455,14 +2436,12 @@ const handleBatchRestart = async () => {
       { headers: { Authorization: `Bearer ${token}` } }
     )
 
-    console.log('批量重启响应:', response.data)
 
     if (response.data.code === 0) {
       const results = response.data.data.results || []
       const successCount = results.filter(r => r.success).length
       const failureCount = results.filter(r => !r.success).length
 
-      console.log('批量重启结果:', { successCount, failureCount, results })
 
       if (failureCount > 0) {
         // 显示失败详情
@@ -2480,8 +2459,6 @@ const handleBatchRestart = async () => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量重启失败:', error)
-      console.error('错误详情:', error.response?.data)
       ElMessage.error(error.response?.data?.message || '批量重启失败')
     }
   } finally {
@@ -2542,7 +2519,6 @@ const handleBatchPause = async () => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量停止失败:', error)
       ElMessage.error('批量停止失败')
     }
   } finally {
@@ -2603,7 +2579,6 @@ const handleBatchResume = async () => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量恢复失败:', error)
       ElMessage.error('批量恢复失败')
     }
   } finally {
@@ -2628,9 +2603,7 @@ const loadNodes = async () => {
       }
     )
     nodeList.value = response.data.data || []
-    console.log('🔍 节点列表加载成功:', nodeList.value.length, '个节点')
   } catch (error: any) {
-    console.error('获取节点列表失败:', error)
     nodeList.value = []
   }
 }
@@ -2648,8 +2621,6 @@ const handleAddMatchRule = () => {
     operator: 'In',
     value: ''
   })
-  console.log('🔍 添加规则后 - schedulingType:', editWorkloadData.value.schedulingType)
-  console.log('🔍 添加规则后 - matchRules:', editWorkloadData.value.matchRules)
 }
 
 // 删除匹配规则
@@ -2660,21 +2631,15 @@ const handleRemoveMatchRule = (index: number) => {
   // 如果没有规则了，自动切换到"任意可用节点"
   if (editWorkloadData.value.matchRules.length === 0) {
     editWorkloadData.value.schedulingType = 'any'
-    console.log('🔍 删除所有规则后，切换 schedulingType 为 any')
   }
 }
 
 // 更新调度配置
 const handleUpdateScheduling = (data: { schedulingType: string; specifiedNode: string }) => {
   if (!editWorkloadData.value) {
-    console.error('🔴 handleUpdateScheduling: editWorkloadData.value 是 null/undefined!')
     return
   }
 
-  console.log('🔍 ====== handleUpdateScheduling 被调用 ======')
-  console.log('🔍 接收到的数据:', data)
-  console.log('🔍 更新前的 editWorkloadData.value.schedulingType:', editWorkloadData.value.schedulingType)
-  console.log('🔍 更新前的 editWorkloadData.value.specifiedNode:', editWorkloadData.value.specifiedNode)
 
   // 使用 Object.assign 确保响应式更新
   Object.assign(editWorkloadData.value, {
@@ -2682,9 +2647,6 @@ const handleUpdateScheduling = (data: { schedulingType: string; specifiedNode: s
     specifiedNode: data.specifiedNode
   })
 
-  console.log('🔍 更新后的 editWorkloadData.value.schedulingType:', editWorkloadData.value.schedulingType)
-  console.log('🔍 更新后的 editWorkloadData.value.specifiedNode:', editWorkloadData.value.specifiedNode)
-  console.log('🔍 完整的 editWorkloadData.value:', editWorkloadData.value)
 }
 
 // 更新表单数据
@@ -2775,7 +2737,6 @@ const handleShowDetail = async (workload: Workload) => {
       })
       podMetricsData.value = metricsRes.data.data.metrics || {}
     } catch (metricsError) {
-      console.warn('获取 Pod metrics 失败:', metricsError)
       podMetricsData.value = {}
     }
 
@@ -2794,15 +2755,9 @@ const handleShowDetail = async (workload: Workload) => {
       ingresses: ingressesRes.data.data.items || []
     }
 
-    console.log('📦 详情数据:', detailData.value)
-    console.log('📦 Pods数据:', detailData.value.pods)
-    console.log('📦 Pods数量:', detailData.value.pods.length)
-    console.log('📦 workloadObj:', workloadObj)
-    console.log('📦 workloadObj.spec?.paused:', workloadObj.spec?.paused)
 
     // 更新暂停状态
     isWorkloadPaused.value = !!workloadObj.spec?.paused
-    console.log('📦 isWorkloadPaused:', isWorkloadPaused.value)
 
     // 如果是 CronJob，加载 CronJob 配置
     if (workload.type === 'CronJob' && workloadObj.spec) {
@@ -2815,7 +2770,6 @@ const handleShowDetail = async (workload: Workload) => {
         startingDeadlineSeconds: workloadObj.spec.startingDeadlineSeconds || null,
         suspend: workloadObj.spec.suspend || false,
       }
-      console.log('📦 CronJob 配置:', cronJobConfig.value)
 
       // 加载 CronJob 的 Job 配置
       const jobSpec = workloadObj.spec.jobTemplate?.spec
@@ -2826,7 +2780,6 @@ const handleShowDetail = async (workload: Workload) => {
           backoffLimit: jobSpec.backoffLimit || 6,
           activeDeadlineSeconds: jobSpec.activeDeadlineSeconds || null,
         }
-        console.log('📦 CronJob 的 Job 配置:', jobConfig.value)
       }
     }
 
@@ -2838,13 +2791,11 @@ const handleShowDetail = async (workload: Workload) => {
         backoffLimit: workloadObj.spec.backoffLimit || 6,
         activeDeadlineSeconds: workloadObj.spec.activeDeadlineSeconds || null,
       }
-      console.log('📦 Job 配置:', jobConfig.value)
     }
 
     activeDetailTab.value = 'pods'
     detailDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取工作负载详情失败:', error)
     ElMessage.error('获取工作负载详情失败')
   }
 }
@@ -3076,7 +3027,6 @@ const handlePauseChange = async (value: boolean) => {
     // 恢复标签页
     activeDetailTab.value = currentTab
   } catch (error: any) {
-    console.error('更新暂停状态失败:', error)
     ElMessage.error('更新暂停状态失败: ' + (error.response?.data?.message || error.message))
     // 恢复开关状态
     isWorkloadPaused.value = !value
@@ -3175,7 +3125,6 @@ const handleViewReplicaSetYAML = async (replicaSet: any) => {
     }
     replicaSetYamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 ReplicaSet YAML 失败:', error)
     ElMessage.error('获取 ReplicaSet YAML 失败')
   }
 }
@@ -3186,7 +3135,6 @@ const handleCopyReplicaSetYAML = async () => {
     await navigator.clipboard.writeText(replicaSetYamlContent.value)
     ElMessage.success('YAML 已复制到剪贴板')
   } catch (error: any) {
-    console.error('复制失败:', error)
     ElMessage.error('复制失败')
   }
 }
@@ -3239,7 +3187,6 @@ const handleRollback = async (replicaSet: any) => {
     activeDetailTab.value = currentTab
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('回滚失败:', error)
       ElMessage.error('回滚失败: ' + (error.response?.data?.message || error.message))
     }
   }
@@ -3489,23 +3436,18 @@ const handleDialogOpened = async () => {
 
 // 初始化终端
 const initTerminal = async () => {
-  console.log('🔍 initTerminal 被调用')
-  console.log('🔍 terminalWrapper.value:', terminalWrapper.value)
 
   // 等待 DOM 元素准备好，最多重试 10 次
   let retries = 0
   while (!terminalWrapper.value && retries < 10) {
-    console.log(`⏳ 等待 terminalWrapper 准备好... (${retries + 1}/10)`)
     await new Promise(resolve => setTimeout(resolve, 100))
     retries++
   }
 
   if (!terminalWrapper.value) {
-    console.error('❌ terminalWrapper 仍然为 null，无法初始化终端')
     return
   }
 
-  console.log('✅ terminalWrapper 已准备好，开始初始化终端')
 
   // 清空容器
   terminalWrapper.value.innerHTML = ''
@@ -3555,7 +3497,6 @@ const initTerminal = async () => {
   const token = localStorage.getItem('token')
   const clusterId = selectedClusterId.value
 
-  console.log('🔍 终端连接参数:', {
     clusterId,
     namespace: terminalData.value.namespace,
     pod: terminalData.value.pod,
@@ -3575,14 +3516,12 @@ const initTerminal = async () => {
     `container=${terminalData.value.container}&` +
     `token=${token}`
 
-  console.log('🔍 WebSocket URL:', wsUrl)
 
   try {
     // 建立WebSocket连接
     terminalWebSocket = new WebSocket(wsUrl)
 
     terminalWebSocket.onopen = () => {
-      console.log('✅ WebSocket 已连接')
       terminalConnected.value = true
       terminal.clear()
       terminal.writeln('\x1b[1;32m✓ 已连接到容器 ' + terminalData.value.container + '\x1b[0m')
@@ -3594,7 +3533,6 @@ const initTerminal = async () => {
     }
 
     terminalWebSocket.onerror = (error) => {
-      console.error('❌ WebSocket错误:', error)
       terminal.writeln('\x1b[1;31m✗ 连接错误\x1b[0m')
       terminal.writeln('请检查:')
       terminal.writeln('1. 集群连接是否正常')
@@ -3603,14 +3541,12 @@ const initTerminal = async () => {
     }
 
     terminalWebSocket.onclose = (event) => {
-      console.log('🔌 WebSocket 已关闭:', event.code, event.reason)
       terminalConnected.value = false
       // 安全检查：terminal 可能已经被销毁
       if (terminal) {
         try {
           terminal.writeln('\x1b[1;33m连接已关闭\x1b[0m')
         } catch (e) {
-          console.warn('写入终端消息失败（可能已销毁）:', e)
         }
       }
     }
@@ -3630,7 +3566,6 @@ const initTerminal = async () => {
     })
 
   } catch (error: any) {
-    console.error('❌ 创建终端失败:', error)
     terminal.writeln('\x1b[1;31m✗ 连接失败: ' + error.message + '\x1b[0m')
   }
 }
@@ -3685,7 +3620,6 @@ const handleOpenFileBrowser = (podName: string, containerName: string, namespace
     ElMessage.error('请先选择集群')
     return
   }
-  console.log('📂 Opening file browser:', {
     clusterId: selectedClusterId.value,
     namespace,
     podName,
@@ -3722,15 +3656,12 @@ const handleLoadLogs = async () => {
     if (logsAutoScroll.value) {
       setTimeout(() => {
         if (logsWrapper.value) {
-          console.log('滚动到底部，scrollHeight:', logsWrapper.value.scrollHeight)
           logsWrapper.value.scrollTop = logsWrapper.value.scrollHeight
         } else {
-          console.log('logsWrapper.value 为 null')
         }
       }, 100)
     }
   } catch (error: any) {
-    console.error('获取日志失败:', error)
     ElMessage.error(`获取日志失败: ${error.response?.data?.message || error.message}`)
   } finally {
     logsLoading.value = false
@@ -3837,7 +3768,6 @@ const handleShowYAML = async () => {
 
     yamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   } finally {
     yamlSaving.value = false
@@ -3871,7 +3801,6 @@ const handleSaveYAML = async () => {
     yamlDialogVisible.value = false
     await loadWorkloads()
   } catch (error) {
-    console.error('保存 YAML 失败:', error)
     ElMessage.error('保存 YAML 失败')
   } finally {
     yamlSaving.value = false
@@ -3924,7 +3853,6 @@ const handleRestart = async () => {
     await loadWorkloads()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('重启失败:', error)
       ElMessage.error(`重启失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -3969,7 +3897,6 @@ const handleScale = async () => {
     await loadWorkloads()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('扩缩容失败:', error)
       ElMessage.error(`扩缩容失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -3998,9 +3925,6 @@ const handleShowEditDialog = async () => {
     // 获取返回的 JSON 数据
     const workloadData = response.data.data?.items
     if (workloadData) {
-      console.log('🔍 获取到工作负载数据:', workloadData)
-      console.log('🔍 副本数 replicas:', workloadData.spec?.replicas)
-      console.log('🔍 完整的 spec:', workloadData.spec)
 
       // CronJob 的数据路径不同，需要特殊处理
       const isCronJob = workloadType === 'CronJob'
@@ -4008,13 +3932,9 @@ const handleShowEditDialog = async () => {
         ? workloadData.spec?.jobTemplate?.spec?.template?.spec
         : workloadData.spec?.template?.spec
 
-      console.log('🔍 workloadType:', workloadType)
-      console.log('🔍 isCronJob:', isCronJob)
-      console.log('🔍 templateSpec:', templateSpec)
 
       // 转换 nodeSelector 为 matchRules 格式
       const nodeSelector = templateSpec?.nodeSelector || {}
-      console.log('🔍 从 Kubernetes 加载的 nodeSelector:', nodeSelector)
 
       const matchRules = Object.entries(nodeSelector).map(([key, value]) => {
         // 如果值是布尔值 true，则是 Exists 操作符
@@ -4033,8 +3953,6 @@ const handleShowEditDialog = async () => {
         }
       })
 
-      console.log('🔍 转换后的 matchRules:', matchRules)
-      console.log('🔍 matchRules 长度:', matchRules.length)
 
       // 解析 DNS 配置 - 只有当后端有配置时才设置
       let parsedDnsConfig = undefined
@@ -4053,9 +3971,6 @@ const handleShowEditDialog = async () => {
       const calculatedSchedulingType = templateSpec?.nodeName ? 'specified' :
                                         (Object.keys(nodeSelector).length > 0 ? 'match' : 'any')
 
-      console.log('🔍 nodeName:', templateSpec?.nodeName)
-      console.log('🔍 nodeSelector keys:', Object.keys(nodeSelector))
-      console.log('🔍 计算的 schedulingType:', calculatedSchedulingType)
 
       editWorkloadData.value = {
         name: workloadData.metadata?.name || name,
@@ -4107,7 +4022,6 @@ const handleShowEditDialog = async () => {
         revisionHistoryLimit: workloadData.spec?.revisionHistoryLimit ?? 10,
         timeoutSeconds: 600
       }
-      console.log('🔍 解析扩缩容策略:', scalingStrategyData.value)
 
       // 解析 Job 配置（Job 类型）
       if (workloadType === 'Job' && workloadData.spec) {
@@ -4117,7 +4031,6 @@ const handleShowEditDialog = async () => {
           backoffLimit: workloadData.spec.backoffLimit || 6,
           activeDeadlineSeconds: workloadData.spec.activeDeadlineSeconds || null,
         }
-        console.log('🔍 解析 Job 配置:', jobConfig.value)
       }
 
       // 解析 CronJob 配置（CronJob 类型）
@@ -4131,7 +4044,6 @@ const handleShowEditDialog = async () => {
           startingDeadlineSeconds: workloadData.spec.startingDeadlineSeconds || null,
           suspend: workloadData.spec.suspend || false,
         }
-        console.log('🔍 解析 CronJob 配置:', cronJobConfig.value)
 
         // 解析 CronJob 的 Job 配置
         const jobSpec = workloadData.spec.jobTemplate?.spec
@@ -4142,7 +4054,6 @@ const handleShowEditDialog = async () => {
             backoffLimit: jobSpec.backoffLimit || 6,
             activeDeadlineSeconds: jobSpec.activeDeadlineSeconds || null,
           }
-          console.log('🔍 解析 CronJob 的 Job 配置:', jobConfig.value)
         }
       }
 
@@ -4155,7 +4066,6 @@ const handleShowEditDialog = async () => {
       ElMessage.warning('未获取到工作负载数据')
     }
   } catch (error: any) {
-    console.error('获取工作负载详情失败:', error)
     ElMessage.error(`获取工作负载详情失败: ${error.response?.data?.message || error.message}`)
   } finally {
     editSaving.value = false
@@ -4545,8 +4455,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
 
   // 构建 affinity
   const affinity = buildAffinityFromRules(affinityRules.value)
-  console.log('🔍 保存时 - affinityRules:', affinityRules.value)
-  console.log('🔍 保存时 - 构建的 affinity:', affinity)
 
   // 构建 tolerations
   const tolerations = (data.tolerations || []).map((t: any) => {
@@ -4613,9 +4521,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
 
   // 构建 pod template spec
   // 根据工作负载类型设置正确的 restartPolicy
-  console.log('🔍 [restartPolicy] data.type:', data.type)
-  console.log('🔍 [restartPolicy] data.restartPolicy:', data.restartPolicy)
-  console.log('🔍 [restartPolicy] editWorkloadData.value.restartPolicy:', editWorkloadData.value.restartPolicy)
 
   let restartPolicy = 'Always'  // 默认值
   if (data.type === 'Job' || data.type === 'CronJob') {
@@ -4626,7 +4531,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
   }
   // Deployment/StatefulSet/DaemonSet 使用 Always
 
-  console.log('🔍 [restartPolicy] 最终设置的 restartPolicy:', restartPolicy)
 
   const podSpec: any = {
     containers,
@@ -4657,7 +4561,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
     // 空字符串需要转换为 null 来删除字段
     const value = data.priorityClassName || null
     podSpec.priorityClassName = value
-    console.log('🔍 priorityClassName 处理:', {
       原始值: data.priorityClassName,
       类型: typeof data.priorityClassName,
       设置值: value,
@@ -4707,15 +4610,10 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
   delete podSpec.nodeName
   delete podSpec.nodeSelector
 
-  console.log('🔍 ====== 保存调度配置 ======')
-  console.log('🔍 schedulingType:', data.schedulingType)
-  console.log('🔍 specifiedNode:', data.specifiedNode)
-  console.log('🔍 matchRules:', data.matchRules)
 
   if (data.schedulingType === 'specified' && data.specifiedNode) {
     // 指定节点 - 明确设置 nodeName
     podSpec.nodeName = data.specifiedNode
-    console.log('🔍 设置 nodeName:', podSpec.nodeName)
   } else if (data.schedulingType === 'match') {
     // 调度规则匹配 - 构建 nodeSelector
     const nodeSelector: Record<string, any> = {}
@@ -4738,15 +4636,12 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
 
     if (Object.keys(nodeSelector).length > 0) {
       podSpec.nodeSelector = nodeSelector
-      console.log('🔍 设置 nodeSelector:', nodeSelector)
     } else {
-      console.log('🔍 nodeSelector 为空，不设置')
     }
   } else {
     // 任意可用节点 - 明确设置为 null 以删除 Kubernetes 中的字段
     podSpec.nodeName = null
     podSpec.nodeSelector = null
-    console.log('🔍 任意可用节点 - nodeName 和 nodeSelector 设置为 null')
   }
 
   // 构建 Pod template
@@ -4757,8 +4652,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
     spec: podSpec
   }
 
-  console.log('🔍 构建的 podSpec:', JSON.stringify(podSpec, null, 2))
-  console.log('🔍 podSpec.affinity:', podSpec.affinity)
 
   // 构建 metadata
   const metadata: any = {
@@ -4896,9 +4789,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
 
   // 转换为 YAML 字符串
   const yamlStr = yaml.dump(resource, { indent: 2, lineWidth: -1 })
-  console.log('🔍 ====== 最终生成的 YAML ======')
-  console.log('🔍 YAML 长度:', yamlStr.length)
-  console.log('🔍 完整的 YAML:', yamlStr)
 
   return yamlStr
 }
@@ -5085,8 +4975,6 @@ const buildProbe = (probe: any): any => {
 
 // 从亲和性规则构建 Kubernetes affinity 对象
 const buildAffinityFromRules = (rules: any[]): any => {
-  console.log('🔍 buildAffinityFromRules - 输入的规则:', rules)
-  console.log('🔍 buildAffinityFromRules - 规则数量:', rules?.length || 0)
 
   const affinity: any = {}
 
@@ -5139,7 +5027,6 @@ const buildAffinityFromRules = (rules: any[]): any => {
       }
       const podAffinityTerm = buildPodAffinityTerm(rule)
       if (!podAffinityTerm) {
-        console.warn('⚠️ buildPodAffinityTerm 返回 null，跳过此规则')
         continue
       }
       if (rule.priority === 'Required') {
@@ -5162,7 +5049,6 @@ const buildAffinityFromRules = (rules: any[]): any => {
       }
       const podAffinityTerm = buildPodAffinityTerm(rule)
       if (!podAffinityTerm) {
-        console.warn('⚠️ buildPodAffinityTerm 返回 null，跳过此规则')
         continue
       }
       if (rule.priority === 'Required') {
@@ -5195,8 +5081,6 @@ const buildAffinityFromRules = (rules: any[]): any => {
     delete affinity.podAntiAffinity
   }
 
-  console.log('🔍 buildAffinityFromRules - 构建的 affinity:', affinity)
-  console.log('🔍 buildAffinityFromRules - affinity keys:', Object.keys(affinity))
 
   if (Object.keys(affinity).length === 0) return undefined
   return affinity
@@ -5235,14 +5119,12 @@ const buildNodeSelectorTerm = (rule: any): any => {
     term.matchLabels = matchLabels
   }
 
-  console.log('🔍 buildNodeSelectorTerm - 构建的 term:', term)
 
   return term
 }
 
 // 构建 Pod 亲和性条件
 const buildPodAffinityTerm = (rule: any): any => {
-  console.log('🔍 buildPodAffinityTerm - 输入的 rule:', rule)
 
   const matchExpressions = (rule.matchExpressions || []).map((exp: any) => {
     const expression: any = {
@@ -5277,7 +5159,6 @@ const buildPodAffinityTerm = (rule: any): any => {
 
   // 如果 labelSelector 为空，返回 null 以表示无效配置
   if (Object.keys(labelSelector).length === 0) {
-    console.warn('⚠️ buildPodAffinityTerm - labelSelector 为空，返回 null')
     return null
   }
 
@@ -5286,8 +5167,6 @@ const buildPodAffinityTerm = (rule: any): any => {
     topologyKey: rule.topologyKey || 'kubernetes.io/hostname'
   }
 
-  console.log('🔍 buildPodAffinityTerm - 构建的 podAffinityTerm:', podAffinityTerm)
-  console.log('🔍 buildPodAffinityTerm - labelSelector keys:', Object.keys(labelSelector))
 
   return podAffinityTerm
 }
@@ -5339,7 +5218,6 @@ const handleSaveEdit = async () => {
     // 重新加载列表
     await loadWorkloads()
   } catch (error: any) {
-    console.error(isCreateMode.value ? '创建工作负载失败:' : '更新工作负载失败:', error)
     ElMessage.error(error.response?.data?.message || (isCreateMode.value ? '创建工作负载失败' : '更新工作负载失败'))
   } finally {
     editSaving.value = false
@@ -5538,7 +5416,6 @@ const loadConfigMaps = async () => {
     const data = await getConfigMaps(selectedClusterId.value, editWorkloadData.value.namespace)
     configMaps.value = data || []
   } catch (error) {
-    console.error('加载 ConfigMap 列表失败:', error)
   }
 }
 
@@ -5550,7 +5427,6 @@ const loadSecrets = async () => {
     const data = await getSecrets(selectedClusterId.value, editWorkloadData.value.namespace)
     secrets.value = data || []
   } catch (error) {
-    console.error('加载 Secret 列表失败:', error)
   }
 }
 
@@ -5562,7 +5438,6 @@ const loadPVCs = async () => {
     const data = await getPersistentVolumeClaims(selectedClusterId.value, editWorkloadData.value.namespace)
     pvcs.value = data || []
   } catch (error) {
-    console.error('加载 PVC 列表失败:', error)
   }
 }
 
@@ -5598,7 +5473,6 @@ const handleDelete = async () => {
     await loadWorkloads()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除失败:', error)
       ElMessage.error(`删除失败: ${error.response?.data?.message || error.message}`)
     }
   }

@@ -288,8 +288,6 @@ const tableKey = ref(0) // 强制重新渲染表格
 // 获取行的唯一标识
 const getRowKey = (row: any) => {
   const key = row.ID || row.id || row.path
-  console.log('[getRowKey] 菜单:', row.name, 'ID:', row.ID, 'id:', row.id, 'path:', row.path, 'key:', key)
-  console.log('[getRowKey] children:', row.children, 'hasChildren:', row.hasChildren)
   return key
 }
 
@@ -458,7 +456,6 @@ const loadPluginMenuSort = (): Map<string, number> => {
       return new Map(Object.entries(sortMap))
     }
   } catch (error) {
-    console.error('[菜单管理] 加载插件菜单排序失败:', error)
   }
   return new Map()
 }
@@ -470,9 +467,7 @@ const savePluginMenuSort = (menuPath: string, sort: number) => {
     sortMap.set(menuPath, sort)
     const sortObj = Object.fromEntries(sortMap)
     localStorage.setItem(PLUGIN_MENU_SORT_KEY, JSON.stringify(sortObj))
-    console.log(`[菜单管理] 保存插件菜单排序: ${menuPath} = ${sort}`)
   } catch (error) {
-    console.error('[菜单管理] 保存插件菜单排序失败:', error)
   }
 }
 
@@ -519,13 +514,11 @@ const buildPluginMenuList = () => {
 const buildMenuTree = (menus: any[]) => {
   const menuMap = new Map()
 
-  console.log('[buildMenuTree] 输入菜单数量:', menus.length)
 
   // 第一遍循环: 创建所有菜单的副本并放入 Map
   menus.forEach(menu => {
     const id = menu.ID || menu.id
     if (!id) {
-      console.warn('[菜单树] 菜单缺少ID:', menu)
       return
     }
 
@@ -540,7 +533,6 @@ const buildMenuTree = (menus: any[]) => {
     }
 
     menuMap.set(id, menuCopy)
-    console.log(`[buildMenuTree] 添加到Map: ${menu.name} (id: ${id}, hasChildren: ${hasOriginalChildren})`)
   })
 
   const tree: any[] = []
@@ -562,12 +554,10 @@ const buildMenuTree = (menus: any[]) => {
       const menuItem = menuMap.get(id)
       if (menuItem && !tree.includes(menuItem)) {
         tree.push(menuItem)
-        console.log(`[buildMenuTree] ${menu.name} 作为顶级菜单`)
       }
     }
   })
 
-  console.log('[buildMenuTree] 构建完成，顶级菜单:', tree.map(m => ({ name: m.name, hasChildren: m.hasChildren, childrenCount: m.children?.length || 0 })))
 
   return tree
 }
@@ -579,9 +569,7 @@ const loadMenus = async () => {
     let systemMenus: any[] = []
     try {
       systemMenus = await getMenuTree() || []
-      console.log('[loadMenus] 后端返回的系统菜单原始数据:', JSON.stringify(systemMenus, null, 2))
     } catch (error) {
-      console.error('[菜单管理] 获取系统菜单失败:', error)
     }
 
     // 2. 获取插件菜单
@@ -595,7 +583,6 @@ const loadMenus = async () => {
             // 删除空的 children 数组
             delete node.children
             node.hasChildren = false
-            console.log(`[cleanEmptyChildren] 删除 ${node.name} 的空 children 数组`)
           } else {
             // 递归处理子节点
             cleanEmptyChildren(node.children)
@@ -630,8 +617,6 @@ const loadMenus = async () => {
 
     // 强制重新渲染表格
     tableKey.value++
-    console.log('[loadMenus] 最终设置的 menuList:', JSON.stringify(menuList.value, null, 2))
-    console.log('[loadMenus] 系统菜单数:', systemMenus.length, '插件菜单数:', pluginMenus.length)
   } finally {
     loading.value = false
   }
@@ -656,7 +641,6 @@ const insertPluginMenus = (tree: any[], pluginMenus: any[]) => {
         // 设置 hasChildren 标记
         parent.hasChildren = true
       } else {
-        console.warn('[插件菜单] 未找到父菜单:', pluginMenu.name, 'parentId:', parentId)
       }
     }
   })
@@ -732,7 +716,7 @@ const handleDelete = async (row: any) => {
     ElMessage.success('删除成功')
     loadMenus()
   } catch (error) {
-    if (error !== 'cancel') console.error(error)
+    // 取消操作或错误已在 catch 块中处理
   }
 }
 
@@ -783,7 +767,6 @@ const handleSubmit = async () => {
         resetForm()
         loadMenus()
       } catch (error) {
-        console.error(error)
         ElMessage.error('操作失败')
       } finally {
         submitting.value = false

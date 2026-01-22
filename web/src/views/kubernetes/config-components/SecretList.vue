@@ -414,7 +414,6 @@ const loadNamespaces = async () => {
     const data = await getNamespaces(props.clusterId)
     namespaces.value = data || []
   } catch (error) {
-    console.error('获取命名空间列表失败:', error)
   }
 }
 
@@ -431,7 +430,6 @@ const loadSecrets = async () => {
     })
     secretList.value = response.data.data || []
   } catch (error) {
-    console.error('获取 Secret 列表失败:', error)
     secretList.value = []
     // 不显示错误提示，避免频繁弹出
   } finally {
@@ -488,7 +486,6 @@ const handleEditForm = async (row: SecretInfo) => {
       }
     )
 
-    console.log('获取Secret详情响应:', response.data)
 
     // 获取Secret对象，可能是items或yaml字段
     let secret: any = response.data?.data?.items || response.data?.data?.yaml
@@ -498,7 +495,6 @@ const handleEditForm = async (row: SecretInfo) => {
       secret = yaml.load(secret)
     }
 
-    console.log('解析后的Secret:', secret)
 
     if (!secret || !secret.metadata) {
       ElMessage.error('获取Secret数据失败')
@@ -515,12 +511,10 @@ const handleEditForm = async (row: SecretInfo) => {
       annotations: secret.metadata?.annotations ? Object.entries(secret.metadata.annotations).map(([key, value]) => ({ key, value })) : []
     }
 
-    console.log('填充的表单数据:', formData.value)
 
     isEditMode.value = true
     formDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 Secret 详情失败:', error)
     ElMessage.error(`获取详情失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -551,7 +545,6 @@ const handleEditYAML = async (row: SecretInfo) => {
       yamlDialogVisible.value = true
     }
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -600,7 +593,6 @@ const handleSaveYAML = async () => {
     await loadSecrets()
     emit('refresh')
   } catch (error: any) {
-    console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     saving.value = false
@@ -673,10 +665,6 @@ const handleSaveForm = async () => {
 
     if (isEditMode.value) {
       // 编辑模式：使用 PUT 请求
-      console.log('Secret保存表单 - clusterId:', props.clusterId)
-      console.log('Secret保存表单 - formData:', formData.value)
-      console.log('Secret发送PUT请求，URL:', `/api/v1/plugins/kubernetes/resources/secrets/${formData.value.namespace}/${formData.value.name}/yaml`)
-      console.log('Secret clusterId:', props.clusterId)
       await axios.put(
         `/api/v1/plugins/kubernetes/resources/secrets/${formData.value.namespace}/${formData.value.name}/yaml`,
         secretObj,
@@ -703,7 +691,6 @@ const handleSaveForm = async () => {
     await loadSecrets()
     emit('refresh')
   } catch (error: any) {
-    console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     saving.value = false
@@ -737,7 +724,6 @@ const handleDelete = async (row: SecretInfo) => {
     emit('refresh')
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除失败:', error)
       ElMessage.error(`删除失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -786,7 +772,6 @@ const handleFileChange = (event: Event) => {
         formData.value.data.push({ key: fileName, value: base64Content })
         ElMessage.success('文件上传成功')
       } catch (error) {
-        console.error('编码错误:', error)
         ElMessage.error('文件编码失败')
       }
     }

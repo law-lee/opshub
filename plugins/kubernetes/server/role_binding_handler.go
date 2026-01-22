@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -77,10 +76,6 @@ func (h *RoleBindingHandler) BindUserToRole(c *gin.Context) {
 		return
 	}
 
-	// 打印调试信息
-	fmt.Printf("DEBUG: BindUserToRole - ClusterID: %d, UserID: %d, RoleName: %s, RoleNamespace: %s, RoleType: %s, BoundBy: %d\n",
-		req.ClusterID, req.UserID, req.RoleName, req.RoleNamespace, req.RoleType, currentUserID)
-
 	// 绑定角色
 	err := h.roleBindingService.BindUserRole(
 		c.Request.Context(),
@@ -93,7 +88,6 @@ func (h *RoleBindingHandler) BindUserToRole(c *gin.Context) {
 	)
 
 	if err != nil {
-		fmt.Printf("ERROR: BindUserRole failed: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "绑定失败: " + err.Error(),

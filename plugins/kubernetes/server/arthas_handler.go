@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -44,15 +43,6 @@ type ArthasCommandRequest struct {
 	Pod       string `json:"pod" binding:"required"`
 	Container string `json:"container" binding:"required"`
 	Command   string `json:"command" binding:"required"`
-	ProcessID string `json:"processId"` // Java进程ID，如果为空则自动检测
-}
-
-// ArthasAttachRequest Arthas附加请求
-type ArthasAttachRequest struct {
-	ClusterID uint   `json:"clusterId" binding:"required"`
-	Namespace string `json:"namespace" binding:"required"`
-	Pod       string `json:"pod" binding:"required"`
-	Container string `json:"container" binding:"required"`
 	ProcessID string `json:"processId"` // Java进程ID，如果为空则自动检测
 }
 
@@ -147,7 +137,6 @@ func (h *ArthasHandler) ListJavaProcesses(c *gin.Context) {
 
 	// 如果命令执行失败（例如容器中没有sh），返回空数组而不是错误
 	if err != nil {
-		log.Printf("获取Java进程列表失败（可能不是Java容器）: %v", err)
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
 			"message": "success",
@@ -406,85 +395,6 @@ if [ $SUCCESS -ne 1 ]; then
     exit 1
 fi
 `, processID, ognlExpr)
-
-	return []string{"sh", "-c", script}
-}
-
-// buildArthasCommandWithWideTerminal 构建Arthas命令（使用宽终端避免输出截断）
-func (h *ArthasHandler) buildArthasCommandWithWideTerminal(processID string, command string) []string {
-	// 使用 arthas-boot.jar 执行命令，设置宽终端宽度避免键名被截断
-	script := fmt.Sprintf(`
-# 下载 arthas-boot.jar 如果不存在
-if [ ! -f /tmp/arthas-boot.jar ]; then
-    echo "[INFO] Downloading arthas-boot.jar..."
-    curl -sL -o /tmp/arthas-boot.jar https://arthas.aliyun.com/arthas-boot.jar 2>/dev/null || \
-    wget -q -O /tmp/arthas-boot.jar https://arthas.aliyun.com/arthas-boot.jar 2>/dev/null
-    if [ ! -f /tmp/arthas-boot.jar ]; then
-        echo "[ERROR] Failed to download arthas-boot.jar"
-        exit 1
-    fi
-fi
-
-TARGET_PID=%s
-COMMAND='%s'
-
-# 设置宽终端宽度
-export COLUMNS=500
-export TERM=dumb
-
-echo "[INFO] Executing Arthas command on process $TARGET_PID: $COMMAND"
-
-# 生成随机端口 (9000-9999)
-RANDOM_PORT=$((9000 + $$ %% 1000))
-
-# 执行命令
-MAX_RETRY=3
-RETRY=0
-SUCCESS=0
-PORT=$RANDOM_PORT
-
-while [ $RETRY -lt $MAX_RETRY ]; do
-    RETRY=$((RETRY + 1))
-    echo "[INFO] Executing command (attempt $RETRY/$MAX_RETRY) on port $PORT..."
-
-    COMBINED_CMD="options print-table-width 500; $COMMAND"
-    OUTPUT=$(COLUMNS=500 java -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $PORT --http-port -1 -c "$COMBINED_CMD" 2>&1)
-    EXIT_CODE=$?
-
-    # 检查是否是端口冲突
-    if echo "$OUTPUT" | grep -qE "telnet port.*is used|process detection timeout|unexpected process"; then
-        echo "[WARN] Port $PORT conflict, trying different port..."
-        PORT=$((PORT + 1))
-        sleep 2
-        continue
-    fi
-
-    if [ $EXIT_CODE -eq 0 ]; then
-        echo "$OUTPUT"
-        SUCCESS=1
-        break
-    fi
-
-    if echo "$OUTPUT" | grep -qE "KEY|VALUE|=|os\.|java\."; then
-        echo "$OUTPUT"
-        SUCCESS=1
-        break
-    fi
-
-    if echo "$OUTPUT" | grep -qE "Connection refused|reset by peer|No process|Can not find"; then
-        echo "[WARN] Connection issue, retrying..."
-        sleep 3
-    else
-        echo "$OUTPUT"
-        sleep 2
-    fi
-done
-
-if [ $SUCCESS -ne 1 ]; then
-    echo "[ERROR] Failed to execute Arthas command after $MAX_RETRY attempts"
-    exit 1
-fi
-`, processID, command)
 
 	return []string{"sh", "-c", script}
 }
@@ -1310,63 +1220,6 @@ func (h *ArthasHandler) executeArthasCommandWithResponse(c *gin.Context, command
 	})
 }
 
-// executeArthasCommandWithWideTerminal 执行Arthas命令并返回结果（使用宽终端避免截断）
-func (h *ArthasHandler) executeArthasCommandWithWideTerminal(c *gin.Context, command string) {
-	clusterIDStr := c.Query("clusterId")
-	namespace := c.Query("namespace")
-	pod := c.Query("pod")
-	container := c.Query("container")
-	processID := c.Query("processId")
-
-	if clusterIDStr == "" || namespace == "" || pod == "" || container == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "缺少必要参数",
-		})
-		return
-	}
-
-	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "无效的集群ID",
-		})
-		return
-	}
-
-	currentUserID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    401,
-			"message": "未授权",
-		})
-		return
-	}
-
-	// 构建带宽终端的Arthas命令
-	arthasCmd := h.buildArthasCommandWithWideTerminal(processID, command)
-
-	// 执行命令（带超时，Arthas 首次启动可能需要较长时间）
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
-	defer cancel()
-
-	output, err := h.execCommand(ctx, uint(clusterID), currentUserID.(uint), namespace, pod, container, arthasCmd)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "执行Arthas命令失败: " + err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "success",
-		"data":    output,
-	})
-}
-
 // execCommand 在Pod中执行命令
 func (h *ArthasHandler) execCommand(ctx context.Context, clusterID, userID uint, namespace, pod, container string, command []string) (string, error) {
 	restConfig, err := h.clusterService.GetRESTConfig(clusterID, userID)
@@ -1462,12 +1315,9 @@ func (h *ArthasHandler) ArthasWebSocket(c *gin.Context) {
 	// 升级到WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
-
-	log.Printf("🔧 Arthas WebSocket connected: cluster=%d, ns=%s, pod=%s, container=%s", clusterID, namespace, pod, container)
 
 	// 获取REST config
 	restConfig, err := h.clusterService.GetRESTConfig(uint(clusterID), currentUserID.(uint))
@@ -1496,9 +1346,7 @@ func (h *ArthasHandler) ArthasWebSocket(c *gin.Context) {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					log.Printf("🔧 Arthas WebSocket closed normally")
-				} else {
-					log.Printf("🔧 Arthas WebSocket read error: %v", err)
+					// WebSocket closed normally
 				}
 				cancel()
 				return

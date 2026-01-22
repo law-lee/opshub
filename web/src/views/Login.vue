@@ -148,12 +148,10 @@ const refreshCaptcha = async () => {
   try {
     captchaImage.value = ''
     const res: any = await request.get('/api/v1/captcha')
-    console.log('验证码响应:', res)
     captchaImage.value = res.image
     captchaId.value = res.captchaId
     loginForm.captchaId = res.captchaId
   } catch (error) {
-    console.error('获取验证码失败:', error)
     ElMessage.error('获取验证码失败')
   }
 }
@@ -182,8 +180,6 @@ const handleLogin = async () => {
         ElMessage.success('登录成功')
         await router.push('/')
       } catch (error: any) {
-        console.error('登录失败，错误对象:', error)
-        console.error('错误对象结构:', JSON.stringify(error))
 
         // 提取错误消息 - 支持多种错误对象格式
         let errorMessage = '登录失败'
@@ -202,7 +198,6 @@ const handleLogin = async () => {
           }
         }
 
-        console.log('最终错误消息:', errorMessage)
         ElMessage.error(errorMessage)
         // 登录失败后刷新验证码
         refreshCaptcha()

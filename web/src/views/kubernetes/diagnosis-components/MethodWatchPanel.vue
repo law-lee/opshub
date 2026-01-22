@@ -363,7 +363,6 @@ const startWatch = async () => {
     })
 
     ws.onopen = () => {
-      console.log('WebSocket connected')
       // 发送 watch 命令
       const command = buildWatchCommand()
       rawOutput.value = `[INFO] 执行命令: ${command}\n\n`
@@ -406,7 +405,6 @@ const startWatch = async () => {
     }
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
       rawOutput.value += '\n[ERROR] WebSocket 连接错误\n'
       watching.value = false
       starting.value = false
@@ -414,7 +412,6 @@ const startWatch = async () => {
     }
 
     ws.onclose = () => {
-      console.log('WebSocket closed')
       watching.value = false
       starting.value = false
       rawOutput.value += '\n[INFO] 监测已停止\n'
@@ -423,7 +420,6 @@ const startWatch = async () => {
   } catch (error: any) {
     ElMessage.error('启动监测失败: ' + (error.message || '未知错误'))
     starting.value = false
-    console.error(error)
   }
 }
 

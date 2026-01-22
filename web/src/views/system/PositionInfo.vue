@@ -381,7 +381,6 @@ const loadPositionList = async () => {
     positionList.value = res.list || []
     pagination.total = res.total || 0
   } catch (error) {
-    console.error('获取岗位列表失败:', error)
     // 使用模拟数据
     if (searchForm.postCode || searchForm.postName) {
       positionList.value = []
@@ -495,7 +494,6 @@ const handleAssignUsers = async (row: any) => {
     // 后端返回 {list, total, page, pageSize} 格式
     selectedUsers.value = res.list || res.data || []
   } catch (error) {
-    console.error('获取岗位用户失败:', error)
     selectedUsers.value = []
   }
 
@@ -522,7 +520,6 @@ const loadAvailableUsers = async () => {
     availableUsers.value = userList.filter((u: any) => !selectedUserIds.includes(u.id || u.ID))
     userPagination.total = (res.total || 0) - selectedUsers.value.length
   } catch (error) {
-    console.error('获取用户列表失败:', error)
     availableUsers.value = []
   } finally {
     usersLoading.value = false

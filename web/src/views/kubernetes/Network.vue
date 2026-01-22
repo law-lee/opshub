@@ -244,7 +244,6 @@ const loadClusters = async () => {
       }
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取集群列表失败')
   }
 }
@@ -366,7 +365,6 @@ const handleTerminal = async (data: { namespace: string; name: string }) => {
     terminalConnected.value = false
     terminalDialogVisible.value = true
   } catch (error) {
-    console.error('获取Pod详情失败:', error)
     ElMessage.error('获取Pod详情失败')
   }
 }
@@ -395,7 +393,6 @@ const handleLogs = async (data: { namespace: string; name: string }) => {
     logsContent.value = ''
     logsDialogVisible.value = true
   } catch (error) {
-    console.error('获取Pod详情失败:', error)
     ElMessage.error('获取Pod详情失败')
   }
 }
@@ -408,23 +405,18 @@ const handleTerminalDialogOpened = async () => {
 
 // 初始化终端
 const initTerminal = async () => {
-  console.log('🔍 initTerminal 被调用')
-  console.log('🔍 terminalWrapper.value:', terminalWrapper.value)
 
   // 等待 DOM 元素准备好，最多重试 10 次
   let retries = 0
   while (!terminalWrapper.value && retries < 10) {
-    console.log(`⏳ 等待 terminalWrapper 准备好... (${retries + 1}/10)`)
     await new Promise(resolve => setTimeout(resolve, 100))
     retries++
   }
 
   if (!terminalWrapper.value) {
-    console.error('❌ terminalWrapper 仍然为 null，无法初始化终端')
     return
   }
 
-  console.log('✅ terminalWrapper 已准备好，开始初始化终端')
 
   // 清空容器
   terminalWrapper.value.innerHTML = ''
@@ -474,7 +466,6 @@ const initTerminal = async () => {
   const token = localStorage.getItem('token')
   const clusterId = selectedClusterId.value
 
-  console.log('🔍 终端连接参数:', {
     clusterId,
     namespace: terminalData.value.namespace,
     pod: terminalData.value.pod,
@@ -494,14 +485,12 @@ const initTerminal = async () => {
     `container=${terminalData.value.container}&` +
     `token=${token}`
 
-  console.log('🔍 WebSocket URL:', wsUrl)
 
   try {
     // 建立WebSocket连接
     terminalWebSocket = new WebSocket(wsUrl)
 
     terminalWebSocket.onopen = () => {
-      console.log('✅ WebSocket 已连接')
       terminalConnected.value = true
       terminal.clear()
       terminal.writeln('\x1b[1;32m✓ 已连接到容器 ' + terminalData.value.container + '\x1b[0m')
@@ -513,7 +502,6 @@ const initTerminal = async () => {
     }
 
     terminalWebSocket.onerror = (error) => {
-      console.error('❌ WebSocket错误:', error)
       terminal.writeln('\x1b[1;31m✗ 连接错误\x1b[0m')
       terminal.writeln('请检查:')
       terminal.writeln('1. 集群连接是否正常')
@@ -522,14 +510,12 @@ const initTerminal = async () => {
     }
 
     terminalWebSocket.onclose = (event) => {
-      console.log('🔌 WebSocket 已关闭:', event.code, event.reason)
       terminalConnected.value = false
       // 安全检查：terminal 可能已经被销毁
       if (terminal) {
         try {
           terminal.writeln('\x1b[1;33m连接已关闭\x1b[0m')
         } catch (e) {
-          console.warn('写入终端消息失败（可能已销毁）:', e)
         }
       }
     }
@@ -549,7 +535,6 @@ const initTerminal = async () => {
     })
 
   } catch (error: any) {
-    console.error('❌ 创建终端失败:', error)
     terminal.writeln('\x1b[1;31m✗ 连接失败: ' + error.message + '\x1b[0m')
   }
 }
@@ -603,15 +588,12 @@ const handleLoadLogs = async () => {
     if (logsAutoScroll.value) {
       setTimeout(() => {
         if (logsWrapper.value) {
-          console.log('滚动到底部，scrollHeight:', logsWrapper.value.scrollHeight)
           logsWrapper.value.scrollTop = logsWrapper.value.scrollHeight
         } else {
-          console.log('logsWrapper.value 为 null')
         }
       }, 100)
     }
   } catch (error: any) {
-    console.error('获取日志失败:', error)
     ElMessage.error(`获取日志失败: ${error.response?.data?.message || error.message}`)
   } finally {
     logsLoading.value = false

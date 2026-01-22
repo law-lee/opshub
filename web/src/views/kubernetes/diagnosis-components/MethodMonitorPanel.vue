@@ -382,7 +382,6 @@ const startMonitor = async () => {
     })
 
     ws.onopen = () => {
-      console.log('WebSocket connected')
       // 发送 monitor 命令
       const command = buildMonitorCommand()
       rawOutput.value = `[INFO] 执行命令: ${command}\n\n`
@@ -420,7 +419,6 @@ const startMonitor = async () => {
     }
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
       rawOutput.value += '\n[ERROR] WebSocket 连接错误\n'
       monitoring.value = false
       starting.value = false
@@ -428,7 +426,6 @@ const startMonitor = async () => {
     }
 
     ws.onclose = () => {
-      console.log('WebSocket closed')
       monitoring.value = false
       starting.value = false
       rawOutput.value += '\n[INFO] 监控已停止\n'
@@ -437,7 +434,6 @@ const startMonitor = async () => {
   } catch (error: any) {
     ElMessage.error('启动监控失败: ' + (error.message || '未知错误'))
     starting.value = false
-    console.error(error)
   }
 }
 

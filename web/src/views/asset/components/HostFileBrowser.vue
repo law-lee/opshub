@@ -412,13 +412,11 @@ const handleCustomUpload = async (options: any) => {
         // 限制在95%，剩余5%表示服务器处理
         const percentComplete = Math.min(Math.round((event.loaded / event.total) * 95), 95)
         uploadProgress.value = percentComplete
-        console.log(`上传进度: ${percentComplete}%`)
       }
     })
 
     // 上传完成，开始处理
     xhr.upload.addEventListener('load', () => {
-      console.log('文件已上传到服务器，等待服务器处理...')
       uploadProgress.value = 95
       isProcessing.value = true
     })
@@ -427,7 +425,6 @@ const handleCustomUpload = async (options: any) => {
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         // 服务器处理完成
-        console.log('服务器处理完成')
         isProcessing.value = false
         uploadProgress.value = 100
 

@@ -211,7 +211,6 @@ const loadIngresses = async (showSuccess = false) => {
       ElMessage.success('刷新成功')
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取 Ingress 列表失败')
   } finally {
     loading.value = false
@@ -224,7 +223,6 @@ const loadNamespaces = async () => {
     const data = await getNamespaces(props.clusterId)
     namespaces.value = data || []
   } catch (error) {
-    console.error(error)
   }
 }
 
@@ -284,7 +282,6 @@ const handleEditYAML = async (ingress: IngressInfo) => {
     yamlContent.value = yaml
     yamlDialogVisible.value = true
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取 YAML 失败')
   }
 }
@@ -295,7 +292,6 @@ const yamlToJson = (yaml: string): any => {
   try {
     return load(yaml)
   } catch (error) {
-    console.error('YAML 解析错误:', error)
     throw error
   }
 }
@@ -326,7 +322,6 @@ const handleSaveYAML = async () => {
         jsonData.kind = 'Ingress'
       }
     } catch (e) {
-      console.error('YAML 解析失败:', e)
       ElMessage.error('YAML 格式错误，请检查缩进和语法')
       saving.value = false
       return
@@ -343,7 +338,6 @@ const handleSaveYAML = async () => {
     emit('refresh')
     await loadIngresses()
   } catch (error) {
-    console.error(error)
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -372,7 +366,6 @@ const handleDelete = async (ingress: IngressInfo) => {
     await loadIngresses()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error(error)
       ElMessage.error('删除失败')
     }
   }
@@ -440,7 +433,6 @@ const handleSaveCreateYAML = async () => {
     emit('refresh')
     await loadIngresses()
   } catch (error) {
-    console.error(error)
     ElMessage.error('创建失败: ' + (error as any).message)
   } finally {
     creating.value = false

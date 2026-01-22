@@ -294,7 +294,6 @@ const loadHostList = async () => {
     }
   } catch (error) {
     ElMessage.error('加载主机列表失败')
-    console.error('加载主机列表失败:', error)
     allHosts.value = []
   } finally {
     hostsLoading.value = false

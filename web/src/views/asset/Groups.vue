@@ -358,7 +358,6 @@ const loadGroupTree = async () => {
     // 后端已经返回树形结构，直接使用
     groupTree.value = data || []
   } catch (error) {
-    console.error('获取分组列表失败:', error)
     ElMessage.error('获取分组列表失败')
   } finally {
     loading.value = false
@@ -372,7 +371,6 @@ const loadParentOptions = async () => {
     // 后端已经返回树形结构，直接使用
     parentOptions.value = data || []
   } catch (error) {
-    console.error('获取父级选项失败:', error)
   }
 }
 

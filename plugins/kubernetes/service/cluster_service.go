@@ -156,7 +156,6 @@ func (s *ClusterService) DeleteCluster(ctx context.Context, id uint) error {
 			// 清理 K8s 中的 ServiceAccount 和 RoleBinding
 			if err := s.cleanupClusterK8sResources(ctx, id, kc.ServiceAccount, username); err != nil {
 				// 记录错误但继续清理其他资源
-				fmt.Printf("清理集群 %d 用户 %s 的 K8s 资源失败: %v\n", id, username, err)
 				errChan <- fmt.Errorf("清理用户 %s 的 K8s 资源失败: %w", username, err)
 			}
 
@@ -170,7 +169,6 @@ func (s *ClusterService) DeleteCluster(ctx context.Context, id uint) error {
 	go func() {
 		defer wg.Done()
 		if err := s.cleanupDefaultRoles(ctx, id); err != nil {
-			fmt.Printf("清理集群 %d 的默认角色失败: %v\n", id, err)
 			errChan <- fmt.Errorf("清理默认角色失败: %w", err)
 		}
 	}()
@@ -180,7 +178,6 @@ func (s *ClusterService) DeleteCluster(ctx context.Context, id uint) error {
 	go func() {
 		defer wg.Done()
 		if err := s.cleanupAllRoleBindings(ctx, id); err != nil {
-			fmt.Printf("清理集群 %d 的角色绑定失败: %v\n", id, err)
 			errChan <- fmt.Errorf("清理角色绑定失败: %w", err)
 		}
 	}()
@@ -226,16 +223,14 @@ func (s *ClusterService) cleanupClusterK8sResources(ctx context.Context, cluster
 	// 1. 删除 RoleBinding
 	// 尝试删除命名空间级别的 RoleBinding
 	if err := clientset.RbacV1().RoleBindings(OpsHubAuthNamespace).Delete(ctx, serviceAccount, metav1.DeleteOptions{}); err != nil {
-		if !k8serrors.IsNotFound(err) {
-			fmt.Printf("删除 RoleBinding %s 失败: %v\n", serviceAccount, err)
-		}
+		// 忽略不存在的错误
+		_ = err
 	}
 
 	// 尝试删除集群级别的 ClusterRoleBinding
 	if err := clientset.RbacV1().ClusterRoleBindings().Delete(ctx, serviceAccount, metav1.DeleteOptions{}); err != nil {
-		if !k8serrors.IsNotFound(err) {
-			fmt.Printf("删除 ClusterRoleBinding %s 失败: %v\n", serviceAccount, err)
-		}
+		// 忽略不存在的错误
+		_ = err
 	}
 
 	// 2. 删除 ServiceAccount
@@ -245,7 +240,6 @@ func (s *ClusterService) cleanupClusterK8sResources(ctx context.Context, cluster
 		}
 	}
 
-	fmt.Printf("已清理集群 %d 的 K8s 资源: SA=%s, User=%s\n", clusterID, serviceAccount, username)
 	return nil
 }
 
@@ -265,7 +259,6 @@ func (s *ClusterService) cleanupDefaultRoles(ctx context.Context, clusterID uint
 		return fmt.Errorf("批量删除 ClusterRole 失败: %w", err)
 	}
 
-	fmt.Printf("已清理集群 %d 的默认角色\n", clusterID)
 	return nil
 }
 
@@ -288,10 +281,7 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 			LabelSelector: labelSelector,
 		})
 		if err != nil && !k8serrors.IsNotFound(err) {
-			fmt.Printf("批量删除 ClusterRoleBinding (标签) 失败: %v\n", err)
 			errChan <- err
-		} else {
-			fmt.Printf("已批量删除 ClusterRoleBinding (标签)\n")
 		}
 	}()
 
@@ -301,7 +291,6 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 		defer wg.Done()
 		namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			fmt.Printf("列出命名空间失败: %v\n", err)
 			errChan <- err
 			return
 		}
@@ -321,13 +310,11 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 					LabelSelector: labelSelector,
 				})
 				if err != nil && !k8serrors.IsNotFound(err) {
-					fmt.Printf("批量删除 RoleBinding %s (标签) 失败: %v\n", namespace, err)
 					errChan <- err
 				}
 			}(ns.Name)
 		}
 		nsWg.Wait()
-		fmt.Printf("已批量删除 %d 个命名空间的 RoleBinding (标签)\n", len(namespaces.Items))
 	}()
 
 	// 3. 并行：删除旧的没有标签的 ClusterRoleBinding（通过前缀）
@@ -337,7 +324,6 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 		defer wg.Done()
 		allCRBs, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			fmt.Printf("列出 ClusterRoleBinding 失败: %v\n", err)
 			return
 		}
 
@@ -347,11 +333,7 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 				deleteWg.Add(1)
 				go func(name string) {
 					defer deleteWg.Done()
-					if err := clientset.RbacV1().ClusterRoleBindings().Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-						if !k8serrors.IsNotFound(err) {
-							fmt.Printf("删除 ClusterRoleBinding %s (前缀) 失败: %v\n", name, err)
-						}
-					}
+					_ = clientset.RbacV1().ClusterRoleBindings().Delete(ctx, name, metav1.DeleteOptions{})
 				}(crb.Name)
 			}
 		}
@@ -364,7 +346,6 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 		defer wg.Done()
 		namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			fmt.Printf("列出命名空间失败: %v\n", err)
 			return
 		}
 
@@ -389,11 +370,7 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 						deleteWg.Add(1)
 						go func(ns, name string) {
 							defer deleteWg.Done()
-							if err := clientset.RbacV1().RoleBindings(ns).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-								if !k8serrors.IsNotFound(err) {
-									fmt.Printf("删除 RoleBinding %s/%s (前缀) 失败: %v\n", ns, name, err)
-								}
-							}
+							_ = clientset.RbacV1().RoleBindings(ns).Delete(ctx, name, metav1.DeleteOptions{})
 						}(namespace, rb.Name)
 					}
 				}
@@ -416,7 +393,6 @@ func (s *ClusterService) cleanupAllRoleBindings(ctx context.Context, clusterID u
 		return fmt.Errorf("清理角色绑定完成，但有 %d 个错误", len(errors))
 	}
 
-	fmt.Printf("已清理集群 %d 的所有角色绑定\n", clusterID)
 	return nil
 }
 
@@ -487,29 +463,21 @@ func (s *ClusterService) GetCachedClientset(ctx context.Context, id uint) (*kube
 func (s *ClusterService) GetClientsetForUser(ctx context.Context, clusterID uint, userID uint) (*kubernetes.Clientset, error) {
 	cacheKey := fmt.Sprintf("%d-%d", clusterID, userID)
 
-	fmt.Printf("🔍 [GetClientsetForUser] clusterID=%d, userID=%d, cacheKey=%s\n", clusterID, userID, cacheKey)
-
 	s.cacheMutex.RLock()
 	clientset, exists := s.clientsetCache[cacheKey]
 	s.cacheMutex.RUnlock()
 
 	if exists {
-		fmt.Printf("✅ [GetClientsetForUser] Using cached clientset for %s\n", cacheKey)
 		return clientset, nil
 	}
-
-	fmt.Printf("🔄 [GetClientsetForUser] Cache miss, creating new clientset for userID=%d\n", userID)
 
 	// 检查用户是否是平台管理员（role code == "admin"）
 	isPlatformAdmin, err := s.isPlatformAdmin(ctx, userID)
 	if err != nil {
-		fmt.Printf("⚠️ [GetClientsetForUser] 检查用户角色失败: %v\n", err)
 		// 如果检查角色失败，继续检查K8s角色
 	}
 
 	if isPlatformAdmin {
-		fmt.Printf("👑 [GetClientsetForUser] 用户 %d 是平台管理员，使用集群注册的 kubeconfig\n", userID)
-
 		// 平台管理员直接使用集群注册的 kubeconfig
 		adminClientset, err := s.clusterBiz.GetClusterClientset(ctx, clusterID)
 		if err != nil {
@@ -527,11 +495,8 @@ func (s *ClusterService) GetClientsetForUser(ctx context.Context, clusterID uint
 	// 检查用户在K8s集群中是否有管理员角色（如cluster-owner）
 	hasK8sAdminRole, err := s.hasK8sClusterAdminRole(ctx, clusterID, userID)
 	if err != nil {
-		fmt.Printf("⚠️ [GetClientsetForUser] 检查用户K8s角色失败: %v\n", err)
 		// 如果检查失败，继续使用普通用户逻辑
 	} else if hasK8sAdminRole {
-		fmt.Printf("🔑 [GetClientsetForUser] 用户 %d 在集群 %d 中有管理员角色，使用集群 kubeconfig\n", userID, clusterID)
-
 		// 有K8s管理员角色的用户也使用集群注册的 kubeconfig
 		adminClientset, err := s.clusterBiz.GetClusterClientset(ctx, clusterID)
 		if err != nil {
@@ -547,7 +512,6 @@ func (s *ClusterService) GetClientsetForUser(ctx context.Context, clusterID uint
 	}
 
 	// 非平台管理员，使用用户个人的 ServiceAccount 凭据
-	fmt.Printf("🔐 [GetClientsetForUser] 用户 %d 不是平台管理员，使用个人凭据\n", userID)
 
 	// 缓存不存在，查询用户的 ServiceAccount 凭据
 	var config model.UserKubeConfig
@@ -557,14 +521,10 @@ func (s *ClusterService) GetClientsetForUser(ctx context.Context, clusterID uint
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			fmt.Printf("❌ [GetClientsetForUser] 用户 %d 尚未申请集群 %d 的访问凭据\n", userID, clusterID)
 			return nil, fmt.Errorf("用户尚未申请该集群的访问凭据，请先申请 kubeconfig")
 		}
-		fmt.Printf("❌ [GetClientsetForUser] 查询用户凭据失败: %v\n", err)
 		return nil, fmt.Errorf("查询用户凭据失败: %w", err)
 	}
-
-	fmt.Printf("✅ [GetClientsetForUser] Found SA: %s for userID=%d\n", config.ServiceAccount, userID)
 
 	// 获取集群信息
 	cluster, err := s.clusterBiz.GetCluster(ctx, clusterID)
@@ -609,7 +569,6 @@ func (s *ClusterService) isPlatformAdmin(ctx context.Context, userID uint) (bool
 
 	// admin用户自动拥有平台管理员权限
 	if user.Username == "admin" {
-		fmt.Printf("👑 [isPlatformAdmin] 用户 %s (ID: %d) 是admin，自动授予平台管理员权限\n", user.Username, userID)
 		return true, nil
 	}
 
@@ -649,7 +608,6 @@ func (s *ClusterService) hasK8sClusterAdminRole(ctx context.Context, clusterID, 
 		if binding.RoleName == "cluster-owner" ||
 		   binding.RoleName == "cluster-admin" ||
 		   binding.RoleName == "admin" {
-			fmt.Printf("🔑 [hasK8sClusterAdminRole] 用户 %d 在集群 %d 中有角色: %s\n", userID, clusterID, binding.RoleName)
 			return true, nil
 		}
 	}
@@ -854,8 +812,6 @@ func (s *ClusterService) GenerateUserKubeConfig(ctx context.Context, clusterID u
 
 // GetUserExistingKubeConfig 获取用户现有的KubeConfig（如果存在）
 func (s *ClusterService) GetUserExistingKubeConfig(ctx context.Context, clusterID uint, username string, userID uint) (string, string, error) {
-	fmt.Printf("🔍 [GetUserExistingKubeConfig] 查询用户凭据: clusterID=%d, username=%s, userID=%d\n", clusterID, username, userID)
-
 	// 从数据库查询用户在该集群的激活凭据
 	var config model.UserKubeConfig
 	err := s.db.Where("cluster_id = ? AND user_id = ? AND is_active = 1", clusterID, userID).
@@ -864,14 +820,10 @@ func (s *ClusterService) GetUserExistingKubeConfig(ctx context.Context, clusterI
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			fmt.Printf("❌ [GetUserExistingKubeConfig] 用户 %s (ID: %d) 尚未申请集群 %d 的凭据\n", username, userID, clusterID)
 			return "", "", fmt.Errorf("用户尚未申请凭据")
 		}
-		fmt.Printf("❌ [GetUserExistingKubeConfig] 查询凭据失败: %v\n", err)
 		return "", "", fmt.Errorf("查询凭据失败: %w", err)
 	}
-
-	fmt.Printf("✅ [GetUserExistingKubeConfig] 找到用户凭据: SA=%s\n", config.ServiceAccount)
 
 	// 获取集群信息
 	cluster, err := s.clusterBiz.GetCluster(ctx, clusterID)
@@ -1010,7 +962,6 @@ func (s *ClusterService) RevokeUserKubeConfig(ctx context.Context, clusterID uin
 	err = clientset.RbacV1().ClusterRoleBindings().Delete(ctx, crbName, metav1.DeleteOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		// ClusterRoleBinding 可能不存在（普通用户没有），继续删除 ServiceAccount
-		fmt.Printf("删除 ClusterRoleBinding 警告: %v\n", err)
 	}
 
 	// 删除 ServiceAccount - 在 opshub-auth namespace 中
@@ -1025,7 +976,6 @@ func (s *ClusterService) RevokeUserKubeConfig(ctx context.Context, clusterID uin
 		Delete(&model.UserKubeConfig{}).Error
 	if err != nil {
 		// 记录错误但不影响整体流程（K8s资源已删除）
-		fmt.Printf("警告：删除数据库中的凭据记录失败: %v\n", err)
 	}
 
 	// 清除缓存
@@ -1323,7 +1273,6 @@ func (s *ClusterService) RevokeCredentialFully(ctx context.Context, clusterID ui
 			for _, subject := range crb.Subjects {
 				if subject.Kind == "ServiceAccount" && subject.Name == serviceAccount &&
 					(subject.Namespace == OpsHubAuthNamespace || subject.Namespace == "default") {
-					fmt.Printf("DEBUG: Deleting ClusterRoleBinding %s\n", crb.Name)
 					_ = clientset.RbacV1().ClusterRoleBindings().Delete(ctx, crb.Name, metav1.DeleteOptions{})
 					break
 				}
@@ -1344,7 +1293,6 @@ func (s *ClusterService) RevokeCredentialFully(ctx context.Context, clusterID ui
 				for _, subject := range rb.Subjects {
 					if subject.Kind == "ServiceAccount" && subject.Name == serviceAccount &&
 						(subject.Namespace == OpsHubAuthNamespace || subject.Namespace == "default") {
-						fmt.Printf("DEBUG: Deleting RoleBinding %s/%s\n", ns.Name, rb.Name)
 						_ = clientset.RbacV1().RoleBindings(ns.Name).Delete(ctx, rb.Name, metav1.DeleteOptions{})
 						break
 					}
@@ -1358,7 +1306,6 @@ func (s *ClusterService) RevokeCredentialFully(ctx context.Context, clusterID ui
 	err = clientset.CoreV1().ServiceAccounts(OpsHubAuthNamespace).Delete(ctx, serviceAccount, metav1.DeleteOptions{})
 	if err == nil {
 		deleted = true
-		fmt.Printf("DEBUG: Deleted ServiceAccount %s from %s\n", serviceAccount, OpsHubAuthNamespace)
 	} else if !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("删除 ServiceAccount 失败: %w", err)
 	}
@@ -1368,9 +1315,6 @@ func (s *ClusterService) RevokeCredentialFully(ctx context.Context, clusterID ui
 		err = clientset.CoreV1().ServiceAccounts("default").Delete(ctx, serviceAccount, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return fmt.Errorf("删除 ServiceAccount 失败: %w", err)
-		}
-		if err == nil {
-			fmt.Printf("DEBUG: Deleted ServiceAccount %s from default\n", serviceAccount)
 		}
 	}
 
@@ -1432,7 +1376,6 @@ func (s *ClusterService) ensureOpsHubAuthNamespace(ctx context.Context, clientse
 		return fmt.Errorf("创建命名空间失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Created namespace %s\n", OpsHubAuthNamespace)
 	return nil
 }
 
@@ -1506,7 +1449,6 @@ func (s *ClusterService) SyncAllClustersStatus(ctx context.Context) error {
 			defer wg.Done()
 			if err := s.SyncClusterStatus(ctx, id); err != nil {
 				// 记录错误但继续处理其他集群
-				fmt.Printf("同步集群 %d 状态失败: %v\n", id, err)
 				errChan <- err
 			}
 		}(cluster.ID)
@@ -1535,15 +1477,12 @@ func (s *ClusterService) GetRESTConfig(clusterID uint, userID uint) (*rest.Confi
 	// 检查用户是否是平台管理员
 	isPlatformAdmin, err := s.isPlatformAdmin(ctx, userID)
 	if err != nil {
-		fmt.Printf("⚠️ [GetRESTConfig] 检查用户角色失败: %v\n", err)
 		// 如果检查角色失败，继续使用普通用户逻辑
 	} else if isPlatformAdmin {
-		fmt.Printf("👑 [GetRESTConfig] 用户 %d 是平台管理员，使用集群的 REST config\n", userID)
 		return s.clusterBiz.GetClusterRESTConfig(ctx, clusterID)
 	}
 
 	// 非平台管理员，使用用户个人的 ServiceAccount 凭据
-	fmt.Printf("🔐 [GetRESTConfig] 用户 %d 不是平台管理员，使用个人凭据\n", userID)
 
 	// 查询用户的 ServiceAccount 凭据
 	var config model.UserKubeConfig

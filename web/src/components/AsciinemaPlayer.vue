@@ -53,11 +53,6 @@ const loadAsciinemaPlayer = async () => {
     const script = document.createElement('script')
     script.src = 'https://cdn.jsdelivr.net/npm/asciinema-player@3.6.3/dist/bundle/asciinema-player.min.js'
     script.onload = () => {
-      console.log('✅ AsciinemaPlayer 库已加载')
-      console.log('全局变量:', {
-        AsciinemaPlayer: win.AsciinemaPlayer,
-        AsciiinemaPlayer: win.AsciiinemaPlayer
-      })
       resolve()
     }
     script.onerror = () => reject(new Error('Failed to load AsciinemaPlayer'))
@@ -81,10 +76,6 @@ const createPlayer = async () => {
     // 尝试两种可能的全局变量名
     const AsciinemaPlayerLibrary = win.AsciinemaPlayer || win.AsciiinemaPlayer
 
-    console.log('📼 AsciinemaPlayer 库:', AsciinemaPlayerLibrary)
-    console.log('📼 播放器容器:', playerRef.value)
-    console.log('📼 录制文件 URL:', props.src)
-
     if (!AsciinemaPlayerLibrary) {
       throw new Error('AsciinemaPlayer library not loaded')
     }
@@ -103,8 +94,6 @@ const createPlayer = async () => {
       controls: true,
     })
 
-    console.log('✅ 播放器创建成功:', player)
-
     // 监听事件
     if (player.addEventListener) {
       player.addEventListener('ready', () => emit('ready'))
@@ -116,8 +105,7 @@ const createPlayer = async () => {
 
     emit('ready')
   } catch (error) {
-    console.error('❌ Failed to create AsciinemaPlayer:', error)
-    console.error('错误详情:', error)
+    // Error handling without console output
   }
 }
 

@@ -20,7 +20,6 @@ class MonitorPlugin implements Plugin {
    * 安装插件
    */
   async install() {
-    console.log('[Monitor Plugin] 插件安装中...')
     // 初始化操作
   }
 
@@ -28,7 +27,6 @@ class MonitorPlugin implements Plugin {
    * 卸载插件
    */
   async uninstall() {
-    console.log('[Monitor Plugin] 插件卸载中...')
     // 清理资源
   }
 
@@ -124,8 +122,6 @@ class MonitorPlugin implements Plugin {
 
 // 创建并注册插件实例
 const plugin = new MonitorPlugin()
-console.log('[Monitor Plugin] 正在注册插件...')
 pluginManager.register(plugin)
-console.log('[Monitor Plugin] 插件注册完成')
 
 export default plugin

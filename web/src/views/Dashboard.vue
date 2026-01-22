@@ -185,7 +185,6 @@ const fetchHosts = async () => {
     await nextTick()
     renderHostStatusChart()
   } catch (error) {
-    console.error('获取主机列表失败:', error)
     topStats.value[0].value = '0'
   }
 }
@@ -206,7 +205,6 @@ const fetchClusters = async () => {
     await nextTick()
     renderK8sResourceChart()
   } catch (error) {
-    console.error('获取K8s集群列表失败:', error)
     topStats.value[1].value = '0'
   }
 }
@@ -238,7 +236,6 @@ const fetchOperationLogs = async () => {
     await nextTick()
     renderOperationTrendChart()
   } catch (error) {
-    console.error('获取操作日志失败:', error)
     topStats.value[2].value = '0'
   }
 }
@@ -261,7 +258,6 @@ const fetchAlertLogs = async () => {
     await nextTick()
     renderAlertStatsChart()
   } catch (error) {
-    console.error('获取告警日志失败:', error)
     topStats.value[3].value = '0'
   }
 }

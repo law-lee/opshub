@@ -146,10 +146,8 @@ func (h *TerminalAuditHandler) DeleteTerminalSession(c *gin.Context) {
 	}
 
 	// 删除录制文件
-	if err := os.Remove(session.RecordingPath); err != nil {
-		fmt.Printf("删除录制文件失败: %v\n", err)
-		// 即使文件删除失败，仍然继续删除数据库记录
-	}
+	// 即使文件删除失败，仍然继续删除数据库记录
+	_ = os.Remove(session.RecordingPath)
 
 	// 删除数据库记录
 	if err := h.db.Delete(&session).Error; err != nil {

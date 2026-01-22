@@ -25,20 +25,10 @@ app.use(pinia)
 // 自动安装所有已注册的插件
 async function installPlugins() {
   const plugins = pluginManager.getAll()
-  console.log('=== 开始安装插件 ===')
-  console.log('已注册的插件数量:', plugins.length)
-  console.log('已注册的插件列表:', plugins.map(p => p.name))
 
   for (const plugin of plugins) {
-    console.log(`正在安装插件: ${plugin.name}`)
-    const result = await pluginManager.install(plugin.name, false) // 不显示消息
-    console.log(`插件 ${plugin.name} 安装${result ? '成功' : '失败'}`)
+    await pluginManager.install(plugin.name, false) // 不显示消息
   }
-
-  console.log('=== 插件安装完成 ===')
-  const installed = pluginManager.getInstalled()
-  console.log('已安装的插件数量:', installed.length)
-  console.log('已安装的插件列表:', installed.map(p => p.name))
 }
 
 // 安装插件并注册路由

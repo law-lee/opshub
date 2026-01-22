@@ -33,12 +33,8 @@ func NewRoleBindingService(db *gorm.DB) *RoleBindingService {
 
 // BindUserRole 绑定用户到K8s角色
 func (s *RoleBindingService) BindUserRole(ctx context.Context, clusterID, userID uint64, roleName, roleNamespace, roleType string, boundBy uint64) error {
-	fmt.Printf("DEBUG: BindUserRole called - clusterID=%d, userID=%d, roleName=%s, roleNamespace=%s, roleType=%s, boundBy=%d\n",
-		clusterID, userID, roleName, roleNamespace, roleType, boundBy)
-
 	// 检查表是否存在
 	if !s.db.Migrator().HasTable(&model.K8sUserRoleBinding{}) {
-		fmt.Printf("ERROR: Table k8s_user_role_bindings does not exist!\n")
 		return errors.New("数据表不存在，请重启服务")
 	}
 
@@ -48,11 +44,9 @@ func (s *RoleBindingService) BindUserRole(ctx context.Context, clusterID, userID
 		clusterID, userID, roleName, roleNamespace).First(&existing).Error
 
 	if err == nil {
-		fmt.Printf("DEBUG: User already bound to this role\n")
 		return errors.New("用户已绑定该角色")
 	}
 	if err != gorm.ErrRecordNotFound {
-		fmt.Printf("ERROR: Database query failed: %v\n", err)
 		return err
 	}
 
@@ -121,7 +115,6 @@ func (s *RoleBindingService) BindUserRole(ctx context.Context, clusterID, userID
 		return fmt.Errorf("创建角色绑定失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Binding created successfully\n")
 	return nil
 }
 
@@ -175,20 +168,16 @@ func (s *RoleBindingService) UnbindUserRole(ctx context.Context, clusterID, user
 		if err := clientset.RbacV1().ClusterRoleBindings().Delete(ctx, bindingName, metav1.DeleteOptions{}); err != nil {
 			// 忽略不存在的错误
 			if !strings.Contains(err.Error(), "not found") {
-				fmt.Printf("WARNING: Failed to delete ClusterRoleBinding: %v\n", err)
+				// 错误日志已移除
 			}
-		} else {
-			fmt.Printf("DEBUG: Deleted ClusterRoleBinding %s\n", bindingName)
 		}
 	} else {
 		bindingName := fmt.Sprintf("opshub-%s-%s", roleName, saName)
 		if err := clientset.RbacV1().RoleBindings(roleNamespace).Delete(ctx, bindingName, metav1.DeleteOptions{}); err != nil {
 			// 忽略不存在的错误
 			if !strings.Contains(err.Error(), "not found") {
-				fmt.Printf("WARNING: Failed to delete RoleBinding: %v\n", err)
+				// 错误日志已移除
 			}
-		} else {
-			fmt.Printf("DEBUG: Deleted RoleBinding %s/%s\n", roleNamespace, bindingName)
 		}
 	}
 
@@ -481,7 +470,6 @@ func (s *RoleBindingService) ensureServiceAccount(ctx context.Context, clientset
 		return fmt.Errorf("创建ServiceAccount失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Created ServiceAccount %s/%s\n", saNamespace, saName)
 	return nil
 }
 
@@ -495,7 +483,6 @@ func (s *RoleBindingService) createClusterRoleBinding(ctx context.Context, clien
 	// 检查是否已存在
 	_, err := crbClient.Get(ctx, bindingName, metav1.GetOptions{})
 	if err == nil {
-		fmt.Printf("DEBUG: ClusterRoleBinding %s already exists\n", bindingName)
 		return nil
 	}
 
@@ -528,7 +515,6 @@ func (s *RoleBindingService) createClusterRoleBinding(ctx context.Context, clien
 		return fmt.Errorf("创建ClusterRoleBinding失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Created ClusterRoleBinding %s\n", bindingName)
 	return nil
 }
 
@@ -542,7 +528,6 @@ func (s *RoleBindingService) createRoleBinding(ctx context.Context, clientset *k
 	// 检查是否已存在
 	_, err := rbClient.Get(ctx, bindingName, metav1.GetOptions{})
 	if err == nil {
-		fmt.Printf("DEBUG: RoleBinding %s/%s already exists\n", roleNamespace, bindingName)
 		return nil
 	}
 
@@ -575,7 +560,6 @@ func (s *RoleBindingService) createRoleBinding(ctx context.Context, clientset *k
 		return fmt.Errorf("创建RoleBinding失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Created RoleBinding %s/%s\n", roleNamespace, bindingName)
 	return nil
 }
 
@@ -583,14 +567,10 @@ func (s *RoleBindingService) createRoleBinding(ctx context.Context, clientset *k
 func (s *RoleBindingService) rollbackK8sBinding(ctx context.Context, clientset *kubernetes.Clientset, roleType, roleName, roleNamespace, saName, saNamespace string) error {
 	if roleType == "ClusterRole" {
 		bindingName := fmt.Sprintf("opshub-%s-%s", roleName, saName)
-		if err := clientset.RbacV1().ClusterRoleBindings().Delete(ctx, bindingName, metav1.DeleteOptions{}); err != nil {
-			fmt.Printf("WARNING: Failed to rollback ClusterRoleBinding: %v\n", err)
-		}
+		_ = clientset.RbacV1().ClusterRoleBindings().Delete(ctx, bindingName, metav1.DeleteOptions{})
 	} else {
 		bindingName := fmt.Sprintf("opshub-%s-%s", roleName, saName)
-		if err := clientset.RbacV1().RoleBindings(roleNamespace).Delete(ctx, bindingName, metav1.DeleteOptions{}); err != nil {
-			fmt.Printf("WARNING: Failed to rollback RoleBinding: %v\n", err)
-		}
+		_ = clientset.RbacV1().RoleBindings(roleNamespace).Delete(ctx, bindingName, metav1.DeleteOptions{})
 	}
 	return nil
 }
@@ -631,7 +611,6 @@ func (s *RoleBindingService) ensureOpsHubAuthNamespace(ctx context.Context, clie
 		return fmt.Errorf("创建命名空间失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Created namespace %s\n", OpsHubAuthNamespace)
 	return nil
 }
 
@@ -645,7 +624,6 @@ func (s *RoleBindingService) ensureUserKubeConfigRecord(clusterID, userID uint64
 		// 记录已存在，检查 service_account 是否匹配
 		if existing.ServiceAccount == serviceAccount {
 			// 完全匹配，无需更新
-			fmt.Printf("DEBUG: UserKubeConfig record already exists for user %d in cluster %d\n", userID, clusterID)
 			return nil
 		}
 
@@ -656,7 +634,6 @@ func (s *RoleBindingService) ensureUserKubeConfigRecord(clusterID, userID uint64
 		if err := s.db.Save(&existing).Error; err != nil {
 			return fmt.Errorf("更新凭据记录失败: %w", err)
 		}
-		fmt.Printf("DEBUG: Updated UserKubeConfig record for user %d in cluster %d, SA: %s\n", userID, clusterID, serviceAccount)
 		return nil
 	}
 
@@ -678,6 +655,5 @@ func (s *RoleBindingService) ensureUserKubeConfigRecord(clusterID, userID uint64
 		return fmt.Errorf("创建凭据记录失败: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Created UserKubeConfig record for user %d in cluster %d, SA: %s\n", userID, clusterID, serviceAccount)
 	return nil
 }

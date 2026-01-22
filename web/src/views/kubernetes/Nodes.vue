@@ -1357,7 +1357,6 @@ const startLabelEdit = async () => {
 
     labelEditMode.value = true
   } catch (error) {
-    console.error('获取节点YAML失败:', error)
     ElMessage.error('获取节点信息失败')
   }
 }
@@ -1402,9 +1401,6 @@ const saveLabels = async () => {
     const token = localStorage.getItem('token')
     const nodeName = selectedNode.value.name
 
-    console.log('保存标签 - 节点:', nodeName)
-    console.log('有效标签:', validLabels)
-
     // 判断是否为系统标签
     const isSystemLabel = (key: string) => {
       return key.startsWith('kubernetes.io/') ||
@@ -1424,9 +1420,6 @@ const saveLabels = async () => {
         userLabels.push(l)
       }
     })
-
-    console.log('系统标签:', systemLabels)
-    console.log('用户标签:', userLabels)
 
     // 合并系统标签和用户标签
     const allLabels = [...systemLabels, ...userLabels]
@@ -1449,8 +1442,6 @@ metadata:
 ${labelsStr}
 `
 
-    console.log('发送的 labels YAML:', labelsYaml)
-
     // 调用 API 保存
     const response = await axios.put(
       `/api/v1/plugins/kubernetes/resources/nodes/${nodeName}/yaml`,
@@ -1463,26 +1454,20 @@ ${labelsStr}
       }
     )
 
-    console.log('API 响应:', response.data)
     ElMessage.success('标签保存成功')
     labelEditMode.value = false
     // 刷新节点列表
     await loadNodes()
-    console.log('刷新节点列表完成')
     // 从刷新后的节点数据中重新获取标签
     const updatedNode = nodeList.value.find(n => n.name === nodeName)
-    console.log('查找更新后的节点:', updatedNode)
     if (updatedNode) {
-      console.log('节点标签:', updatedNode.labels)
       selectedNode.value = updatedNode
       labelList.value = Object.keys(updatedNode.labels || {}).map(key => ({
         key,
         value: updatedNode.labels![key]
       }))
-      console.log('最终 labelList:', labelList.value)
     }
   } catch (error: any) {
-    console.error('保存标签失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     labelSaving.value = false
@@ -1544,7 +1529,6 @@ const startTaintEdit = async () => {
 
     taintEditMode.value = true
   } catch (error) {
-    console.error('获取节点YAML失败:', error)
     ElMessage.error('获取节点信息失败')
   }
 }
@@ -1690,15 +1674,6 @@ const saveTaints = async () => {
 
     const updatedYaml = updatedLines.join('\n')
 
-    // 调试日志
-    console.log('===== 污点保存调试信息 =====')
-    console.log('原始 YAML 行数:', lines.length)
-    console.log('更新后 YAML 行数:', updatedLines.length)
-    console.log('保存的污点数量:', validTaints.length)
-    console.log('生成的 YAML:')
-    console.log(updatedYaml)
-    console.log('==========================')
-
     // 调用 API 保存
     await axios.put(
       `/api/v1/plugins/kubernetes/resources/nodes/${nodeName}/yaml`,
@@ -1729,7 +1704,6 @@ const saveTaints = async () => {
       taintList.value = validTaints
     }
   } catch (error: any) {
-    console.error('保存污点失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     taintSaving.value = false
@@ -1767,7 +1741,7 @@ const savePaginationState = () => {
       pageSize: pageSize.value
     }))
   } catch (error) {
-    console.error('保存分页状态失败:', error)
+    // 保存分页状态失败
   }
 }
 
@@ -1781,7 +1755,6 @@ const restorePaginationState = () => {
       pageSize.value = state.pageSize || 10
     }
   } catch (error) {
-    console.error('恢复分页状态失败:', error)
     currentPage.value = 1
     pageSize.value = 10
   }
@@ -1820,7 +1793,6 @@ const loadClusters = async () => {
       await loadNodes()
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取集群列表失败')
   }
 }
@@ -1846,7 +1818,6 @@ const loadNodes = async () => {
     // 恢复分页状态
     restorePaginationState()
   } catch (error) {
-    console.error(error)
     nodeList.value = []
     ElMessage.error('获取节点列表失败')
   } finally {
@@ -1863,7 +1834,6 @@ const handleSearch = () => {
 
 // 查看详情
 const handleViewDetails = (row: NodeInfo) => {
-  console.log('查看节点详情:', row)
   ElMessage.info('详情功能开发中...')
 }
 
@@ -1931,7 +1901,6 @@ const handleDrainNode = async () => {
     await loadNodes()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('节点排空失败:', error)
       ElMessage.error(`节点排空失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -1968,7 +1937,6 @@ const handleCordonNode = async () => {
     await loadNodes()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('设为不可调度失败:', error)
       ElMessage.error(`设为不可调度失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -2005,7 +1973,6 @@ const handleUncordonNode = async () => {
     await loadNodes()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('设为可调度失败:', error)
       ElMessage.error(`设为可调度失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -2039,7 +2006,6 @@ const handleDeleteNode = async () => {
     await loadNodes()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除节点失败:', error)
       ElMessage.error(`删除节点失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -2054,8 +2020,6 @@ const handleShowYAML = async () => {
     const clusterId = selectedClusterId.value
     const nodeName = selectedNode.value.name
 
-    console.log('获取 YAML:', { clusterId, nodeName })
-
     const response = await axios.get(
       `/api/v1/plugins/kubernetes/resources/nodes/${nodeName}/yaml?clusterId=${clusterId}`,
       {
@@ -2063,13 +2027,9 @@ const handleShowYAML = async () => {
       }
     )
 
-    console.log('YAML 响应:', response.data)
-
     yamlContent.value = response.data.data?.yaml || ''
     yamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
-    console.error('错误响应:', error.response?.data)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -2095,7 +2055,6 @@ const handleSaveYAML = async () => {
     yamlDialogVisible.value = false
     await loadNodes()
   } catch (error) {
-    console.error('保存 YAML 失败:', error)
     ElMessage.error('保存 YAML 失败')
   } finally {
     yamlSaving.value = false
@@ -2148,9 +2107,6 @@ const handleShell = async () => {
     // CloudTTY NodePort 模式下，直接访问服务地址即可
     const cloudttyUrl = `http://${nodeIp}:${port}/`
 
-    console.log('CloudTTY URL:', cloudttyUrl)
-    console.log('Node:', selectedNode.value.name)
-
     // 打开 CloudTTY 终端对话框
     cloudttyTerminalVisible.value = true
 
@@ -2163,13 +2119,12 @@ const handleShell = async () => {
           try {
             iframe.contentWindow?.focus()
           } catch (e) {
-            console.log('无法设置 iframe 焦点:', e)
+            // 无法设置 iframe 焦点
           }
         })
       }
     })
   } catch (error: any) {
-    console.error('获取CloudTTY服务失败:', error)
     ElMessage.error('无法连接到CloudTTY服务: ' + (error.response?.data?.message || error.message))
   }
 }
@@ -2189,9 +2144,8 @@ const focusCloudTTYIframe = () => {
   if (iframe && iframe.contentWindow) {
     try {
       iframe.contentWindow.focus()
-      console.log('CloudTTY iframe 已聚焦')
     } catch (e) {
-      console.log('无法聚焦 iframe:', e)
+      // 无法聚焦 iframe
     }
   }
 }
@@ -2245,7 +2199,6 @@ const handleShellOpened = async () => {
 
   ws.onerror = (error) => {
     terminal.writeln('\r\n\x1b[31m连接错误\x1b[0m')
-    console.error('WebSocket error:', error)
   }
 
   ws.onclose = () => {
@@ -2297,15 +2250,13 @@ const checkCloudTTY = async () => {
     )
     cloudttyInstalled.value = response.data.data?.installed || false
   } catch (error) {
-    console.log('CloudTTY check failed:', error)
+    // CloudTTY check failed
   }
 }
 
 // 处理 CloudTTY 按钮
 const handleCloudTTY = () => {
-  console.log('CloudTTY button clicked, installed:', cloudttyInstalled.value)
   cloudttyDialogVisible.value = true
-  console.log('Dialog visible set to:', cloudttyDialogVisible.value)
 }
 
 // 开始部署
@@ -2480,7 +2431,6 @@ const handleBatchLabels = async () => {
     await loadNodes()
     clearSelection()
   } catch (error: any) {
-    console.error('批量设置标签失败:', error)
     ElMessage.error(`批量设置标签失败: ${error.response?.data?.message || error.message}`)
   } finally {
     batchLabelSaving.value = false
@@ -2539,7 +2489,6 @@ const handleBatchTaints = async () => {
     await loadNodes()
     clearSelection()
   } catch (error: any) {
-    console.error('批量设置污点失败:', error)
     ElMessage.error(`批量设置污点失败: ${error.response?.data?.message || error.message}`)
   } finally {
     batchTaintSaving.value = false
@@ -2577,7 +2526,6 @@ const handleBatchDrain = async () => {
     clearSelection()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量排空失败:', error)
       ElMessage.error(`批量排空失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -2614,7 +2562,6 @@ const handleBatchCordon = async () => {
     clearSelection()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量设为不可调度失败:', error)
       ElMessage.error(`批量设为不可调度失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -2651,7 +2598,6 @@ const handleBatchUncordon = async () => {
     clearSelection()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量设为可调度失败:', error)
       ElMessage.error(`批量设为可调度失败: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -2688,7 +2634,6 @@ const handleBatchDelete = async () => {
     clearSelection()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('批量删除节点失败:', error)
       ElMessage.error(`批量删除节点失败: ${error.response?.data?.message || error.message}`)
     }
   }

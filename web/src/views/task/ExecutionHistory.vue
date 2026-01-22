@@ -471,7 +471,6 @@ const loadHistory = async () => {
     historyList.value = res.list || []
     pagination.total = res.total || 0
   } catch (error) {
-    console.error('获取执行记录列表失败:', error)
     ElMessage.error('获取执行记录列表失败')
   } finally {
     loading.value = false

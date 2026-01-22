@@ -2,7 +2,7 @@
   <el-container class="layout-container">
     <el-aside width="260px" v-if="!hideSidebar">
       <div class="logo">
-        <h3>OpsHub</h3>
+        <h3><span class="logo-ops">Ops</span><span class="logo-hub">Hub</span></h3>
       </div>
 
       <el-menu
@@ -223,7 +223,6 @@ const buildPluginMenus = async (authorizedPaths: Set<string>) => {
   // 检查当前用户是否是超级管理员
   const roles = userStore.userInfo?.roles || []
   const isSuperAdmin = roles.some((r: any) => r.code === 'admin')
-  console.log('[Layout] 是否超级管理员:', isSuperAdmin)
 
   // 从后端API获取插件启用状态
   let enabledPluginNames: Set<string> = new Set()
@@ -235,9 +234,7 @@ const buildPluginMenus = async (authorizedPaths: Set<string>) => {
         .filter((p: any) => p.enabled)
         .map((p: any) => p.name)
     )
-    console.log('[Layout] 后端已启用的插件:', Array.from(enabledPluginNames))
   } catch (error) {
-    console.error('[Layout] 获取插件启用状态失败，默认显示所有插件菜单:', error)
     // 如果获取失败，显示所有已安装的插件菜单
     const installedPlugins = pluginManager.getInstalled()
     enabledPluginNames = new Set(installedPlugins.map(p => p.name))
@@ -250,31 +247,22 @@ const buildPluginMenus = async (authorizedPaths: Set<string>) => {
       const stored = localStorage.getItem(PLUGIN_MENU_SORT_KEY)
       if (stored) {
         const sortMap = JSON.parse(stored)
-        console.log('[Layout] 加载的自定义排序:', sortMap)
         return new Map(Object.entries(sortMap))
       }
     } catch (error) {
-      console.error('[Layout] 加载插件菜单排序失败:', error)
     }
     return new Map()
   })()
 
-  console.log('=== 开始构建插件菜单 ===')
-  console.log('所有插件数量:', allPlugins.length)
-  console.log('已启用的插件数量:', enabledPluginNames.size)
-  console.log('授权的路径数量:', authorizedPaths.size)
 
   allPlugins.forEach(plugin => {
     // 只处理已启用的插件
     if (!enabledPluginNames.has(plugin.name)) {
-      console.log(`跳过未启用的插件: ${plugin.name}`)
       return
     }
 
-    console.log(`处理插件: ${plugin.name}`)
     if (plugin.getMenus) {
       const menus = plugin.getMenus()
-      console.log(`  - 菜单数量: ${menus.length}`)
 
       menus.forEach(menu => {
         // 权限过滤：
@@ -282,7 +270,6 @@ const buildPluginMenus = async (authorizedPaths: Set<string>) => {
         // 2. 普通用户只显示有权限的菜单
         // 3. 用户没有任何权限且不是超级管理员，不显示任何菜单
         if (!isSuperAdmin && !authorizedPaths.has(menu.path)) {
-          console.log(`  - 跳过无权限的菜单: ${menu.name} (${menu.path})`)
           return
         }
 
@@ -300,14 +287,11 @@ const buildPluginMenus = async (authorizedPaths: Set<string>) => {
           // 不设置 children 属性，让 buildMenuTree 根据实际子菜单动态设置
         })
 
-        console.log(`  - 菜单: ${menu.name}, sort: ${sort}`)
       })
     } else {
-      console.log(`  - 插件没有提供 getMenus 方法`)
     }
   })
 
-  console.log('插件菜单构建完成，总数:', pluginMenus.length)
   return pluginMenus
 }
 
@@ -318,24 +302,20 @@ const buildMenuTree = (menus: any[]) => {
     const isVisible = menu.visible === undefined || menu.visible === 1
 
     if (!isVisible) {
-      console.log(`[Layout buildMenuTree] 过滤掉不可见的菜单: ${menu.name}`)
     }
 
     return isVisible
   })
 
-  console.log('[Layout buildMenuTree] 过滤后菜单数量:', filteredMenus.length, '原始数量:', menus.length)
 
   // 创建一个 Map 来快速查找菜单
   const menuMap = new Map()
 
-  console.log('[Layout buildMenuTree] 开始构建菜单树,菜单数量:', filteredMenus.length)
 
   filteredMenus.forEach(menu => {
     // 统一使用 ID 或 path 作为唯一标识
     const menuId = menu.ID || menu.id || menu.path
     if (!menuId) {
-      console.warn('[Layout buildMenuTree] 菜单缺少ID:', menu)
       return
     }
 
@@ -344,7 +324,6 @@ const buildMenuTree = (menus: any[]) => {
     // 不设置 children 属性，只在需要时动态添加
     menuMap.set(menuId, menuWithoutChildren)
 
-    console.log(`[Layout buildMenuTree] 添加菜单到Map: ${menu.name} (ID: ${menuId})`)
   })
 
   const tree: any[] = []
@@ -355,7 +334,6 @@ const buildMenuTree = (menus: any[]) => {
     const menuItem = menuMap.get(menuId)
 
     if (!menuItem) {
-      console.warn('[Layout buildMenuTree] 找不到菜单:', menu)
       return
     }
 
@@ -371,12 +349,6 @@ const buildMenuTree = (menus: any[]) => {
       parentId = menu.parentId === 0 ? null : menu.parentId
     }
 
-    console.log(`[Layout buildMenuTree] 处理菜单 ${menu.name}:`, {
-      menuId,
-      parentId,
-      hasParent: parentId && menuMap.has(parentId)
-    })
-
     if (parentId && menuMap.has(parentId)) {
       // 有父菜单，添加到父菜单的 children
       const parent = menuMap.get(parentId)
@@ -385,15 +357,12 @@ const buildMenuTree = (menus: any[]) => {
         parent.children = []
       }
       parent.children.push(menuItem)
-      console.log(`[Layout buildMenuTree] 将 ${menu.name} 添加到父菜单 ${parent.name}`)
     } else if (parentId) {
       // parentId 存在但找不到父菜单,作为顶级菜单
-      console.warn(`[Layout buildMenuTree] 找不到 ${menu.name} 的父菜单 (parentId: ${parentId}), 作为顶级菜单`)
       tree.push(menuItem)
     } else {
       // 没有父菜单，添加到根节点
       tree.push(menuItem)
-      console.log(`[Layout buildMenuTree] 将 ${menu.name} 作为顶级菜单`)
     }
   })
 
@@ -414,38 +383,29 @@ const buildMenuTree = (menus: any[]) => {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       // 详细日志
-      console.log(`[Layout cleanEmptyChildren] 处理 ${node.name}, children:`, node.children)
 
       // 检查 children 是否存在且为空数组
       if (Array.isArray(node.children) && node.children.length === 0) {
-        console.log(`[Layout cleanEmptyChildren] 删除 ${node.name} 的空 children 数组`)
         delete node.children
         // 关键修复：明确设置 hasChildren 为 false
         node.hasChildren = false
       } else if (Array.isArray(node.children) && node.children.length > 0) {
-        console.log(`[Layout cleanEmptyChildren] ${node.name} 有 ${node.children.length} 个子菜单，递归处理`)
         // 关键修复：明确设置 hasChildren 为 true
         node.hasChildren = true
         cleanEmptyChildren(node.children)
       } else if (node.children) {
         // children 存在但不是数组，删除它
-        console.log(`[Layout cleanEmptyChildren] ${node.name} 的 children 不是数组，删除它:`, typeof node.children)
         delete node.children
         node.hasChildren = false
       } else {
-        console.log(`[Layout cleanEmptyChildren] ${node.name} 没有 children 属性`)
         // 明确设置 hasChildren 为 false
         node.hasChildren = false
       }
     }
   }
 
-  console.log('[Layout buildMenuTree] 清理前，顶级菜单:', tree.map(m => ({ name: m.name, hasChildren: !!m.children, childrenCount: m.children?.length || 0, childrenType: typeof m.children })))
   cleanEmptyChildren(tree)
-  console.log('[Layout buildMenuTree] 清理后，顶级菜单:', tree.map(m => ({ name: m.name, hasChildren: !!m.children, childrenCount: m.children?.length || 0, hasChildrenAttr: m.hasChildren })))
 
-  console.log('[Layout buildMenuTree] 菜单树构建完成,顶级菜单数:', tree.length)
-  console.log('[Layout buildMenuTree] 最终菜单树:', tree)
 
   return tree
 }
@@ -458,7 +418,6 @@ const loadMenu = async () => {
 
     // 1. 获取系统菜单（后端已根据用户权限过滤）
     const systemMenus = await getUserMenu() || []
-    console.log('[Layout] 系统菜单(后端过滤):', systemMenus)
 
     // 2. 从系统菜单中提取所有授权的路径（用于插件菜单权限过滤）
     const pluginPathPrefixes = ['/kubernetes', '/monitor', '/task']
@@ -479,11 +438,9 @@ const loadMenu = async () => {
     }
 
     const allAuthorizedPaths = extractPaths(systemMenus)
-    console.log('[Layout] 所有授权的路径(含插件):', Array.from(allAuthorizedPaths))
 
     // 3. 获取插件菜单（根据授权路径过滤）
     const pluginMenus = await buildPluginMenus(allAuthorizedPaths)
-    console.log('[Layout] 插件菜单(权限过滤后):', pluginMenus)
 
     // 4. 展平系统菜单树并过滤掉插件路径的菜单
     // （这些菜单仅用于授权，实际显示由插件管理器提供）
@@ -491,7 +448,6 @@ const loadMenu = async () => {
       menus.forEach(menu => {
         // 跳过插件路径的菜单
         if (menu.path && pluginPathPrefixes.some(prefix => menu.path.startsWith(prefix))) {
-          console.log(`[Layout] 跳过数据库中的插件菜单: ${menu.name} (${menu.path})`)
           // 仍然需要处理子菜单（如果有的话）
           if (menu.children && menu.children.length > 0) {
             flattenMenus(menu.children, result)
@@ -510,15 +466,12 @@ const loadMenu = async () => {
     }
 
     const flatSystemMenus = flattenMenus(systemMenus)
-    console.log('[Layout] 展平后的系统菜单数(已过滤插件):', flatSystemMenus.length)
 
     // 5. 合并所有菜单
     const allMenus = [...flatSystemMenus, ...pluginMenus]
-    console.log('[Layout] 合并后的所有菜单数:', allMenus.length)
 
     // 6. 构建菜单树
     menuList.value = buildMenuTree(allMenus)
-    console.log('[Layout] 最终菜单树:', menuList.value)
 
     // 检查用户是否有权限
     // 如果不是超级管理员且没有任何菜单，则显示无权限页面
@@ -526,12 +479,10 @@ const loadMenu = async () => {
     const isSuperAdmin = roles.some((r: any) => r.code === 'admin')
     if (!isSuperAdmin && menuList.value.length === 0) {
       hasNoPermission.value = true
-      console.log('[Layout] 用户没有任何权限，显示无权限页面')
     } else {
       hasNoPermission.value = false
     }
   } catch (error) {
-    console.error('[Layout] 加载菜单失败:', error)
     ElMessage.error('加载菜单失败')
   }
 }
@@ -555,7 +506,6 @@ onMounted(async () => {
     try {
       await userStore.getProfile()
     } catch (error) {
-      console.error('获取用户信息失败:', error)
     }
   }
 
@@ -565,7 +515,6 @@ onMounted(async () => {
 
   // 监听插件变化，自动刷新菜单
   const handlePluginChange = () => {
-    console.log('检测到插件变化，重新加载菜单')
     loadMenu()
   }
 
@@ -603,6 +552,7 @@ onMounted(async () => {
   background: #000000;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   margin: 0;
+  margin-top: 32px;
   flex-shrink: 0;
   width: 100%;
 }
@@ -612,8 +562,31 @@ onMounted(async () => {
   color: #fff;
   font-weight: 700;
   letter-spacing: 2px;
-  font-size: 22px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: auto;
+  line-height: 1;
+}
+
+.logo-ops {
+  color: #fff;
+  line-height: 1;
+}
+
+.logo-hub {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #FFB347 0%, #FF8C00 50%, #FF6B00 100%);
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  height: auto;
+  line-height: 1;
 }
 
 /* 用户信息区域 */

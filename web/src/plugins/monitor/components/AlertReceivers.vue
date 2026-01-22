@@ -366,7 +366,6 @@ const loadData = async () => {
     tableData.value = data || []
   } catch (error: any) {
     ElMessage.error('加载数据失败')
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -429,7 +428,6 @@ const handleDelete = async (row: any) => {
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
-      console.error(error)
     }
   } finally {
     loading.value = false
@@ -461,7 +459,6 @@ const handleSubmit = async () => {
         await loadData()
       } catch (error: any) {
         ElMessage.error(error.response?.data?.message || '操作失败')
-        console.error(error)
       } finally {
         submitting.value = false
       }
@@ -520,7 +517,6 @@ const handleConfigChannels = async (row: AlertReceiver) => {
     channelDialogVisible.value = true
   } catch (error: any) {
     ElMessage.error('加载通道配置失败')
-    console.error(error)
   } finally {
     channelLoading.value = false
   }
@@ -577,7 +573,6 @@ const handleSaveChannels = async () => {
     await loadData()
   } catch (error: any) {
     ElMessage.error('保存失败')
-    console.error(error)
   } finally {
     channelSubmitting.value = false
   }

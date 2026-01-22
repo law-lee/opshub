@@ -427,9 +427,7 @@ const loadDeptTree = async () => {
     const data = await getDepartmentTree()
     // 后端已经返回树形结构，直接使用
     deptTree.value = data || []
-    console.log('部门树数据:', JSON.stringify(deptTree.value, null, 2))
   } catch (error) {
-    console.error('获取部门列表失败:', error)
     ElMessage.error('获取部门列表失败')
   } finally {
     loading.value = false
@@ -477,9 +475,7 @@ const loadParentOptions = async () => {
     const data = await getParentOptions()
     // 后端已经返回树形结构，直接使用
     parentOptions.value = data || []
-    console.log('加载父级选项:', JSON.stringify(parentOptions.value, null, 2))
   } catch (error) {
-    console.error('获取父级选项失败:', error)
   }
 }
 

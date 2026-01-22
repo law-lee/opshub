@@ -139,7 +139,6 @@ const localSpecifiedNode = ref(props.formData.specifiedNode || '')
 
 // 监听 props 变化
 watch(() => props.formData, (newData) => {
-  console.log('🔍 NodeSelector 收到数据:', {
     schedulingType: newData.schedulingType,
     specifiedNode: newData.specifiedNode,
     matchRules: newData.matchRules,
@@ -151,10 +150,6 @@ watch(() => props.formData, (newData) => {
 
 // 处理调度类型变化
 const handleSchedulingTypeChange = async (newType: string) => {
-  console.log('🔍 ====== 调度类型变化 ======')
-  console.log('🔍 新的调度类型:', newType)
-  console.log('🔍 变化前的 localSpecifiedNode:', localSpecifiedNode.value)
-  console.log('🔍 当前的 matchRules:', props.formData.matchRules)
 
   // 如果切换到非"指定节点"类型，清空指定节点
   if (newType !== 'specified') {
@@ -164,8 +159,6 @@ const handleSchedulingTypeChange = async (newType: string) => {
   // 等待 DOM 更新后再 emit
   await nextTick()
 
-  console.log('🔍 变化后的 localSpecifiedNode:', localSpecifiedNode.value)
-  console.log('🔍 准备 emit update 事件:', {
     schedulingType: newType,
     specifiedNode: localSpecifiedNode.value
   })
@@ -179,8 +172,6 @@ const handleSchedulingTypeChange = async (newType: string) => {
 
 // 处理指定节点变化
 const handleSpecifiedNodeChange = (node: string) => {
-  console.log('🔍 ====== 指定节点变化 ======')
-  console.log('🔍 新的指定节点:', node)
 
   // 通知父组件更新
   emit('update', {

@@ -167,7 +167,6 @@ const loadData = async () => {
     const data = await getServiceAccounts(props.clusterId, props.namespace)
     serviceAccounts.value = data || []
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取 ServiceAccount 列表失败')
   } finally {
     loading.value = false
@@ -220,7 +219,6 @@ const handleEdit = async (row: ServiceAccountInfo) => {
     editingItem.value = row
     yamlDialogVisible.value = true
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取 ServiceAccount YAML 失败')
   }
 }
@@ -285,7 +283,6 @@ const handleDelete = async (row: ServiceAccountInfo) => {
     await loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error(error)
       ElMessage.error('删除失败: ' + (error.response?.data?.message || error.message))
     }
   }
@@ -324,7 +321,6 @@ const handleSaveYaml = async () => {
     yamlDialogVisible.value = false
     await loadData()
   } catch (error: any) {
-    console.error(error)
     ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))
   } finally {
     yamlSaving.value = false

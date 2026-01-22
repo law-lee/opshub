@@ -1652,7 +1652,6 @@ const loadGroupTree = async () => {
     groupTree.value = data || []
     filteredGroupTree.value = data || []
   } catch (error) {
-    console.error('获取分组树失败:', error)
     ElMessage.error('获取分组树失败')
   } finally {
     groupLoading.value = false
@@ -1695,7 +1694,6 @@ const loadHostList = async () => {
             }
           }
         } catch (err) {
-          console.error(`获取主机 ${host.id} 的权限失败:`, err)
         }
       }
       hostPermissions.value = permissionsMap
@@ -1704,7 +1702,6 @@ const loadHostList = async () => {
       userHasEditPermission.value = false
     }
   } catch (error) {
-    console.error('获取主机列表失败:', error)
     ElMessage.error('获取主机列表失败')
   } finally {
     hostLoading.value = false
@@ -1717,7 +1714,6 @@ const loadCredentialList = async () => {
     const data = await getCredentials()
     credentialList.value = data || []
   } catch (error) {
-    console.error('获取凭证列表失败:', error)
   }
 }
 
@@ -1727,7 +1723,6 @@ const loadCloudAccountList = async () => {
     const data = await getCloudAccounts()
     cloudAccountList.value = data || []
   } catch (error) {
-    console.error('获取云平台账号列表失败:', error)
   }
 }
 
@@ -1768,11 +1763,8 @@ const loadTerminalHostList = async (groupId?: number) => {
       params.groupId = groupId
     }
     const res = await getHostList(params)
-    console.log('终端主机列表数据:', res)
     terminalHostList.value = res.list || []
-    console.log('terminalHostList:', terminalHostList.value)
   } catch (error) {
-    console.error('获取主机列表失败:', error)
     terminalHostList.value = []
   }
 }
@@ -1910,7 +1902,6 @@ const connectSSH = (host: any) => {
   }
 
   ws.value.onerror = (error) => {
-    console.error('WebSocket error:', error)
     if (terminal.value) {
       terminal.value.writeln('\x1b[1;31m连接错误\x1b[0m')
     }
@@ -2037,7 +2028,6 @@ const handleDirectImportSubmit = async () => {
             ElMessage.success('主机信息采集成功')
             loadHostList()
           } catch (error: any) {
-            console.error('自动采集失败:', error)
             // 采集失败不阻塞主流程，只记录错误
           }
         }, 500)
@@ -2117,7 +2107,6 @@ const handleExcelImportSubmit = async () => {
           await loadHostList()
           ElMessage.success(`成功采集 ${newHosts.length} 台主机信息`)
         } catch (error) {
-          console.error('批量采集失败:', error)
         }
       }
     }
@@ -2178,7 +2167,6 @@ const handleGetCloudHosts = async () => {
     selectedCloudGroup.value = groupTree.value.find((g: any) => g.id === cloudImportForm.groupId)
     cloudImportStep.value = 1
   } catch (error: any) {
-    console.error('获取云主机列表失败:', error)
     ElMessage.error(error.message || '获取云主机列表失败')
   } finally {
     loadingCloudHosts.value = false
@@ -2574,7 +2562,6 @@ watch(() => cloudImportForm.accountId, async (accountId) => {
         cloudImportForm.region = account.region
       }
     } catch (error: any) {
-      console.error('加载区域列表失败:', error)
       ElMessage.error(error.message || '加载区域列表失败')
     } finally {
       loadingCloudRegions.value = false

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/smtp"
 	"time"
@@ -427,15 +426,10 @@ func (s *AlertService) sendFeishu(message AlertMessage, config AlertChannelConfi
 		},
 	}
 
-	// 打印调试信息
 	jsonData, _ := json.MarshalIndent(webhookData, "", "  ")
-	log.Printf("[飞书告警] Webhook URL: %s\n", config.FeishuWebhook)
-	log.Printf("[飞书告警] 发送数据: %s\n", string(jsonData))
+	_ = jsonData // Keep marshaled data for webhook
 
 	err := s.sendWebhookRequest(config.FeishuWebhook, webhookData)
-	if err != nil {
-		log.Printf("[飞书告警] 发送失败: %v\n", err)
-	}
 	return err
 }
 

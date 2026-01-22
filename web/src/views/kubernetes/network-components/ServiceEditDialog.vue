@@ -497,7 +497,6 @@ const openEdit = async (service: ServiceInfo, nsList: any[]) => {
       addPort()
     }
   } catch (error) {
-    console.error('获取 Service 详情失败:', error)
     ElMessage.error('获取 Service 详情失败')
   }
 }
@@ -810,7 +809,6 @@ const handleSave = async () => {
     emit('success')
     handleClose()
   } catch (error) {
-    console.error('保存失败:', error)
     ElMessage.error('保存失败')
   } finally {
     saving.value = false

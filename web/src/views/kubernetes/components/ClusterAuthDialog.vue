@@ -525,7 +525,6 @@ const formatDate = (dateStr: string) => {
 
 // 监听计算属性变化，用于调试
 watch(existingNamespacePermissions, (newVal) => {
-  console.log('existingNamespacePermissions computed changed:', newVal)
 }, { immediate: true })
 
 // 授权相关方法
@@ -550,7 +549,6 @@ const handleAuthorize = async (user: any) => {
     existingBindings.value = bindings
     showAuthorizeDialog.value = true
   } catch (error) {
-    console.error('Failed to load user permissions:', error)
     showAuthorizeDialog.value = true  // 即使失败也显示对话框
   } finally {
     authorizeLoading.value = false
@@ -611,7 +609,6 @@ const loadClusterRoles = async () => {
         // 重新加载角色列表
         roles = await getClusterRoles(props.cluster.id)
       } catch (createError) {
-        console.error('Failed to create default cluster roles:', createError)
       }
     }
 
@@ -665,13 +662,11 @@ const loadNamespaceRoles = async () => {
         // 重新加载角色列表
         roles = await getNamespaceRoles(props.cluster.id, authorizeForm.value.namespace)
       } catch (createError) {
-        console.error('Failed to create default namespace roles:', createError)
       }
     }
 
     namespaceRoles.value = roles || []
   } catch (error) {
-    console.error('Failed to load namespace roles:', error)
     ElMessage.error('加载命名空间角色失败')
   } finally {
     loadingRoles.value = false

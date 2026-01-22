@@ -455,7 +455,6 @@ const loadAccountList = async () => {
     // getCloudAccounts 返回的是数组，不是 { list: [] }
     accountList.value = Array.isArray(res) ? res : []
   } catch (error) {
-    console.error('加载云账号列表失败:', error)
   } finally {
     loading.value = false
   }
@@ -467,7 +466,6 @@ const loadGroupTree = async () => {
     const res = await getGroupTree()
     groupTreeOptions.value = res || []
   } catch (error) {
-    console.error('加载分组树失败:', error)
   }
 }
 
@@ -513,7 +511,6 @@ const handleEdit = async (row: any) => {
     const res = await getCloudRegions(row.id)
     currentRegions.value = Array.isArray(res) ? res : []
   } catch (error) {
-    console.error('加载区域列表失败:', error)
     currentRegions.value = getLocalRegions(row.provider)
   }
 
@@ -627,7 +624,6 @@ const handleAccountChange = async () => {
       }
     }
   } catch (error: any) {
-    console.error('加载区域列表失败:', error)
     ElMessage.error(error.message || '加载区域列表失败')
   }
 }
@@ -641,7 +637,6 @@ const loadCloudInstances = async () => {
     const res = await getCloudInstances(importForm.accountId, importForm.region)
     cloudHosts.value = Array.isArray(res) ? res : []
   } catch (error: any) {
-    console.error('加载云主机列表失败:', error)
     ElMessage.error(error.message || '加载云主机列表失败')
     cloudHosts.value = []
   } finally {
@@ -667,7 +662,6 @@ watch(() => form.provider, async (newProvider) => {
       const res = await getCloudRegions(form.id)
       currentRegions.value = Array.isArray(res) ? res : []
     } catch (error) {
-      console.error('加载区域列表失败:', error)
       currentRegions.value = getLocalRegions(newProvider)
     }
   } else {

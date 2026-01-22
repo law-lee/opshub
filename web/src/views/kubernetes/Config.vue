@@ -180,7 +180,6 @@ const loadClusters = async () => {
       }
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取集群列表失败')
   }
 }

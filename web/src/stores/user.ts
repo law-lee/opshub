@@ -23,11 +23,9 @@ export const useUserStore = defineStore('user', {
     // 登录
     async login(params: LoginParams) {
       const res = await login(params)
-      console.log('登录响应:', res)
       this.token = res.token
       this.userInfo = res.user
       localStorage.setItem('token', res.token)
-      console.log('Token已保存:', res.token)
       return res
     },
 
@@ -62,7 +60,6 @@ export const useUserStore = defineStore('user', {
           avatar: avatarUrl
         }
         this.avatarTimestamp = Date.now()
-        console.log('[UserStore] 头像已更新:', avatarUrl, '时间戳:', this.avatarTimestamp)
       }
     }
   }

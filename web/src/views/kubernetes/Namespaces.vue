@@ -592,7 +592,6 @@ const startLabelEdit = async () => {
 
     labelEditMode.value = true
   } catch (error) {
-    console.error('获取命名空间YAML失败:', error)
     ElMessage.error('获取命名空间信息失败')
   }
 }
@@ -720,7 +719,6 @@ const saveLabels = async () => {
 
     const updatedYaml = updatedLines.join('\n')
 
-    console.log('发送的 labels YAML:', updatedYaml)
 
     // 调用 API 保存
     await axios.put(
@@ -745,7 +743,6 @@ const saveLabels = async () => {
       labelList.value = validLabels
     }
   } catch (error: any) {
-    console.error('保存标签失败:', error)
     ElMessage.error(`保存失败: ${error.response?.data?.message || error.message}`)
   } finally {
     labelSaving.value = false
@@ -760,7 +757,6 @@ const savePaginationState = () => {
       pageSize: pageSize.value
     }))
   } catch (error) {
-    console.error('保存分页状态失败:', error)
   }
 }
 
@@ -774,7 +770,6 @@ const restorePaginationState = () => {
       pageSize.value = state.pageSize || 10
     }
   } catch (error) {
-    console.error('恢复分页状态失败:', error)
     currentPage.value = 1
     pageSize.value = 10
   }
@@ -813,7 +808,6 @@ const loadClusters = async () => {
       await loadNamespaces()
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取集群列表失败')
   }
 }
@@ -837,7 +831,6 @@ const loadNamespaces = async () => {
     namespaceList.value = data || []
     restorePaginationState()
   } catch (error) {
-    console.error(error)
     namespaceList.value = []
     ElMessage.error('获取命名空间列表失败')
   } finally {
@@ -887,7 +880,6 @@ metadata:
         createDialogVisible.value = false
         await loadNamespaces()
       } catch (error: any) {
-        console.error('创建命名空间失败:', error)
         ElMessage.error(`创建失败: ${error.response?.data?.message || error.message}`)
       } finally {
         createLoading.value = false
@@ -945,7 +937,6 @@ const handleShowYAML = async () => {
     yamlContent.value = response.data.data?.yaml || ''
     yamlDialogVisible.value = true
   } catch (error: any) {
-    console.error('获取 YAML 失败:', error)
     ElMessage.error(`获取 YAML 失败: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -991,7 +982,6 @@ const handleDelete = async () => {
     await loadNamespaces()
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除命名空间失败:', error)
       ElMessage.error(`删除失败: ${error.response?.data?.message || error.message}`)
     }
   }

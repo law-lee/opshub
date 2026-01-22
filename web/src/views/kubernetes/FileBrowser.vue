@@ -228,7 +228,6 @@ const loadFiles = async () => {
   loading.value = true
   try {
     const token = localStorage.getItem('token')
-    console.log('📂 Loading files:', {
       clusterId: props.clusterId,
       namespace: props.namespace,
       podName: props.podName,
@@ -248,22 +247,15 @@ const loadFiles = async () => {
       timeout: 60000 // 60秒超时
     })
 
-    console.log('✅ API Response:', response.data)
 
     // 适配新的响应格式 {code: 0, data: {files: [...]}, msg: "获取成功"}
     if (response.data.code === 0 && response.data.data) {
       files.value = response.data.data.files || []
-      console.log('✅ Files loaded:', files.value.length)
     } else {
       // 兼容旧格式
       files.value = response.data.files || []
-      console.log('✅ Files loaded (legacy):', files.value.length)
     }
   } catch (error: any) {
-    console.error('❌ 获取文件列表失败:', error)
-    console.error('❌ Error code:', error.code)
-    console.error('❌ Error message:', error.message)
-    console.error('❌ Error response:', error.response?.data)
 
     let errorMsg = '获取文件列表失败'
     if (error.code === 'ECONNABORTED') {
@@ -355,7 +347,6 @@ const downloadFile = async (file: FileInfo) => {
 
     ElMessage.success(`文件 ${file.name} 下载成功`)
   } catch (error: any) {
-    console.error('下载文件失败:', error)
     const errorMsg = error.response?.data?.msg || error.response?.data?.message || '下载文件失败'
     ElMessage.error(errorMsg)
   } finally {
@@ -367,14 +358,12 @@ const downloadFile = async (file: FileInfo) => {
 // 上传前处理
 const beforeUpload = (file: File) => {
   uploading.value = true
-  console.log('📤 Uploading file:', file.name, 'size:', file.size)
   return true
 }
 
 // 上传成功处理
 const handleUploadSuccess = (response: any) => {
   uploading.value = false
-  console.log('✅ Upload response:', response)
 
   if (response.code === 0) {
     ElMessage.success(response.msg || '文件上传成功')
@@ -388,7 +377,6 @@ const handleUploadSuccess = (response: any) => {
 // 上传失败处理
 const handleUploadError = (error: any) => {
   uploading.value = false
-  console.error('❌ Upload error:', error)
   const errorMsg = error.response?.data?.msg || error.response?.data?.message || '文件上传失败'
   ElMessage.error(errorMsg)
 }
@@ -401,8 +389,6 @@ const handleClose = () => {
 
 // 监听 visible 变化，加载数据
 watch(() => props.visible, (newVal) => {
-  console.log('🔍 FileBrowser visibility changed:', newVal)
-  console.log('🔍 FileBrowser props:', {
     clusterId: props.clusterId,
     namespace: props.namespace,
     podName: props.podName,

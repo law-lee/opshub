@@ -144,11 +144,9 @@ const loadSysEnv = async () => {
       sysEnvData.value = res.data
     } else {
       sysEnvData.value = []
-      console.warn('系统环境变量返回格式不正确:', res)
     }
   } catch (error: any) {
     ElMessage.error('获取系统环境变量失败: ' + (error.message || '未知错误'))
-    console.error(error)
   }
 }
 
@@ -174,11 +172,9 @@ const loadSysProp = async () => {
       sysPropData.value = res.data
     } else {
       sysPropData.value = []
-      console.warn('系统属性返回格式不正确:', res)
     }
   } catch (error: any) {
     ElMessage.error('获取系统属性失败: ' + (error.message || '未知错误'))
-    console.error(error)
   }
 }
 

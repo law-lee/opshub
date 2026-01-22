@@ -203,7 +203,6 @@ const loadUserInfo = async () => {
       profileForm.avatar = userStore.userInfo.avatar || ''
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取用户信息失败')
   }
 }
@@ -245,44 +244,34 @@ const handleAvatarUpload = async (options: any) => {
   try {
     // 上传图片到服务器
     const uploadRes: any = await uploadAvatar(file)
-    console.log('上传响应:', uploadRes)
-    console.log('上传返回的 data:', uploadRes.data)
 
     if (uploadRes.code === 0 && uploadRes.data) {
       // 获取服务器返回的头像路径
       const serverPath = uploadRes.data.url || uploadRes.data
-      console.log('[Profile] 服务器返回的路径:', serverPath)
 
       // 更新用户头像到服务器（保存相对路径）
       await updateUserAvatar(serverPath)
-      console.log('[Profile] 头像已保存到数据库')
 
       // 立即更新 store 中的头像，触发所有组件更新
       userStore.updateAvatar(serverPath)
-      console.log('[Profile] store 已更新，avatar:', userStore.userInfo?.avatar)
-      console.log('[Profile] avatarTimestamp:', userStore.avatarTimestamp)
 
       // 等待 DOM 更新
       await nextTick()
 
       // 强制刷新组件（通过改变 key）
       avatarKey.value = Date.now()
-      console.log('[Profile] avatarKey 已更新:', avatarKey.value)
-      console.log('[Profile] 计算后的 avatarUrl:', avatarUrl.value)
 
       ElMessage.success('头像上传成功')
 
       // 延迟刷新完整的用户信息（避免覆盖刚更新的头像）
       setTimeout(() => {
         userStore.getProfile().then(() => {
-          console.log('[Profile] 完整用户信息刷新完成')
         })
       }, 500)
     } else {
       throw new Error(uploadRes.message || '上传失败')
     }
   } catch (error: any) {
-    console.error('头像上传失败:', error)
     const errorMsg = error.response?.data?.message || error.message || '头像上传失败'
     ElMessage.error(errorMsg)
   } finally {
@@ -316,7 +305,6 @@ const handleUpdateProfile = async () => {
           profileForm.avatar = userStore.userInfo.avatar || ''
         }
       } catch (error) {
-        console.error(error)
         ElMessage.error('保存失败')
       } finally {
         updateLoading.value = false
@@ -342,7 +330,6 @@ const handleUpdatePassword = async () => {
           window.location.href = '/login'
         }, 1500)
       } catch (error: any) {
-        console.error(error)
         const errorMsg = error.response?.data?.message || error.message || '修改密码失败'
         ElMessage.error(errorMsg)
       } finally {

@@ -440,7 +440,6 @@ const loadNodeDetail = async () => {
       await loadNodeMetrics()
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取节点信息失败')
   } finally {
     loading.value = false
@@ -459,7 +458,6 @@ const loadNodeMetrics = async () => {
     cpuUsage.value = metrics.cpuUsage ? (metrics.cpuUsage * 100).toFixed(1) : 0
     memoryUsage.value = metrics.memoryUsage ? (metrics.memoryUsage * 100).toFixed(1) : 0
   } catch (error) {
-    console.error('获取指标失败:', error)
   }
 }
 
@@ -473,7 +471,6 @@ const loadPods = async () => {
     })
     pods.value = response.data.data || []
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取 Pod 列表失败')
   } finally {
     podsLoading.value = false
@@ -497,7 +494,6 @@ const loadEvents = async () => {
       event.involvedObject.kind === 'Node'
     )
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取事件列表失败')
   } finally {
     eventsLoading.value = false
@@ -524,7 +520,6 @@ const savePodPaginationState = () => {
       pageSize: podPageSize.value
     }))
   } catch (error) {
-    console.error('保存Pod分页状态失败:', error)
   }
 }
 
@@ -538,7 +533,6 @@ const loadPodPaginationState = () => {
       podPageSize.value = state.pageSize || 10
     }
   } catch (error) {
-    console.error('恢复Pod分页状态失败:', error)
   }
 }
 

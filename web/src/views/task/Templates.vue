@@ -329,9 +329,7 @@ const loadTemplates = async () => {
       templates.value = []
       pagination.value.total = 0
     }
-    console.log('加载模板列表成功，共', templates.value.length, '条')
   } catch (error) {
-    console.error('加载模板列表失败:', error)
     ElMessage.error('加载模板列表失败')
     templates.value = []
   } finally {
@@ -438,7 +436,6 @@ const handleSaveTemplate = async () => {
     // 重新加载列表
     await loadTemplates()
   } catch (error: any) {
-    console.error('保存模板失败:', error)
     ElMessage.error(error.message || '保存失败')
   }
 }

@@ -342,7 +342,6 @@ const loadData = async () => {
     pagination.total = result?.total || 0
   } catch (error: any) {
     ElMessage.error('加载数据失败')
-    console.error(error)
   } finally {
     loading.value = false
   }
@@ -354,7 +353,7 @@ const loadStats = async () => {
     const data = await getAlertStats()
     stats.value = data || { totalAlerts: 0, successSent: 0, failedSent: 0, todayAlerts: 0 }
   } catch (error: any) {
-    console.error(error)
+    // Error handling without console output
   }
 }
 

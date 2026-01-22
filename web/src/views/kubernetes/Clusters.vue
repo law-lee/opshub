@@ -822,7 +822,6 @@ const loadClusters = async () => {
     // 恢复分页状态
     restorePaginationState()
   } catch (error) {
-    console.error(error)
     ElMessage.error('获取集群列表失败')
   } finally {
     loading.value = false
@@ -837,7 +836,7 @@ const savePaginationState = () => {
       pageSize: pageSize.value
     }))
   } catch (error) {
-    console.error('保存分页状态失败:', error)
+    // 保存分页状态失败
   }
 }
 
@@ -851,7 +850,6 @@ const restorePaginationState = () => {
       pageSize.value = state.pageSize || 10
     }
   } catch (error) {
-    console.error('恢复分页状态失败:', error)
     currentPage.value = 1
     pageSize.value = 10
   }
@@ -1244,8 +1242,7 @@ const handleSubmit = async () => {
             // 并行创建集群角色和命名空间角色（ClusterRole）
             const [clusterRolesResult, namespaceRolesResult] = await Promise.all([
               createDefaultClusterRoles(newCluster.id),
-              createDefaultNamespaceRoles(newCluster.id).catch(err => {
-                console.warn('创建命名空间角色失败:', err)
+              createDefaultNamespaceRoles(newCluster.id).catch(() => {
                 // 命名空间角色创建失败不影响整体流程
                 return { created: [] }
               })
@@ -1258,7 +1255,6 @@ const handleSubmit = async () => {
             ElMessage.success(`默认角色初始化完成（集群角色：${clusterCount}个，命名空间角色：${namespaceCount}个）`)
           } catch (roleError) {
             roleLoadingMsg.close()
-            console.error('创建默认角色失败:', roleError)
             ElMessage.warning('集群注册成功，但创建默认角色失败，请稍后在角色管理页面手动创建')
           }
         }
@@ -1429,7 +1425,6 @@ const loadClusterCredentials = async () => {
     clusterCredentialUsers.value = users
     // 不再自动刷新当前用户凭据，避免误清空
   } catch (error: any) {
-    console.error('加载凭据用户失败:', error)
     ElMessage.error(error.response?.data?.message || '加载凭据用户失败')
   }
 }
@@ -1462,8 +1457,7 @@ const refreshCurrentUserCredential = async () => {
       localStorage.removeItem(storageKey)
       localStorage.removeItem(usernameKey)
     } else {
-      // 其他错误，记录日志但不清空凭据
-      console.error('刷新当前用户凭据失败:', error)
+      // 其他错误，不清空凭据
     }
   }
 }
@@ -1496,7 +1490,6 @@ const handleAuthorize = async (row: Cluster) => {
         currentCredentialUsername.value = ''
       } else {
         // 其他错误，也清空显示
-        console.error('获取现有kubeconfig失败:', error)
         generatedKubeConfig.value = ''
         currentCredentialUsername.value = ''
       }
@@ -1656,7 +1649,7 @@ onMounted(async () => {
     try {
       await userStore.getProfile()
     } catch (error) {
-      console.error('获取用户信息失败:', error)
+      // 获取用户信息失败
     }
   }
 

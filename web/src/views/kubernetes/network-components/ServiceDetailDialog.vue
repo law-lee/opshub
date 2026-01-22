@@ -308,7 +308,6 @@ const loadServiceDetail = async (namespace: string, name: string) => {
     // 加载关联的Pods
     await loadPods()
   } catch (error) {
-    console.error('加载Service详情失败:', error)
     ElMessage.error('加载Service详情失败: ' + (error as any).message)
   } finally {
     loading.value = false
@@ -364,7 +363,6 @@ const loadPods = async () => {
             restarts: mainStatus?.restartCount || pod.restarts || 0
           }
         } catch (error) {
-          console.error(`获取Pod ${pod.name} 详情失败:`, error)
           // 失败时返回基本信息
           return {
             ...pod,
@@ -378,7 +376,6 @@ const loadPods = async () => {
 
     pods.value = detailedPods
   } catch (error) {
-    console.error('加载Pod列表失败:', error)
     ElMessage.error('加载Pod列表失败')
   } finally {
     podsLoading.value = false

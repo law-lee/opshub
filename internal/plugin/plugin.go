@@ -92,9 +92,7 @@ func NewManager(db *gorm.DB) *Manager {
 	}
 
 	// 自动迁移插件状态表
-	if err := db.AutoMigrate(&PluginState{}); err != nil {
-		fmt.Printf("Failed to migrate PluginState table: %v\n", err)
-	}
+	_ = db.AutoMigrate(&PluginState{})
 
 	return mgr
 }

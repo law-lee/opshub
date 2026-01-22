@@ -265,11 +265,9 @@ const loadPerfCounters = async () => {
     perfCounters.value = parsePerfCounterOutput(output)
 
     if (perfCounters.value.length === 0 && output) {
-      console.warn('解析性能计数器失败，原始输出:', output)
     }
   } catch (error: any) {
     ElMessage.error('获取性能计数器失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loading.value = false
   }

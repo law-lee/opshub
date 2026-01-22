@@ -18,16 +18,12 @@ class PluginManagerImpl {
   private loadInstalledPlugins() {
     try {
       const stored = localStorage.getItem(this.STORAGE_KEY)
-      console.log('[PluginManager] 从 localStorage 加载插件:', stored)
       if (stored) {
         const plugins = JSON.parse(stored)
         this.installedPlugins = new Set(plugins)
-        console.log('[PluginManager] 已加载已安装插件:', Array.from(this.installedPlugins))
-      } else {
-        console.log('[PluginManager] localStorage 中没有已安装插件数据')
       }
     } catch (error) {
-      console.error('[PluginManager] 加载已安装插件失败:', error)
+      // 加载失败时静默处理
     }
   }
 
@@ -39,7 +35,7 @@ class PluginManagerImpl {
       const plugins = Array.from(this.installedPlugins)
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(plugins))
     } catch (error) {
-      console.error('Failed to save installed plugins:', error)
+      // 保存失败时静默处理
     }
   }
 
@@ -48,7 +44,6 @@ class PluginManagerImpl {
    */
   register(plugin: Plugin) {
     this.plugins.set(plugin.name, plugin)
-    console.log('Plugin registered:', plugin.name)
   }
 
   /**
@@ -65,8 +60,6 @@ class PluginManagerImpl {
 
     // 如果已经安装过，静默跳过
     if (this.installedPlugins.has(name)) {
-      console.log('Plugin already installed:', name)
-
       // 仍然需要注册路由（因为刷新页面后路由会丢失）
       if (plugin.getRoutes) {
         const routes = plugin.getRoutes()
@@ -97,13 +90,11 @@ class PluginManagerImpl {
       if (showMessage) {
         ElMessage.success(`插件 ${name} 安装成功`)
       }
-      console.log('Plugin installed:', name)
       return true
     } catch (error) {
       if (showMessage) {
         ElMessage.error(`插件 ${name} 安装失败`)
       }
-      console.error('Plugin install failed:', error)
       return false
     }
   }
@@ -133,11 +124,9 @@ class PluginManagerImpl {
       this.saveInstalledPlugins()
 
       ElMessage.success(`插件 ${name} 已卸载，请刷新页面以完全移除`)
-      console.log('Plugin uninstalled:', name)
       return true
     } catch (error) {
       ElMessage.error(`插件 ${name} 卸载失败`)
-      console.error('Plugin uninstall failed:', error)
       return false
     }
   }

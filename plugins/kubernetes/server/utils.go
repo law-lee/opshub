@@ -56,8 +56,6 @@ func RequireAdmin(c *gin.Context, db *gorm.DB) bool {
 
 	roles, err := roleUseCase.GetByUserID(context.Background(), userID)
 	if err != nil {
-		// 输出详细错误日志便于调试
-		fmt.Printf("获取用户角色失败: userID=%d, error=%v\n", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取用户角色失败: " + err.Error(),
@@ -171,9 +169,7 @@ func (r *RecordingWebSocketReader) Read(p []byte) (int, error) {
 
 	// 记录用户输入
 	if r.recorder != nil {
-		if err := r.recorder.RecordInput(data); err != nil {
-			fmt.Printf("录制输入失败: %v\n", err)
-		}
+		_ = r.recorder.RecordInput(data)
 	}
 
 	n := copy(p, data)
@@ -191,9 +187,7 @@ type RecordingWebSocketWriter struct {
 func (w *RecordingWebSocketWriter) Write(p []byte) (int, error) {
 	// 记录终端输出
 	if w.recorder != nil {
-		if err := w.recorder.RecordOutput(p); err != nil {
-			fmt.Printf("录制输出失败: %v\n", err)
-		}
+		_ = w.recorder.RecordOutput(p)
 	}
 
 	// 写入 WebSocket

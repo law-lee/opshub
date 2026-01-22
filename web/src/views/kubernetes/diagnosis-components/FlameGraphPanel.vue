@@ -280,7 +280,6 @@ const loadThreadListForSelect = async () => {
     const output = typeof res === 'string' ? res : (res?.data || '')
     threadOptions.value = parseThreadListOutput(output)
   } catch (error) {
-    console.error('加载线程列表失败:', error)
   } finally {
     loadingThreads.value = false
   }
@@ -404,11 +403,9 @@ const startProfiling = async () => {
       } else {
         errorMessage.value = '未能生成火焰图，可能采样时间太短或进程活动不足'
       }
-      console.warn('Profiler output:', output)
     }
   } catch (error: any) {
     errorMessage.value = '生成火焰图失败: ' + (error.message || '未知错误')
-    console.error(error)
   } finally {
     loading.value = false
     if (countdownTimer) {

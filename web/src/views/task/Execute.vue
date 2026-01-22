@@ -403,7 +403,6 @@ const loadHostGroups = async () => {
     const data = await getGroupTree()
     hostGroups.value = data || []
   } catch (error) {
-    console.error('加载主机分组失败:', error)
   }
 }
 
@@ -426,7 +425,6 @@ const loadHostList = async () => {
       allHosts.value = []
     }
   } catch (error) {
-    console.error('加载主机列表失败:', error)
     allHosts.value = []
   } finally {
     hostsLoading.value = false
@@ -447,9 +445,7 @@ const loadTemplates = async () => {
     } else {
       allTemplates.value = []
     }
-    console.log('加载模板列表成功，共', allTemplates.value.length, '条')
   } catch (error) {
-    console.error('加载模板列表失败:', error)
     allTemplates.value = []
     ElMessage.error('加载模板列表失败')
   } finally {
@@ -460,7 +456,6 @@ const loadTemplates = async () => {
 // 分组点击
 const handleGroupClick = (data: any) => {
   selectedGroupId.value = data.id
-  console.log('选中分组:', data)
 }
 
 // 主机选择变化
@@ -489,17 +484,13 @@ const selectTemplate = (row: any) => {
   showTemplateDialog.value = false
 
   // 调试：打印模板数据
-  console.log('选择的模板数据:', row)
-  console.log('variables 字段:', row.variables)
 
   // 解析模板参数
   let params: any[] = []
   if (row.variables && row.variables !== '[]') {
     try {
       params = JSON.parse(row.variables)
-      console.log('解析后的参数:', params)
     } catch (e) {
-      console.error('解析参数失败:', e)
       params = []
     }
   }

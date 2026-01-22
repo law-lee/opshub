@@ -385,11 +385,9 @@ func (h *RoleHandler) CreateDefaultClusterRoles(c *gin.Context) {
 		})
 		return
 	}
-	fmt.Printf("[CreateDefaultClusterRoles] 获取clientset耗时: %v\n", time.Since(startTime))
 
 	// 定义默认角色及其权限
 	defaultRoles := getDefaultClusterRoles()
-	fmt.Printf("[CreateDefaultClusterRoles] 需要创建 %d 个角色\n", len(defaultRoles))
 
 	createStartTime := time.Now()
 
@@ -408,14 +406,11 @@ func (h *RoleHandler) CreateDefaultClusterRoles(c *gin.Context) {
 			if err != nil {
 				// 如果是"已存在"错误，不算失败
 				if !strings.Contains(err.Error(), "already exists") {
-					fmt.Printf("[CreateDefaultClusterRoles] 创建角色 %s 失败: %v, 耗时: %v\n", role.Name, err, time.Since(roleStart))
 					resultChan <- result{name: role.Name, err: err}
 					return
 				}
-				fmt.Printf("[CreateDefaultClusterRoles] 角色 %s 已存在, 耗时: %v\n", role.Name, time.Since(roleStart))
-			} else {
-				fmt.Printf("[CreateDefaultClusterRoles] 创建角色 %s 成功, 耗时: %v\n", role.Name, time.Since(roleStart))
 			}
+			_ = roleStart // 忽略未使用的变量
 			resultChan <- result{name: role.Name, err: nil}
 		}(roleDef)
 	}
@@ -434,8 +429,8 @@ func (h *RoleHandler) CreateDefaultClusterRoles(c *gin.Context) {
 		}
 	}
 
-	fmt.Printf("[CreateDefaultClusterRoles] 所有角色创建完成, 总耗时: %v\n", time.Since(createStartTime))
-	fmt.Printf("[CreateDefaultClusterRoles] 接口总耗时: %v\n", time.Since(startTime))
+	_ = createStartTime // 忽略未使用的变量
+	_ = startTime // 忽略未使用的变量
 
 	if createErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

@@ -362,7 +362,6 @@ const loadDashboard = async () => {
     }
   } catch (error: any) {
     ElMessage.error('加载Dashboard失败: ' + (error.message || '未知错误'))
-    console.error(error)
   } finally {
     loading.value = false
   }

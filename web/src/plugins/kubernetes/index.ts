@@ -15,7 +15,6 @@ class KubernetesPlugin implements Plugin {
    * 安装插件
    */
   async install() {
-    console.log('Kubernetes 插件安装中...')
     // 在这里可以进行一些初始化操作
     // 例如: 注册全局组件、配置等
   }
@@ -24,7 +23,6 @@ class KubernetesPlugin implements Plugin {
    * 卸载插件
    */
   async uninstall() {
-    console.log('Kubernetes 插件卸载中...')
     // 清理插件创建的资源
   }
 
@@ -223,8 +221,6 @@ class KubernetesPlugin implements Plugin {
 
 // 创建并注册插件实例
 const plugin = new KubernetesPlugin()
-console.log('[Kubernetes Plugin] 正在注册插件...')
 pluginManager.register(plugin)
-console.log('[Kubernetes Plugin] 插件注册完成')
 
 export default plugin
