@@ -7,12 +7,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	assetbiz "github.com/ydcloud-dy/opshub/internal/biz/asset"
 	"github.com/ydcloud-dy/opshub/pkg/response"
@@ -170,13 +173,17 @@ func (h *Handler) GetJobTemplate(c *gin.Context) {
 func (h *Handler) CreateJobTemplate(c *gin.Context) {
 	var template model.JobTemplate
 	if err := c.ShouldBindJSON(&template); err != nil {
-		response.ErrorCode(c, http.StatusBadRequest, "参数错误")
+		response.ErrorCode(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
 	template.Status = 1
 	template.CreatedBy = 1
+	// 处理空的 variables 字段，MySQL JSON 字段不能为空字符串
+	if template.Variables == "" {
+		template.Variables = "[]"
+	}
 	if err := h.db.Create(&template).Error; err != nil {
-		response.ErrorCode(c, http.StatusInternalServerError, "创建失败")
+		response.ErrorCode(c, http.StatusInternalServerError, "创建失败: "+err.Error())
 		return
 	}
 	response.Success(c, template)
@@ -334,6 +341,14 @@ func (h *Handler) ExecuteTask(c *gin.Context) {
 		taskName = fmt.Sprintf("手动执行任务 - %s", time.Now().Format("2006-01-02 15:04:05"))
 	}
 
+	// 从context获取当前用户ID
+	var createdBy uint = 1
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(uint); ok {
+			createdBy = uid
+		}
+	}
+
 	hostIDsJSON, _ := json.Marshal(req.HostIDs)
 	jobTask := model.JobTask{
 		Name:        taskName,
@@ -341,7 +356,7 @@ func (h *Handler) ExecuteTask(c *gin.Context) {
 		Status:      "running",
 		TargetHosts: string(hostIDsJSON),
 		Parameters:  "", // 空字符串而不是nil
-		CreatedBy:   1, // TODO: 从JWT获取用户ID
+		CreatedBy:   createdBy,
 		ExecuteTime: ptrTime(time.Now()),
 	}
 
@@ -896,4 +911,533 @@ func shellescape(s string) string {
 // ptrTime 返回时间指针
 func ptrTime(t time.Time) *time.Time {
 	return &t
+}
+
+// ==================== 执行记录 ====================
+
+// ListExecutionHistory 获取执行记录列表
+func (h *Handler) ListExecutionHistory(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+	keyword := c.Query("keyword")
+	taskType := c.Query("taskType")
+	status := c.Query("status")
+	startDate := c.Query("startDate")
+	endDate := c.Query("endDate")
+
+	var jobTasks []model.JobTask
+	var total int64
+
+	query := h.db.Model(&model.JobTask{}).Where("deleted_at IS NULL")
+
+	// 关键词搜索
+	if keyword != "" {
+		query = query.Where("name LIKE ?", "%"+keyword+"%")
+	}
+	// 任务类型筛选
+	if taskType != "" {
+		query = query.Where("task_type = ?", taskType)
+	}
+	// 状态筛选
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	// 日期范围筛选
+	if startDate != "" {
+		query = query.Where("created_at >= ?", startDate+" 00:00:00")
+	}
+	if endDate != "" {
+		query = query.Where("created_at <= ?", endDate+" 23:59:59")
+	}
+
+	query.Count(&total)
+	offset := (page - 1) * pageSize
+	query.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&jobTasks)
+
+	// 获取用户信息
+	type UserInfo struct {
+		ID       uint   `gorm:"column:id"`
+		Username string `gorm:"column:username"`
+	}
+	userMap := make(map[uint]string)
+	var userIDs []uint
+	for _, task := range jobTasks {
+		if task.CreatedBy > 0 {
+			userIDs = append(userIDs, task.CreatedBy)
+		}
+	}
+
+	if len(userIDs) > 0 {
+		var users []UserInfo
+		h.db.Table("sys_user").Select("id, username").Where("id IN ?", userIDs).Find(&users)
+		for _, u := range users {
+			userMap[u.ID] = u.Username
+		}
+	}
+
+	// 收集所有主机ID
+	type HostInfo struct {
+		ID   uint   `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+		IP   string `gorm:"column:ip"`
+	}
+	hostMap := make(map[uint]HostInfo)
+	var allHostIDs []uint
+	for _, task := range jobTasks {
+		if task.TargetHosts != "" {
+			var hostIDs []uint
+			if err := json.Unmarshal([]byte(task.TargetHosts), &hostIDs); err == nil {
+				allHostIDs = append(allHostIDs, hostIDs...)
+			}
+		}
+	}
+
+	if len(allHostIDs) > 0 {
+		var hosts []HostInfo
+		h.db.Table("hosts").Select("id, name, ip").Where("id IN ?", allHostIDs).Find(&hosts)
+		for _, host := range hosts {
+			hostMap[host.ID] = host
+		}
+	}
+
+	// 构建响应数据
+	type ExecutionHistoryItem struct {
+		model.JobTask
+		CreatedByName      string `json:"createdByName"`
+		TargetHostsDisplay string `json:"targetHostsDisplay"`
+	}
+
+	items := make([]ExecutionHistoryItem, 0, len(jobTasks))
+	for _, task := range jobTasks {
+		item := ExecutionHistoryItem{
+			JobTask:       task,
+			CreatedByName: userMap[task.CreatedBy],
+		}
+
+		// 构建主机显示字符串
+		if task.TargetHosts != "" {
+			var hostIDs []uint
+			if err := json.Unmarshal([]byte(task.TargetHosts), &hostIDs); err == nil {
+				var hostDisplays []string
+				for _, hid := range hostIDs {
+					if host, ok := hostMap[hid]; ok {
+						if host.Name != "" && host.IP != "" {
+							hostDisplays = append(hostDisplays, fmt.Sprintf("%s(%s)", host.Name, host.IP))
+						} else if host.Name != "" {
+							hostDisplays = append(hostDisplays, host.Name)
+						} else if host.IP != "" {
+							hostDisplays = append(hostDisplays, host.IP)
+						}
+					}
+				}
+				item.TargetHostsDisplay = strings.Join(hostDisplays, ", ")
+			}
+		}
+
+		items = append(items, item)
+	}
+
+	response.Success(c, gin.H{
+		"list":     items,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+	})
+}
+
+// GetExecutionHistory 获取执行记录详情
+func (h *Handler) GetExecutionHistory(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	var jobTask model.JobTask
+	if err := h.db.Where("id = ? AND deleted_at IS NULL", id).First(&jobTask).Error; err != nil {
+		response.ErrorCode(c, http.StatusNotFound, "执行记录不存在")
+		return
+	}
+
+	// 获取用户名
+	var username string
+	if jobTask.CreatedBy > 0 {
+		h.db.Table("sys_user").Select("username").Where("id = ?", jobTask.CreatedBy).Scan(&username)
+	}
+
+	// 获取主机信息
+	type HostInfo struct {
+		ID   uint   `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+		IP   string `gorm:"column:ip"`
+	}
+	var targetHostsDisplay string
+	if jobTask.TargetHosts != "" {
+		var hostIDs []uint
+		if err := json.Unmarshal([]byte(jobTask.TargetHosts), &hostIDs); err == nil && len(hostIDs) > 0 {
+			var hosts []HostInfo
+			h.db.Table("hosts").Select("id, name, ip").Where("id IN ?", hostIDs).Find(&hosts)
+			var hostDisplays []string
+			for _, host := range hosts {
+				if host.Name != "" && host.IP != "" {
+					hostDisplays = append(hostDisplays, fmt.Sprintf("%s(%s)", host.Name, host.IP))
+				} else if host.Name != "" {
+					hostDisplays = append(hostDisplays, host.Name)
+				} else if host.IP != "" {
+					hostDisplays = append(hostDisplays, host.IP)
+				}
+			}
+			targetHostsDisplay = strings.Join(hostDisplays, ", ")
+		}
+	}
+
+	// 构建响应
+	type ExecutionHistoryDetail struct {
+		model.JobTask
+		CreatedByName      string `json:"createdByName"`
+		TargetHostsDisplay string `json:"targetHostsDisplay"`
+	}
+
+	detail := ExecutionHistoryDetail{
+		JobTask:            jobTask,
+		CreatedByName:      username,
+		TargetHostsDisplay: targetHostsDisplay,
+	}
+
+	response.Success(c, detail)
+}
+
+// DeleteExecutionHistory 删除执行记录
+func (h *Handler) DeleteExecutionHistory(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err := h.db.Delete(&model.JobTask{}, id).Error; err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "删除失败")
+		return
+	}
+	response.Success(c, nil)
+}
+
+// BatchDeleteExecutionHistory 批量删除执行记录
+func (h *Handler) BatchDeleteExecutionHistory(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if len(req.IDs) == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请选择要删除的记录")
+		return
+	}
+	if err := h.db.Delete(&model.JobTask{}, req.IDs).Error; err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "删除失败")
+		return
+	}
+	response.Success(c, nil)
+}
+
+// ExportExecutionHistory 导出执行记录
+func (h *Handler) ExportExecutionHistory(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids"`
+	}
+	c.ShouldBindJSON(&req)
+
+	var jobTasks []model.JobTask
+	query := h.db.Model(&model.JobTask{}).Where("deleted_at IS NULL")
+
+	if len(req.IDs) > 0 {
+		query = query.Where("id IN ?", req.IDs)
+	}
+	query.Order("created_at DESC").Find(&jobTasks)
+
+	// 获取用户信息
+	type UserInfo struct {
+		ID       uint   `gorm:"column:id"`
+		Username string `gorm:"column:username"`
+	}
+	userMap := make(map[uint]string)
+	var userIDs []uint
+	for _, task := range jobTasks {
+		if task.CreatedBy > 0 {
+			userIDs = append(userIDs, task.CreatedBy)
+		}
+	}
+	if len(userIDs) > 0 {
+		var users []UserInfo
+		h.db.Table("sys_user").Select("id, username").Where("id IN ?", userIDs).Find(&users)
+		for _, u := range users {
+			userMap[u.ID] = u.Username
+		}
+	}
+
+	// 获取主机信息
+	type HostInfo struct {
+		ID   uint   `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+		IP   string `gorm:"column:ip"`
+	}
+	hostMap := make(map[uint]HostInfo)
+	var allHostIDs []uint
+	for _, task := range jobTasks {
+		if task.TargetHosts != "" {
+			var hostIDs []uint
+			if err := json.Unmarshal([]byte(task.TargetHosts), &hostIDs); err == nil {
+				allHostIDs = append(allHostIDs, hostIDs...)
+			}
+		}
+	}
+	if len(allHostIDs) > 0 {
+		var hosts []HostInfo
+		h.db.Table("hosts").Select("id, name, ip").Where("id IN ?", allHostIDs).Find(&hosts)
+		for _, host := range hosts {
+			hostMap[host.ID] = host
+		}
+	}
+
+	// 构建导出数据
+	type ExportItem struct {
+		ID                 uint   `json:"id"`
+		Name               string `json:"name"`
+		TaskType           string `json:"taskType"`
+		Status             string `json:"status"`
+		TargetHostsDisplay string `json:"targetHostsDisplay"`
+		CreatedByName      string `json:"createdByName"`
+		CreatedAt          string `json:"createdAt"`
+		Result             string `json:"result"`
+	}
+
+	items := make([]ExportItem, 0, len(jobTasks))
+	for _, task := range jobTasks {
+		item := ExportItem{
+			ID:            task.ID,
+			Name:          task.Name,
+			TaskType:      task.TaskType,
+			Status:        task.Status,
+			CreatedByName: userMap[task.CreatedBy],
+			CreatedAt:     task.CreatedAt.Format("2006-01-02 15:04:05"),
+			Result:        task.Result,
+		}
+
+		// 构建主机显示字符串
+		if task.TargetHosts != "" {
+			var hostIDs []uint
+			if err := json.Unmarshal([]byte(task.TargetHosts), &hostIDs); err == nil {
+				var hostDisplays []string
+				for _, hid := range hostIDs {
+					if host, ok := hostMap[hid]; ok {
+						if host.Name != "" && host.IP != "" {
+							hostDisplays = append(hostDisplays, fmt.Sprintf("%s(%s)", host.Name, host.IP))
+						} else if host.Name != "" {
+							hostDisplays = append(hostDisplays, host.Name)
+						} else if host.IP != "" {
+							hostDisplays = append(hostDisplays, host.IP)
+						}
+					}
+				}
+				item.TargetHostsDisplay = strings.Join(hostDisplays, ", ")
+			}
+		}
+
+		items = append(items, item)
+	}
+
+	response.Success(c, items)
+}
+
+// ==================== 文件分发 ====================
+
+// DistributeFilesRequest 文件分发请求
+type FileDistributionResult struct {
+	HostID   uint   `json:"hostId"`
+	HostName string `json:"hostName"`
+	HostIP   string `json:"hostIp"`
+	Status   string `json:"status"` // success, failed
+	Error    string `json:"error,omitempty"`
+}
+
+// DistributeFiles 文件分发
+func (h *Handler) DistributeFiles(c *gin.Context) {
+	// 解析表单
+	form, err := c.MultipartForm()
+	if err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "无法解析表单数据: "+err.Error())
+		return
+	}
+
+	files := form.File["files"]
+	if len(files) == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请上传至少一个文件")
+		return
+	}
+
+	targetPath := c.PostForm("targetPath")
+	if targetPath == "" {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定目标路径")
+		return
+	}
+
+	hostIdsStr := c.PostForm("hostIds")
+	if hostIdsStr == "" {
+		response.ErrorCode(c, http.StatusBadRequest, "请选择目标主机")
+		return
+	}
+
+	var hostIDs []uint
+	if err := json.Unmarshal([]byte(hostIdsStr), &hostIDs); err != nil {
+		response.ErrorCode(c, http.StatusBadRequest, "主机ID格式错误")
+		return
+	}
+
+	if len(hostIDs) == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请选择至少一台目标主机")
+		return
+	}
+
+	// 从context获取当前用户ID
+	var createdBy uint = 1
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(uint); ok {
+			createdBy = uid
+		}
+	}
+
+	ctx := c.Request.Context()
+
+	// 创建任务记录
+	fileNames := make([]string, 0, len(files))
+	for _, f := range files {
+		fileNames = append(fileNames, f.Filename)
+	}
+	taskName := fmt.Sprintf("文件分发 - %s", time.Now().Format("2006-01-02 15:04:05"))
+
+	hostIDsJSON, _ := json.Marshal(hostIDs)
+	paramsJSON, _ := json.Marshal(map[string]interface{}{
+		"files":      fileNames,
+		"targetPath": targetPath,
+	})
+
+	jobTask := model.JobTask{
+		Name:        taskName,
+		TaskType:    "file",
+		Status:      "running",
+		TargetHosts: string(hostIDsJSON),
+		Parameters:  string(paramsJSON),
+		CreatedBy:   createdBy,
+		ExecuteTime: ptrTime(time.Now()),
+	}
+
+	if err := h.db.Create(&jobTask).Error; err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "创建任务记录失败: "+err.Error())
+		return
+	}
+
+	// 执行分发
+	results := make([]FileDistributionResult, 0, len(hostIDs))
+	allSuccess := true
+
+	for _, hostID := range hostIDs {
+		result := h.distributeToHost(ctx, hostID, files, targetPath)
+		results = append(results, result)
+		if result.Status != "success" {
+			allSuccess = false
+		}
+	}
+
+	// 更新任务状态
+	resultJSON, _ := json.Marshal(results)
+	if allSuccess {
+		jobTask.Status = "success"
+	} else {
+		jobTask.Status = "failed"
+	}
+	jobTask.Result = string(resultJSON)
+	h.db.Save(&jobTask)
+
+	response.Success(c, gin.H{
+		"taskId":  jobTask.ID,
+		"results": results,
+	})
+}
+
+// distributeToHost 分发文件到单个主机
+func (h *Handler) distributeToHost(ctx context.Context, hostID uint, files []*multipart.FileHeader, targetPath string) FileDistributionResult {
+	result := FileDistributionResult{
+		HostID: hostID,
+		Status: "failed",
+	}
+
+	// 获取主机信息
+	var host assetbiz.Host
+	if err := h.db.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", hostID).First(&host).Error; err != nil {
+		result.Error = fmt.Sprintf("获取主机信息失败: %v", err)
+		return result
+	}
+
+	result.HostName = host.Name
+	result.HostIP = host.IP
+
+	// 获取凭证
+	if host.CredentialID == 0 {
+		result.Error = "主机未配置凭证"
+		return result
+	}
+
+	var credential assetbiz.Credential
+	if err := h.db.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", host.CredentialID).First(&credential).Error; err != nil {
+		result.Error = fmt.Sprintf("获取凭证失败: %v", err)
+		return result
+	}
+
+	// 解密凭证
+	if err := h.decryptCredential(&credential); err != nil {
+		result.Error = fmt.Sprintf("解密凭证失败: %v", err)
+		return result
+	}
+
+	// 建立SSH连接
+	sshClient, err := h.createSSHClient(&host, &credential)
+	if err != nil {
+		result.Error = fmt.Sprintf("SSH连接失败: %v", err)
+		return result
+	}
+	defer sshClient.Close()
+
+	// 创建SFTP客户端
+	sftpClient, err := sftp.NewClient(sshClient)
+	if err != nil {
+		result.Error = fmt.Sprintf("创建SFTP客户端失败: %v", err)
+		return result
+	}
+	defer sftpClient.Close()
+
+	// 确保目标目录存在
+	if err := sftpClient.MkdirAll(targetPath); err != nil {
+		// 目录可能已存在，忽略错误
+	}
+
+	// 上传每个文件
+	for _, fileHeader := range files {
+		srcFile, err := fileHeader.Open()
+		if err != nil {
+			result.Error = fmt.Sprintf("打开文件 %s 失败: %v", fileHeader.Filename, err)
+			return result
+		}
+
+		remotePath := targetPath + "/" + fileHeader.Filename
+		dstFile, err := sftpClient.Create(remotePath)
+		if err != nil {
+			srcFile.Close()
+			result.Error = fmt.Sprintf("创建远程文件 %s 失败: %v", remotePath, err)
+			return result
+		}
+
+		_, err = io.Copy(dstFile, srcFile)
+		srcFile.Close()
+		dstFile.Close()
+
+		if err != nil {
+			result.Error = fmt.Sprintf("传输文件 %s 失败: %v", fileHeader.Filename, err)
+			return result
+		}
+	}
+
+	result.Status = "success"
+	return result
 }

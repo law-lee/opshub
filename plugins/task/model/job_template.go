@@ -11,7 +11,7 @@ type JobTemplate struct {
 	Code        string     `json:"code" gorm:"size:100;not null;uniqueIndex" binding:"required"`
 	Description string     `json:"description" gorm:"type:text"`
 	Content     string     `json:"content" gorm:"type:longtext;not null" binding:"required"`
-	Variables   string     `json:"variables,omitempty" gorm:"type:json"` // JSON
+	Variables   string     `json:"variables,omitempty" gorm:"type:text"` // JSON字符串
 	Category    string     `json:"category" gorm:"size:50;not null;index" binding:"required"` // script, ansible, module
 	Platform    string     `json:"platform,omitempty" gorm:"size:50"` // linux, windows
 	Timeout     int        `json:"timeout" gorm:"default:300"` // 秒

@@ -15,6 +15,9 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 		// 任务执行
 		taskGroup.POST("/execute", handler.ExecuteTask)
 
+		// 文件分发
+		taskGroup.POST("/distribute", handler.DistributeFiles)
+
 		// 任务作业
 		jobs := taskGroup.Group("/jobs")
 		{
@@ -44,6 +47,16 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 			ansible.POST("", handler.CreateAnsibleTask)
 			ansible.PUT("/:id", handler.UpdateAnsibleTask)
 			ansible.DELETE("/:id", handler.DeleteAnsibleTask)
+		}
+
+		// 执行记录
+		executionHistory := taskGroup.Group("/execution-history")
+		{
+			executionHistory.GET("", handler.ListExecutionHistory)
+			executionHistory.GET("/:id", handler.GetExecutionHistory)
+			executionHistory.DELETE("/:id", handler.DeleteExecutionHistory)
+			executionHistory.POST("/batch-delete", handler.BatchDeleteExecutionHistory)
+			executionHistory.POST("/export", handler.ExportExecutionHistory)
 		}
 	}
 }

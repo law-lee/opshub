@@ -115,6 +115,14 @@ class KubernetesPlugin implements Plugin {
         hidden: false,
         parentPath: parentPath,
       },
+      {
+        name: '应用诊断',
+        path: '/kubernetes/diagnosis',
+        icon: 'Cpu',
+        sort: 10,
+        hidden: false,
+        parentPath: parentPath,
+      },
     ]
   }
 
@@ -200,6 +208,12 @@ class KubernetesPlugin implements Plugin {
             name: 'K8sAudit',
             component: () => import('@/views/kubernetes/Audit.vue'),
             meta: { title: '终端审计' },
+          },
+          {
+            path: 'diagnosis',
+            name: 'K8sDiagnosis',
+            component: () => import('@/views/kubernetes/ApplicationDiagnosis.vue'),
+            meta: { title: '应用诊断' },
           },
         ],
     },

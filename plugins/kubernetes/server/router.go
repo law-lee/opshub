@@ -14,6 +14,7 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	resourceHandler := NewResourceHandler(clusterService, db)
 	roleHandler := NewRoleHandler(db)
 	roleBindingHandler := NewRoleBindingHandler(db)
+	arthasHandler := NewArthasHandler(clusterService, db)
 
 	clusters := router.Group("/kubernetes")
 	{
@@ -256,6 +257,38 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 		clusters.GET("/role-bindings/user-roles", roleBindingHandler.GetUserClusterRoles)
 		clusters.GET("/role-bindings/user-bindings", roleBindingHandler.GetUserRoleBindings)
 		clusters.GET("/role-bindings/credential-users", roleBindingHandler.GetClusterCredentialUsers)
+
+		// Arthas 应用诊断
+		arthas := clusters.Group("/arthas")
+		{
+			// 基础检测
+			arthas.GET("/java-processes", arthasHandler.ListJavaProcesses)
+			arthas.GET("/check", arthasHandler.CheckArthasInstalled)
+			arthas.POST("/install", arthasHandler.InstallArthas)
+
+			// 一次性命令
+			arthas.POST("/command", arthasHandler.ExecuteArthasCommand)
+			arthas.GET("/dashboard", arthasHandler.GetDashboard)
+			arthas.GET("/thread", arthasHandler.GetThreadList)
+			arthas.GET("/thread/stack", arthasHandler.GetThreadStack)
+			arthas.GET("/jvm", arthasHandler.GetJvmInfo)
+			arthas.GET("/sysenv", arthasHandler.GetSysEnv)
+			arthas.GET("/sysprop", arthasHandler.GetSysProp)
+			arthas.GET("/perfcounter", arthasHandler.GetPerfCounter)
+			arthas.GET("/memory", arthasHandler.GetMemory)
+
+			// 类和方法
+			arthas.GET("/jad", arthasHandler.DecompileClass)
+			arthas.GET("/getstatic", arthasHandler.GetStaticField)
+			arthas.GET("/sc", arthasHandler.SearchClass)
+			arthas.GET("/sm", arthasHandler.SearchMethod)
+
+			// 火焰图
+			arthas.GET("/profiler", arthasHandler.GenerateFlameGraph)
+
+			// WebSocket 实时命令（trace, watch, monitor等）
+			arthas.GET("/ws", arthasHandler.ArthasWebSocket)
+		}
 
 	}
 }

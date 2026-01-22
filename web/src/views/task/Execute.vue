@@ -104,8 +104,16 @@
             class="log-item"
             :class="log.status"
           >
-            <span class="log-time">{{ log.time }}</span>
-            <span class="log-message">{{ log.message }}</span>
+            <div class="log-header-line">
+              <span class="log-time">{{ log.time }}</span>
+              <span class="log-status-badge" :class="log.status">
+                {{ log.status === 'success' ? '成功' : log.status === 'error' ? '失败' : '信息' }}
+              </span>
+              <span class="log-host">{{ log.host || '' }}</span>
+            </div>
+            <div class="log-output">
+              <pre>{{ log.message }}</pre>
+            </div>
           </div>
         </div>
       </div>
@@ -202,29 +210,95 @@
         </el-button>
       </div>
       <el-table
-        :data="templates"
+        :data="filteredTemplates"
         @row-click="selectTemplate"
         highlight-current-row
+        v-loading="templatesLoading"
+        style="cursor: pointer;"
       >
         <el-table-column label="名称" prop="name" width="180" />
-        <el-table-column label="类型" prop="type" width="120">
+        <el-table-column label="类型" prop="category" width="120">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.type }}</el-tag>
+            <el-tag size="small">{{ row.category }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="内容" prop="content" show-overflow-tooltip />
-        <el-table-column label="备注" prop="remark" show-overflow-tooltip />
+        <el-table-column label="备注" prop="description" show-overflow-tooltip />
       </el-table>
       <template #footer>
         <el-button @click="showTemplateDialog = false">取消</el-button>
         <el-button type="primary" @click="confirmTemplateSelection">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 参数填写对话框 -->
+    <el-dialog
+      v-model="showParamDialog"
+      title="填写模板参数"
+      width="600px"
+      destroy-on-close
+    >
+      <div class="param-dialog-content">
+        <el-alert
+          type="info"
+          :closable="false"
+          style="margin-bottom: 20px;"
+        >
+          <template #title>
+            模板: <strong>{{ currentTemplate?.name }}</strong>
+          </template>
+        </el-alert>
+        <el-form label-width="120px">
+          <el-form-item
+            v-for="(param, index) in templateParams"
+            :key="index"
+            :label="param.name"
+            :required="param.required"
+          >
+            <el-input
+              v-if="param.type === 'text'"
+              v-model="paramValues[param.varName]"
+              :placeholder="param.helpText || `请输入${param.name}`"
+            />
+            <el-input
+              v-else-if="param.type === 'password'"
+              v-model="paramValues[param.varName]"
+              type="password"
+              show-password
+              :placeholder="param.helpText || `请输入${param.name}`"
+            />
+            <el-select
+              v-else-if="param.type === 'select'"
+              v-model="paramValues[param.varName]"
+              :placeholder="param.helpText || `请选择${param.name}`"
+              style="width: 100%;"
+            >
+              <el-option
+                v-for="opt in (param.options || [])"
+                :key="opt"
+                :label="opt"
+                :value="opt"
+              />
+            </el-select>
+            <el-input
+              v-else
+              v-model="paramValues[param.varName]"
+              :placeholder="param.helpText || `请输入${param.name}`"
+            />
+            <div v-if="param.helpText" class="param-help">{{ param.helpText }}</div>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="showParamDialog = false">取消</el-button>
+        <el-button type="primary" @click="applyTemplateWithParams">应用模板</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Plus,
@@ -237,7 +311,7 @@ import {
 } from '@element-plus/icons-vue'
 import { getGroupTree } from '@/api/assetGroup'
 import { getHostList } from '@/api/host'
-import { executeTask } from '@/api/task'
+import { executeTask, getAllJobTemplates } from '@/api/task'
 
 // 脚本类型
 const scriptType = ref('Shell')
@@ -283,6 +357,26 @@ const filteredHosts = computed(() => {
   return hosts
 })
 
+// 过滤后的模板列表
+const filteredTemplates = computed(() => {
+  let result = allTemplates.value
+
+  // 根据类型过滤
+  if (templateFilter.value.type) {
+    result = result.filter((template) => template.category === templateFilter.value.type)
+  }
+
+  // 根据名称过滤
+  if (templateFilter.value.name) {
+    const keyword = templateFilter.value.name.toLowerCase()
+    result = result.filter((template) =>
+      template.name.toLowerCase().includes(keyword)
+    )
+  }
+
+  return result
+})
+
 // 模板对话框
 const showTemplateDialog = ref(false)
 const templateFilter = ref({
@@ -291,17 +385,17 @@ const templateFilter = ref({
 })
 
 // 模板列表
-const templates = ref([
-  {
-    id: 1,
-    name: '获取内存使用情况',
-    type: '系统信息',
-    content: 'free -m',
-    remark: '',
-  },
-])
+const templates = ref<any[]>([])
+const allTemplates = ref<any[]>([])
+const templatesLoading = ref(false)
 
 const selectedTemplate = ref<any>(null)
+
+// 参数对话框
+const showParamDialog = ref(false)
+const currentTemplate = ref<any>(null)
+const templateParams = ref<any[]>([])
+const paramValues = ref<Record<string, string>>({})
 
 // 加载主机分组
 const loadHostGroups = async () => {
@@ -339,6 +433,30 @@ const loadHostList = async () => {
   }
 }
 
+// 加载模板列表
+const loadTemplates = async () => {
+  templatesLoading.value = true
+  try {
+    const response = await getAllJobTemplates()
+    if (Array.isArray(response)) {
+      allTemplates.value = response
+    } else if (response.list && Array.isArray(response.list)) {
+      allTemplates.value = response.list
+    } else if (response.data && Array.isArray(response.data)) {
+      allTemplates.value = response.data
+    } else {
+      allTemplates.value = []
+    }
+    console.log('加载模板列表成功，共', allTemplates.value.length, '条')
+  } catch (error) {
+    console.error('加载模板列表失败:', error)
+    allTemplates.value = []
+    ElMessage.error('加载模板列表失败')
+  } finally {
+    templatesLoading.value = false
+  }
+}
+
 // 分组点击
 const handleGroupClick = (data: any) => {
   selectedGroupId.value = data.id
@@ -368,10 +486,68 @@ const removeHost = (id: number) => {
 // 选择模板
 const selectTemplate = (row: any) => {
   selectedTemplate.value = row
+  showTemplateDialog.value = false
+
+  // 调试：打印模板数据
+  console.log('选择的模板数据:', row)
+  console.log('variables 字段:', row.variables)
+
+  // 解析模板参数
+  let params: any[] = []
+  if (row.variables && row.variables !== '[]') {
+    try {
+      params = JSON.parse(row.variables)
+      console.log('解析后的参数:', params)
+    } catch (e) {
+      console.error('解析参数失败:', e)
+      params = []
+    }
+  }
+
+  // 如果模板有参数，弹出参数填写对话框
+  if (params && params.length > 0) {
+    currentTemplate.value = row
+    templateParams.value = params
+    // 初始化参数值（使用默认值）
+    const values: Record<string, string> = {}
+    params.forEach((param: any) => {
+      values[param.varName] = param.defaultValue || ''
+    })
+    paramValues.value = values
+    showParamDialog.value = true
+  } else {
+    // 没有参数，直接应用模板
+    scriptContent.value = row.content
+    ElMessage.success('已应用模板: ' + row.name)
+  }
+}
+
+// 应用带参数的模板
+const applyTemplateWithParams = () => {
+  // 检查必填参数
+  for (const param of templateParams.value) {
+    if (param.required && !paramValues.value[param.varName]) {
+      ElMessage.warning(`请填写参数: ${param.name}`)
+      return
+    }
+  }
+
+  // 替换模板中的变量占位符
+  let content = currentTemplate.value.content
+  for (const [varName, value] of Object.entries(paramValues.value)) {
+    // 替换 {{变量名}} 格式的占位符
+    const regex = new RegExp(`\\{\\{${varName}\\}\\}`, 'g')
+    content = content.replace(regex, value)
+  }
+
+  scriptContent.value = content
+  showParamDialog.value = false
+  ElMessage.success('已应用模板: ' + currentTemplate.value.name)
 }
 
 // 刷新模板列表
-const refreshTemplates = () => {
+const refreshTemplates = async () => {
+  await loadTemplates()
   ElMessage.success('刷新成功')
 }
 
@@ -385,7 +561,7 @@ const confirmTemplateSelection = () => {
 }
 
 // 添加日志
-const addLog = (message: string, status: string = 'info') => {
+const addLog = (message: string, status: string = 'info', host: string = '') => {
   const now = new Date()
   const time = `${now.getHours().toString().padStart(2, '0')}:${now
     .getMinutes()
@@ -396,6 +572,7 @@ const addLog = (message: string, status: string = 'info') => {
     time,
     message,
     status,
+    host,
   })
 }
 
@@ -423,16 +600,11 @@ const handleExecute = async () => {
 
     // 处理执行结果
     response.results.forEach((result) => {
+      const hostInfo = `${result.hostName} (${result.hostIp})`
       if (result.status === 'success') {
-        addLog(
-          `✓ ${result.hostName} (${result.hostIp}) 执行成功\n${result.output}`,
-          'success'
-        )
+        addLog(result.output || '执行完成，无输出', 'success', hostInfo)
       } else {
-        addLog(
-          `✗ ${result.hostName} (${result.hostIp}) 执行失败: ${result.error}\n${result.output || ''}`,
-          'error'
-        )
+        addLog(`错误: ${result.error}\n${result.output || ''}`, 'error', hostInfo)
       }
     })
 
@@ -454,6 +626,13 @@ const handleExecute = async () => {
 onMounted(() => {
   loadHostGroups()
   loadHostList()
+})
+
+// 监听模板对话框打开，自动加载模板列表
+watch(showTemplateDialog, (newValue) => {
+  if (newValue) {
+    loadTemplates()
+  }
 })
 </script>
 
@@ -620,9 +799,11 @@ onMounted(() => {
 }
 
 .log-content {
-  max-height: 400px;
+  max-height: 500px;
   padding: 16px 20px;
   overflow-y: auto;
+  background: #1e1e1e;
+  border-radius: 0 0 8px 8px;
 
   .empty-log {
     text-align: center;
@@ -634,51 +815,83 @@ onMounted(() => {
 .log-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .log-item {
-  padding: 10px 12px;
-  border-radius: 4px;
-  border-left: 3px solid transparent;
-  display: flex;
-  gap: 12px;
-  font-size: 13px;
-
-  .log-time {
-    color: #909399;
-    flex-shrink: 0;
-    font-family: 'Courier New', monospace;
-    min-width: 70px;
-  }
-
-  .log-message {
-    color: #606266;
-    flex: 1;
-  }
-
-  &.info {
-    background: #ecf5ff;
-    border-left-color: #409eff;
-  }
+  background: #2d2d2d;
+  border-radius: 6px;
+  overflow: hidden;
+  border-left: 3px solid #909399;
 
   &.success {
-    background: #f0f9ff;
     border-left-color: #67c23a;
-
-    .log-message {
-      color: #67c23a;
-      font-weight: 500;
-    }
   }
 
   &.error {
-    background: #fef0f0;
     border-left-color: #f56c6c;
+  }
 
-    .log-message {
+  &.info {
+    border-left-color: #409eff;
+  }
+
+  .log-header-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #252525;
+    border-bottom: 1px solid #3a3a3a;
+  }
+
+  .log-time {
+    color: #888;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .log-status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+
+    &.success {
+      background: rgba(103, 194, 58, 0.2);
+      color: #67c23a;
+    }
+
+    &.error {
+      background: rgba(245, 108, 108, 0.2);
       color: #f56c6c;
-      font-weight: 500;
+    }
+
+    &.info {
+      background: rgba(64, 158, 255, 0.2);
+      color: #409eff;
+    }
+  }
+
+  .log-host {
+    color: #e6a23c;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 13px;
+  }
+
+  .log-output {
+    padding: 12px 14px;
+
+    pre {
+      margin: 0;
+      padding: 0;
+      font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #d4d4d4;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: transparent;
     }
   }
 }
@@ -725,5 +938,23 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 16px;
   gap: 12px;
+}
+
+// 模板表格行可点击样式
+:deep(.el-table__row) {
+  cursor: pointer;
+
+  &:hover {
+    background-color: #f5f7fa !important;
+  }
+}
+
+// 参数对话框样式
+.param-dialog-content {
+  .param-help {
+    font-size: 12px;
+    color: #909399;
+    margin-top: 4px;
+  }
 }
 </style>

@@ -8,36 +8,19 @@
         </div>
         <div>
           <h2 class="page-title">文件分发</h2>
-          <p class="page-subtitle">分发文件到多台主机，支持批量操作和断点续传</p>
+          <p class="page-subtitle">上传文件并分发到多台主机指定目录</p>
         </div>
       </div>
     </div>
 
-    <div class="distribution-main">
-      <!-- 数据源 -->
-      <div class="section-card">
-        <div class="section-header">
-          <span class="section-title">数据源</span>
-        </div>
-        <div class="section-content">
-          <div class="source-tabs">
-            <el-button
-              :type="sourceType === 'upload' ? 'primary' : ''"
-              @click="sourceType = 'upload'"
-            >
-              <el-icon style="margin-right: 6px;"><Upload /></el-icon>
-              上传本地文件
-            </el-button>
-            <el-button
-              :type="sourceType === 'host' ? 'primary' : ''"
-              @click="sourceType = 'host'"
-            >
-              <el-icon style="margin-right: 6px;"><Monitor /></el-icon>
-              添加主机文件
-            </el-button>
+    <div class="distribution-body">
+      <div class="distribution-main">
+        <!-- 上传文件 -->
+        <div class="section-card">
+          <div class="section-header">
+            <span class="section-title">上传文件</span>
           </div>
-
-          <div v-if="sourceType === 'upload'" class="source-content">
+          <div class="section-content">
             <el-upload
               ref="uploadRef"
               class="upload-area"
@@ -46,6 +29,7 @@
               :auto-upload="false"
               :on-change="handleFileChange"
               :file-list="fileList"
+              :show-file-list="false"
             >
               <div class="upload-content">
                 <el-icon class="upload-icon"><UploadFilled /></el-icon>
@@ -73,93 +57,90 @@
             </div>
 
             <div v-else class="empty-state">
-              暂无数据
-            </div>
-          </div>
-
-          <div v-if="sourceType === 'host'" class="source-content">
-            <el-empty description="暂未实现主机文件选择功能" :image-size="100" />
-          </div>
-        </div>
-      </div>
-
-      <!-- 分发目标 -->
-      <div class="section-card">
-        <div class="section-header">
-          <span class="section-title">分发目标</span>
-          <el-icon class="section-tip"><InfoFilled /></el-icon>
-        </div>
-        <div class="section-content">
-          <div class="form-item">
-            <label class="form-label">
-              <span class="required">*</span>
-              目标路径:
-            </label>
-            <el-input
-              v-model="targetPath"
-              placeholder="请输入目标路径"
-              clearable
-            />
-          </div>
-
-          <div class="form-item">
-            <label class="form-label">
-              <span class="required">*</span>
-              目标主机:
-            </label>
-            <el-button @click="showHostDialog = true">
-              <el-icon style="margin-right: 6px;"><Plus /></el-icon>
-              添加目标主机
-            </el-button>
-            <div v-if="selectedHosts.length > 0" class="selected-hosts">
-              <el-tag
-                v-for="host in selectedHosts"
-                :key="host.id"
-                closable
-                @close="removeHost(host.id)"
-                style="margin: 8px 8px 0 0;"
-              >
-                {{ host.name }} ({{ host.ip }})
-              </el-tag>
+              暂无上传文件
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 开始执行按钮 -->
-      <div class="execute-actions">
-        <el-button
-          type="primary"
-          size="large"
-          :loading="distributing"
-          @click="handleDistribute"
-          class="execute-button"
-        >
-          <el-icon style="margin-right: 6px;"><VideoPlay /></el-icon>
-          {{ distributing ? '分发中...' : '开始执行' }}
-        </el-button>
-      </div>
-    </div>
+        <!-- 分发目标 -->
+        <div class="section-card">
+          <div class="section-header">
+            <span class="section-title">分发目标</span>
+          </div>
+          <div class="section-content">
+            <div class="form-item">
+              <label class="form-label">
+                <span class="required">*</span>
+                目标路径:
+              </label>
+              <el-input
+                v-model="targetPath"
+                placeholder="请输入目标路径，如 /tmp 或 /home/user"
+                clearable
+              />
+            </div>
 
-    <!-- 分发记录 -->
-    <div class="distribution-log">
-      <div class="log-header">
-        <span>分发记录</span>
-        <el-icon><InfoFilled /></el-icon>
-      </div>
-      <div class="log-content">
-        <div v-if="distributionLogs.length === 0" class="empty-log">
-          暂无分发记录
+            <div class="form-item">
+              <label class="form-label">
+                <span class="required">*</span>
+                目标主机:
+              </label>
+              <el-button @click="showHostDialog = true">
+                <el-icon style="margin-right: 6px;"><Plus /></el-icon>
+                添加目标主机
+              </el-button>
+              <div v-if="selectedHosts.length > 0" class="selected-hosts">
+                <el-tag
+                  v-for="host in selectedHosts"
+                  :key="host.id"
+                  closable
+                  @close="removeHost(host.id)"
+                  style="margin: 8px 8px 0 0;"
+                >
+                  {{ host.name }} ({{ host.ip }})
+                </el-tag>
+              </div>
+            </div>
+          </div>
         </div>
-        <div v-else class="log-list">
-          <div
-            v-for="log in distributionLogs"
-            :key="log.id"
-            class="log-item"
-            :class="log.status"
+
+        <!-- 开始执行按钮 -->
+        <div class="execute-actions">
+          <el-button
+            size="large"
+            :loading="distributing"
+            :disabled="distributing"
+            @click="handleDistribute"
+            class="execute-button"
           >
-            <div class="log-time">{{ log.time }}</div>
-            <div class="log-message">{{ log.message }}</div>
+            <el-icon style="margin-right: 6px;"><VideoPlay /></el-icon>
+            {{ distributing ? '分发中...' : '开始执行' }}
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 分发记录 -->
+      <div class="distribution-log">
+        <div class="log-header">
+          <span>分发记录</span>
+          <el-button v-if="distributionLogs.length > 0" link size="small" @click="clearLogs">
+            清空
+          </el-button>
+        </div>
+        <div class="log-content">
+          <div v-if="distributionLogs.length === 0" class="empty-log">
+            暂无分发记录
+          </div>
+          <div v-else class="log-list">
+            <div
+              v-for="log in distributionLogs"
+              :key="log.id"
+              class="log-item"
+              :class="log.status"
+            >
+              <div class="log-time">{{ log.time }}</div>
+              <div class="log-message">{{ log.message }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -183,6 +164,7 @@
         </template>
       </el-input>
       <el-table
+        ref="hostTableRef"
         :data="filteredHosts"
         @selection-change="handleHostSelectionChange"
         height="400px"
@@ -209,12 +191,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Upload,
   UploadFilled,
-  Monitor,
   Document,
   Close,
-  InfoFilled,
   Plus,
   VideoPlay,
   Search,
@@ -222,9 +201,7 @@ import {
 } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { getHostList } from '@/api/host'
-
-// 数据源类型
-const sourceType = ref('upload')
+import { distributeFiles } from '@/api/task'
 
 // 文件列表
 const fileList = ref<UploadUserFile[]>([])
@@ -248,12 +225,12 @@ const hostSearchKeyword = ref('')
 const tempSelectedHosts = ref<any[]>([])
 const allHosts = ref<any[]>([])
 const hostsLoading = ref(false)
+const hostTableRef = ref()
 
 // 过滤后的主机列表
 const filteredHosts = computed(() => {
   let hosts = allHosts.value
 
-  // 按关键词过滤
   if (hostSearchKeyword.value) {
     const keyword = hostSearchKeyword.value.toLowerCase()
     hosts = hosts.filter(
@@ -282,8 +259,10 @@ const formatFileSize = (size: number) => {
     return size + ' B'
   } else if (size < 1024 * 1024) {
     return (size / 1024).toFixed(2) + ' KB'
-  } else {
+  } else if (size < 1024 * 1024 * 1024) {
     return (size / (1024 * 1024)).toFixed(2) + ' MB'
+  } else {
+    return (size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
   }
 }
 
@@ -304,7 +283,6 @@ const loadHostList = async () => {
       pageSize: 1000,
     }
     const response = await getHostList(params)
-    // 根据API返回格式调整
     if (Array.isArray(response)) {
       allHosts.value = response
     } else if (response.list && Array.isArray(response.list)) {
@@ -350,6 +328,11 @@ const addLog = (message: string, status: string = 'info') => {
   })
 }
 
+// 清空日志
+const clearLogs = () => {
+  distributionLogs.value = []
+}
+
 // 执行分发
 const handleDistribute = async () => {
   if (fileList.value.length === 0) {
@@ -366,19 +349,57 @@ const handleDistribute = async () => {
   }
 
   distributing.value = true
-  addLog(
-    `开始分发文件: ${fileList.value.map((f) => f.name).join(', ')}，目标主机: ${selectedHosts.value.length} 台`,
-    'info'
-  )
+  const fileNames = fileList.value.map((f) => f.name).join(', ')
+  addLog(`开始分发文件: ${fileNames}`, 'info')
+  addLog(`目标路径: ${targetPath.value}`, 'info')
+  addLog(`目标主机: ${selectedHosts.value.length} 台`, 'info')
 
   try {
-    // TODO: 调用文件分发API
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    addLog('文件分发成功', 'success')
-    ElMessage.success('文件分发成功')
+    // 构建FormData
+    const formData = new FormData()
+    fileList.value.forEach((file) => {
+      if (file.raw) {
+        formData.append('files', file.raw)
+      }
+    })
+    formData.append('targetPath', targetPath.value)
+    formData.append('hostIds', JSON.stringify(selectedHosts.value.map(h => h.id)))
+
+    const response = await distributeFiles(formData)
+
+    // 处理每个主机的分发结果
+    if (response.results && Array.isArray(response.results)) {
+      let successCount = 0
+      let failCount = 0
+
+      response.results.forEach((result: any) => {
+        if (result.status === 'success') {
+          successCount++
+          addLog(`${result.hostName}(${result.hostIp}): 分发成功`, 'success')
+        } else {
+          failCount++
+          addLog(`${result.hostName}(${result.hostIp}): ${result.error || '分发失败'}`, 'error')
+        }
+      })
+
+      if (failCount === 0) {
+        ElMessage.success(`文件分发完成，全部 ${successCount} 台主机成功`)
+        addLog(`分发完成，全部 ${successCount} 台主机成功`, 'success')
+      } else {
+        ElMessage.warning(`分发完成，成功 ${successCount} 台，失败 ${failCount} 台`)
+        addLog(`分发完成，成功 ${successCount} 台，失败 ${failCount} 台`, 'info')
+      }
+    } else {
+      addLog('文件分发完成', 'success')
+      ElMessage.success('文件分发完成')
+    }
+
+    // 清空文件列表
+    fileList.value = []
   } catch (error: any) {
-    addLog('文件分发失败: ' + error.message, 'error')
-    ElMessage.error('文件分发失败')
+    const errMsg = error.message || error.msg || '分发失败'
+    addLog('文件分发失败: ' + errMsg, 'error')
+    ElMessage.error('文件分发失败: ' + errMsg)
   } finally {
     distributing.value = false
   }
@@ -444,6 +465,13 @@ onMounted(() => {
   line-height: 20px;
 }
 
+.distribution-body {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  overflow: hidden;
+}
+
 .distribution-main {
   flex: 1;
   display: flex;
@@ -453,12 +481,14 @@ onMounted(() => {
 }
 
 .distribution-log {
-  width: 350px;
+  width: 400px;
+  min-width: 400px;
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .section-card {
@@ -479,105 +509,96 @@ onMounted(() => {
   .section-title {
     margin-right: 8px;
   }
+}
 
-  .section-tip {
-    color: #909399;
-    cursor: help;
+.upload-area {
+  :deep(.el-upload) {
+    width: 100%;
   }
-}
 
-.source-tabs {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
+  :deep(.el-upload-dragger) {
+    width: 100%;
+    padding: 40px;
+    border: 2px dashed #dcdfe6;
+    border-radius: 8px;
+    background: #fafafa;
+    transition: all 0.3s;
 
-.source-content {
-  .upload-area {
-    :deep(.el-upload) {
-      width: 100%;
-    }
-
-    :deep(.el-upload-dragger) {
-      width: 100%;
-      padding: 60px 40px;
-      border: 2px dashed #dcdfe6;
-      border-radius: 8px;
-      background: #fafafa;
-      transition: all 0.3s;
-
-      &:hover {
-        border-color: #409eff;
-        background: #f0f9ff;
-      }
-    }
-
-    .upload-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-
-      .upload-icon {
-        font-size: 64px;
-        color: #c0c4cc;
-      }
-
-      .upload-text {
-        text-align: center;
-
-        p {
-          margin: 0 0 8px 0;
-          font-size: 16px;
-          font-weight: 500;
-          color: #303133;
-        }
-
-        .upload-hint {
-          font-size: 13px;
-          color: #909399;
-        }
-      }
+    &:hover {
+      border-color: #409eff;
+      background: #f0f9ff;
     }
   }
 
-  .file-list {
-    margin-top: 16px;
+  .upload-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-  }
-
-  .file-item {
-    display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px;
-    background: #f5f7fa;
-    border-radius: 4px;
 
-    .file-icon {
-      font-size: 20px;
-      color: #409eff;
+    .upload-icon {
+      font-size: 48px;
+      color: #c0c4cc;
     }
 
-    .file-name {
-      flex: 1;
-      font-size: 14px;
-      color: #303133;
-    }
+    .upload-text {
+      text-align: center;
 
-    .file-size {
-      font-size: 12px;
-      color: #909399;
+      p {
+        margin: 0 0 4px 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: #303133;
+      }
+
+      .upload-hint {
+        font-size: 12px;
+        color: #909399;
+      }
     }
   }
+}
 
-  .empty-state {
-    text-align: center;
+.file-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+
+  .file-icon {
+    font-size: 20px;
+    color: #409eff;
+  }
+
+  .file-name {
+    flex: 1;
+    font-size: 14px;
+    color: #303133;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-size {
+    font-size: 12px;
     color: #909399;
-    padding: 40px 0;
+    flex-shrink: 0;
   }
+}
+
+.empty-state {
+  text-align: center;
+  color: #909399;
+  padding: 40px 0;
 }
 
 .form-item {
@@ -614,13 +635,30 @@ onMounted(() => {
 }
 
 .execute-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #000;
   border: none;
   padding: 12px 40px;
   font-size: 16px;
+  color: #fff;
 
   &:hover {
-    background: linear-gradient(135deg, #7e8ef5 0%, #8d5cb8 100%);
+    background: #1a1a1a;
+    color: #fff;
+  }
+
+  &:focus {
+    background: #000;
+    color: #fff;
+  }
+
+  &:active {
+    background: #333;
+    color: #fff;
+  }
+
+  &.is-disabled {
+    background: #c0c4cc;
+    color: #fff;
   }
 }
 
@@ -634,6 +672,7 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+  flex-shrink: 0;
 }
 
 .log-content {
@@ -669,6 +708,7 @@ onMounted(() => {
   .log-message {
     font-size: 13px;
     color: #606266;
+    word-break: break-all;
   }
 
   &.info {
@@ -677,7 +717,7 @@ onMounted(() => {
   }
 
   &.success {
-    background: #f0f9ff;
+    background: #f0f9eb;
     border-left-color: #67c23a;
 
     .log-message {

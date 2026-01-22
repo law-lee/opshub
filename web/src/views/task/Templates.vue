@@ -49,9 +49,9 @@
       <el-table :data="templates" v-loading="loading">
         <el-table-column type="index" label="序号" width="80" align="center" />
         <el-table-column label="模板名称" prop="name" min-width="200" />
-        <el-table-column label="模板类型" prop="type" width="120" align="center">
+        <el-table-column label="模板类型" prop="category" width="120" align="center">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.type }}</el-tag>
+            <el-tag size="small">{{ getCategoryLabel(row.category) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="模板内容" prop="content" min-width="300" show-overflow-tooltip />
@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus,
@@ -237,6 +237,7 @@ import {
   Document,
   QuestionFilled
 } from '@element-plus/icons-vue'
+import { getJobTemplateList, createJobTemplate, updateJobTemplate } from '@/api/task'
 
 // 搜索表单
 const searchForm = ref({
@@ -262,28 +263,27 @@ const templateTypes = ref([
   { label: '备份', value: 'backup' },
 ])
 
+// 获取类型标签
+const getCategoryLabel = (category: string) => {
+  const found = templateTypes.value.find(t => t.value === category)
+  return found ? found.label : category
+}
+
 // 模板列表
-const templates = ref([
-  {
-    id: 1,
-    name: '获取内存使用情况',
-    type: '系统信息',
-    content: 'free -m',
-    description: '',
-  },
-])
+const templates = ref<any[]>([])
 
 // 模板对话框
 const showTemplateDialog = ref(false)
 const isEdit = ref(false)
 const templateForm = ref({
   id: 0,
-  type: '',
+  type: '',        // 对应后端的 category
   name: '',
+  code: '',        // 后端唯一标识
   scriptType: 'Shell',
   content: '',
   parameters: [] as any[],
-  remark: '',
+  remark: '',      // 对应后端的 description
 })
 
 // 参数对话框
@@ -308,10 +308,32 @@ const newTypeForm = ref({
 const loadTemplates = async () => {
   loading.value = true
   try {
-    // TODO: 调用API加载模板列表
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    const params = {
+      page: pagination.value.page,
+      pageSize: pagination.value.pageSize,
+      keyword: searchForm.value.name || undefined,
+      category: searchForm.value.type || undefined,
+    }
+    const response = await getJobTemplateList(params)
+    // 处理不同的响应格式
+    if (Array.isArray(response)) {
+      templates.value = response
+      pagination.value.total = response.length
+    } else if (response.list && Array.isArray(response.list)) {
+      templates.value = response.list
+      pagination.value.total = response.total || response.list.length
+    } else if (response.data && Array.isArray(response.data)) {
+      templates.value = response.data
+      pagination.value.total = response.total || response.data.length
+    } else {
+      templates.value = []
+      pagination.value.total = 0
+    }
+    console.log('加载模板列表成功，共', templates.value.length, '条')
   } catch (error) {
+    console.error('加载模板列表失败:', error)
     ElMessage.error('加载模板列表失败')
+    templates.value = []
   } finally {
     loading.value = false
   }
@@ -324,6 +346,7 @@ const handleCreate = () => {
     id: 0,
     type: '',
     name: '',
+    code: '',
     scriptType: 'Shell',
     content: '',
     parameters: [],
@@ -335,9 +358,24 @@ const handleCreate = () => {
 // 编辑模板
 const handleEdit = (row: any) => {
   isEdit.value = true
-  templateForm.value = { ...row }
-  if (!templateForm.value.parameters) {
-    templateForm.value.parameters = []
+  // 将后端字段映射到表单字段
+  let parameters: any[] = []
+  if (row.variables) {
+    try {
+      parameters = JSON.parse(row.variables)
+    } catch {
+      parameters = []
+    }
+  }
+  templateForm.value = {
+    id: row.id,
+    type: row.category,        // category -> type
+    name: row.name,
+    code: row.code,
+    scriptType: 'Shell',
+    content: row.content,
+    parameters: parameters,
+    remark: row.description || '',  // description -> remark
   }
   showTemplateDialog.value = true
 }
@@ -373,27 +411,34 @@ const handleSaveTemplate = async () => {
   }
 
   try {
-    // TODO: 调用API保存模板
+    // 构建API请求数据
+    const requestData = {
+      name: templateForm.value.name,
+      code: templateForm.value.code || `TPL_${Date.now()}`, // 自动生成唯一code
+      description: templateForm.value.remark || '',
+      content: templateForm.value.content,
+      category: templateForm.value.type,
+      platform: 'linux',
+      timeout: 300,
+      variables: templateForm.value.parameters.length > 0
+        ? JSON.stringify(templateForm.value.parameters)
+        : '',
+    }
+
     if (isEdit.value) {
-      // 编辑模式：更新列表中的模板
-      const index = templates.value.findIndex(t => t.id === templateForm.value.id)
-      if (index !== -1) {
-        templates.value[index] = { ...templateForm.value }
-      }
+      // 编辑模式
+      await updateJobTemplate(templateForm.value.id, requestData)
       ElMessage.success('编辑成功')
     } else {
-      // 新建模式：添加到列表
-      const newTemplate = {
-        ...templateForm.value,
-        id: Date.now(), // 临时ID
-        description: templateForm.value.remark || '',
-      }
-      templates.value.unshift(newTemplate)
-      pagination.value.total = templates.value.length
+      // 新建模式
+      await createJobTemplate(requestData)
       ElMessage.success('创建成功')
     }
     showTemplateDialog.value = false
+    // 重新加载列表
+    await loadTemplates()
   } catch (error: any) {
+    console.error('保存模板失败:', error)
     ElMessage.error(error.message || '保存失败')
   }
 }

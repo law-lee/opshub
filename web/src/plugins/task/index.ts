@@ -64,6 +64,14 @@ class TaskPlugin implements Plugin {
         hidden: false,
         parentPath: parentPath,
       },
+      {
+        name: '执行记录',
+        path: '/task/execution-history',
+        icon: 'Notebook',
+        sort: 4,
+        hidden: false,
+        parentPath: parentPath,
+      },
     ]
   }
 
@@ -95,6 +103,12 @@ class TaskPlugin implements Plugin {
             name: 'TaskFileDistribution',
             component: () => import('@/views/task/FileDistribution.vue'),
             meta: { title: '文件分发' },
+          },
+          {
+            path: 'execution-history',
+            name: 'TaskExecutionHistory',
+            component: () => import('@/views/task/ExecutionHistory.vue'),
+            meta: { title: '执行记录' },
           },
         ],
       },
