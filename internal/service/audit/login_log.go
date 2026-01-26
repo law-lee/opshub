@@ -56,6 +56,21 @@ func toLoginLogListResponse(log *audit.SysLoginLog) LoginLogListResponse {
 }
 
 // ListLoginLogs 登录日志列表
+// @Summary 获取登录日志列表
+// @Description 分页获取系统登录日志，支持按用户名、登录类型、登录状态和时间范围筛选
+// @Tags 审计管理-登录日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param username query string false "用户名"
+// @Param loginType query string false "登录类型"
+// @Param loginStatus query string false "登录状态"
+// @Param startTime query string false "开始时间"
+// @Param endTime query string false "结束时间"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /audit/login-logs [get]
 func (s *LoginLogService) ListLoginLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -85,6 +100,16 @@ func (s *LoginLogService) ListLoginLogs(c *gin.Context) {
 }
 
 // GetLoginLog 获取登录日志详情
+// @Summary 获取登录日志详情
+// @Description 获取单条登录日志的详细信息
+// @Tags 审计管理-登录日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "登录日志ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "日志不存在"
+// @Router /audit/login-logs/{id} [get]
 func (s *LoginLogService) GetLoginLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -103,6 +128,16 @@ func (s *LoginLogService) GetLoginLog(c *gin.Context) {
 }
 
 // DeleteLoginLog 删除登录日志
+// @Summary 删除登录日志
+// @Description 删除指定的登录日志记录
+// @Tags 审计管理-登录日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "登录日志ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /audit/login-logs/{id} [delete]
 func (s *LoginLogService) DeleteLoginLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -120,6 +155,16 @@ func (s *LoginLogService) DeleteLoginLog(c *gin.Context) {
 }
 
 // DeleteLoginLogsBatch 批量删除登录日志
+// @Summary 批量删除登录日志
+// @Description 批量删除多条登录日志记录
+// @Tags 审计管理-登录日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "日志ID列表" example({"ids": [1, 2, 3]})
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /audit/login-logs/batch [delete]
 func (s *LoginLogService) DeleteLoginLogsBatch(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`

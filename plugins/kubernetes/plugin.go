@@ -41,7 +41,7 @@ func (p *Plugin) Version() string {
 
 // Author 返回插件作者
 func (p *Plugin) Author() string {
-	return "OpsHub Team"
+	return "J"
 }
 
 // Enable 启用插件
@@ -54,6 +54,7 @@ func (p *Plugin) Enable(db *gorm.DB) error {
 		&model.K8sUserRoleBinding{},
 		&model.UserKubeConfig{},
 		&model.TerminalSession{},
+		&model.ClusterInspection{},
 	}
 
 	for _, m := range models {
@@ -94,6 +95,22 @@ func (p *Plugin) GetMenus() []plugin.MenuConfig {
 			Path:      "/kubernetes/clusters",
 			Icon:      "Connection",
 			Sort:      101,
+			Hidden:    false,
+			ParentPath: "/kubernetes",
+		},
+		{
+			Name:      "应用诊断",
+			Path:      "/kubernetes/application-diagnosis",
+			Icon:      "Grid",
+			Sort:      102,
+			Hidden:    false,
+			ParentPath: "/kubernetes",
+		},
+		{
+			Name:      "集群巡检",
+			Path:      "/kubernetes/cluster-inspection",
+			Icon:      "Grid",
+			Sort:      103,
 			Hidden:    false,
 			ParentPath: "/kubernetes",
 		},

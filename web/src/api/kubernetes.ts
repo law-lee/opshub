@@ -878,10 +878,31 @@ export function createService(clusterId: number, namespace: string, data: {
  * 创建服务 (从 YAML)
  */
 export function createServiceYAML(clusterId: number, namespace: string, data: any) {
+  // 从 YAML 对象转换为 CreateServiceRequest 格式
+  const spec = data.spec || {}
+  const metadata = data.metadata || {}
+
+  const convertedData = {
+    clusterId,
+    namespace: metadata.namespace || namespace,
+    name: metadata.name,
+    type: spec.type || 'ClusterIP',
+    clusterIP: spec.clusterIP,
+    ports: (spec.ports || []).map((port: any) => ({
+      name: port.name || '',
+      protocol: port.protocol || 'TCP',
+      port: port.port,
+      targetPort: port.targetPort ? String(port.targetPort) : '',
+      nodePort: port.nodePort || 0
+    })),
+    selector: spec.selector || {},
+    sessionAffinity: spec.sessionAffinity || ''
+  }
+
   return request({
     url: `/api/v1/plugins/kubernetes/resources/services/${namespace}/yaml`,
     method: 'post',
-    data: { clusterId, ...data }
+    data: convertedData
   })
 }
 
@@ -987,10 +1008,34 @@ export function createIngress(clusterId: number, namespace: string, data: {
  * 创建 Ingress (从 YAML)
  */
 export function createIngressYAML(clusterId: number, namespace: string, data: any) {
+  // 从 YAML 对象转换为 CreateIngressRequest 格式
+  const spec = data.spec || {}
+  const metadata = data.metadata || {}
+
+  const convertedData = {
+    clusterId,
+    namespace: metadata.namespace || namespace,
+    name: metadata.name,
+    ingressClass: spec.ingressClassName || spec.ingressClass || '',
+    rules: (spec.rules || []).map((rule: any) => ({
+      host: rule.host || '',
+      paths: (rule.http?.paths || []).map((path: any) => ({
+        path: path.path || '',
+        pathType: path.pathType || 'Prefix',
+        service: path.backend?.service?.name || '',
+        port: path.backend?.service?.port?.number || 0
+      }))
+    })),
+    tls: (spec.tls || []).map((tls: any) => ({
+      hosts: tls.hosts || [],
+      secretName: tls.secretName || ''
+    }))
+  }
+
   return request({
     url: `/api/v1/plugins/kubernetes/resources/ingresses/${namespace}/yaml`,
     method: 'post',
-    data: { clusterId, ...data }
+    data: convertedData
   })
 }
 
@@ -1217,10 +1262,52 @@ export function createNetworkPolicy(clusterId: number, namespace: string, data: 
  * 创建网络策略 (从 YAML)
  */
 export function createNetworkPolicyYAML(clusterId: number, namespace: string, data: any) {
+  // 从 YAML 对象转换为 CreateNetworkPolicyRequest 格式
+  const spec = data.spec || {}
+
+  const convertedData = {
+    clusterId,
+    namespace: namespace,
+    podSelector: spec.podSelector || {},
+    policyTypes: spec.policyTypes || [],
+    ingress: (spec.ingress || []).map((rule: any) => ({
+      ports: (rule.ports || []).map((port: any) => ({
+        protocol: port.protocol || '',
+        port: port.port || null,
+        endPort: port.endPort || null,
+        namedPort: port.name || ''
+      })),
+      from: (rule.from || []).map((peer: any) => ({
+        podSelector: peer.podSelector || {},
+        namespaceSelector: peer.namespaceSelector || {},
+        ipBlock: peer.ipBlock ? {
+          cidr: peer.ipBlock.cidr || '',
+          except: peer.ipBlock.except || []
+        } : null
+      }))
+    })),
+    egress: (spec.egress || []).map((rule: any) => ({
+      ports: (rule.ports || []).map((port: any) => ({
+        protocol: port.protocol || '',
+        port: port.port || null,
+        endPort: port.endPort || null,
+        namedPort: port.name || ''
+      })),
+      to: (rule.to || []).map((peer: any) => ({
+        podSelector: peer.podSelector || {},
+        namespaceSelector: peer.namespaceSelector || {},
+        ipBlock: peer.ipBlock ? {
+          cidr: peer.ipBlock.cidr || '',
+          except: peer.ipBlock.except || []
+        } : null
+      }))
+    }))
+  }
+
   return request({
     url: `/api/v1/plugins/kubernetes/resources/networkpolicies/${namespace}/yaml`,
     method: 'post',
-    data: { clusterId, ...data }
+    data: convertedData
   })
 }
 

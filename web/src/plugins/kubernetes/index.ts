@@ -9,7 +9,7 @@ class KubernetesPlugin implements Plugin {
   name = 'kubernetes'
   description = 'Kubernetes容器管理平台,提供集群管理、节点管理、工作负载、命名空间等完整功能'
   version = '1.0.0'
-  author = 'OpsHub Team'
+  author = 'J'
 
   /**
    * 安装插件
@@ -115,9 +115,17 @@ class KubernetesPlugin implements Plugin {
       },
       {
         name: '应用诊断',
-        path: '/kubernetes/diagnosis',
+        path: '/kubernetes/application-diagnosis',
         icon: 'Cpu',
         sort: 10,
+        hidden: false,
+        parentPath: parentPath,
+      },
+      {
+        name: '集群巡检',
+        path: '/kubernetes/cluster-inspection',
+        icon: 'DocumentChecked',
+        sort: 11,
         hidden: false,
         parentPath: parentPath,
       },
@@ -208,10 +216,16 @@ class KubernetesPlugin implements Plugin {
             meta: { title: '终端审计' },
           },
           {
-            path: 'diagnosis',
-            name: 'K8sDiagnosis',
+            path: 'application-diagnosis',
+            name: 'K8sApplicationDiagnosis',
             component: () => import('@/views/kubernetes/ApplicationDiagnosis.vue'),
             meta: { title: '应用诊断' },
+          },
+          {
+            path: 'cluster-inspection',
+            name: 'K8sClusterInspection',
+            component: () => import('@/views/kubernetes/ClusterInspection.vue'),
+            meta: { title: '集群巡检' },
           },
         ],
     },

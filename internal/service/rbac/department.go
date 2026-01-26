@@ -20,6 +20,16 @@ func NewDepartmentService(deptUseCase *rbac.DepartmentUseCase) *DepartmentServic
 }
 
 // CreateDepartment 创建部门
+// @Summary 创建部门
+// @Description 管理员创建新部门
+// @Tags 部门管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body rbac.DepartmentRequest true "部门信息"
+// @Success 200 {object} response.Response "创建成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /departments [post]
 func (s *DepartmentService) CreateDepartment(c *gin.Context) {
 	var req rbac.DepartmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -37,6 +47,17 @@ func (s *DepartmentService) CreateDepartment(c *gin.Context) {
 }
 
 // UpdateDepartment 更新部门
+// @Summary 更新部门
+// @Description 管理员更新部门信息
+// @Tags 部门管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "部门ID"
+// @Param body body rbac.DepartmentRequest true "部门信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /departments/{id} [put]
 func (s *DepartmentService) UpdateDepartment(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -62,6 +83,16 @@ func (s *DepartmentService) UpdateDepartment(c *gin.Context) {
 }
 
 // DeleteDepartment 删除部门
+// @Summary 删除部门
+// @Description 管理员删除部门
+// @Tags 部门管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "部门ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /departments/{id} [delete]
 func (s *DepartmentService) DeleteDepartment(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -79,6 +110,16 @@ func (s *DepartmentService) DeleteDepartment(c *gin.Context) {
 }
 
 // GetDepartment 获取部门详情
+// @Summary 获取部门详情
+// @Description 获取单个部门的详细信息
+// @Tags 部门管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "部门ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "部门不存在"
+// @Router /departments/{id} [get]
 func (s *DepartmentService) GetDepartment(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -97,6 +138,14 @@ func (s *DepartmentService) GetDepartment(c *gin.Context) {
 }
 
 // GetDepartmentTree 获取部门树
+// @Summary 获取部门树
+// @Description 获取部门树形结构数据
+// @Tags 部门管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} response.Response "获取成功"
+// @Router /departments/tree [get]
 func (s *DepartmentService) GetDepartmentTree(c *gin.Context) {
 	tree, err := s.deptUseCase.GetTree(c.Request.Context())
 	if err != nil {
@@ -114,6 +163,14 @@ func (s *DepartmentService) GetDepartmentTree(c *gin.Context) {
 }
 
 // GetParentOptions 获取父级部门选项
+// @Summary 获取父级部门选项
+// @Description 获取可选的父级部门列表
+// @Tags 部门管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} response.Response "获取成功"
+// @Router /departments/parent-options [get]
 func (s *DepartmentService) GetParentOptions(c *gin.Context) {
 	options, err := s.deptUseCase.GetParentOptions(c.Request.Context())
 	if err != nil {

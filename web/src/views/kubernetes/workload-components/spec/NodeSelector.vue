@@ -139,11 +139,6 @@ const localSpecifiedNode = ref(props.formData.specifiedNode || '')
 
 // 监听 props 变化
 watch(() => props.formData, (newData) => {
-    schedulingType: newData.schedulingType,
-    specifiedNode: newData.specifiedNode,
-    matchRules: newData.matchRules,
-    matchRulesLength: newData.matchRules?.length || 0
-  })
   localSchedulingType.value = newData.schedulingType || 'any'
   localSpecifiedNode.value = newData.specifiedNode || ''
 }, { immediate: true, deep: true })
@@ -158,10 +153,6 @@ const handleSchedulingTypeChange = async (newType: string) => {
 
   // 等待 DOM 更新后再 emit
   await nextTick()
-
-    schedulingType: newType,
-    specifiedNode: localSpecifiedNode.value
-  })
 
   // 通知父组件更新
   emit('update', {

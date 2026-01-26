@@ -228,12 +228,6 @@ const loadFiles = async () => {
   loading.value = true
   try {
     const token = localStorage.getItem('token')
-      clusterId: props.clusterId,
-      namespace: props.namespace,
-      podName: props.podName,
-      containerName: props.containerName,
-      path: currentPath.value
-    })
 
     const response = await axios.get('/api/v1/plugins/kubernetes/pods/files', {
       params: {
@@ -389,11 +383,6 @@ const handleClose = () => {
 
 // 监听 visible 变化，加载数据
 watch(() => props.visible, (newVal) => {
-    clusterId: props.clusterId,
-    namespace: props.namespace,
-    podName: props.podName,
-    containerName: props.containerName
-  })
   if (newVal) {
     if (!props.clusterId) {
       ElMessage.error('集群ID未设置')

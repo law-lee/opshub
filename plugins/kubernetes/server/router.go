@@ -15,6 +15,7 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	roleHandler := NewRoleHandler(db)
 	roleBindingHandler := NewRoleBindingHandler(db)
 	arthasHandler := NewArthasHandler(clusterService, db)
+	inspectionHandler := NewInspectionHandler(clusterService, db)
 
 	clusters := router.Group("/kubernetes")
 	{
@@ -288,6 +289,17 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 
 			// WebSocket 实时命令（trace, watch, monitor等）
 			arthas.GET("/ws", arthasHandler.ArthasWebSocket)
+		}
+
+		// 集群巡检
+		inspection := clusters.Group("/inspection")
+		{
+			inspection.POST("/start", inspectionHandler.StartInspection)
+			inspection.GET("/progress/:inspectionId", inspectionHandler.GetInspectionProgress)
+			inspection.GET("/result/:inspectionId", inspectionHandler.GetInspectionResult)
+			inspection.GET("/history", inspectionHandler.GetInspectionHistory)
+			inspection.DELETE("/:inspectionId", inspectionHandler.DeleteInspection)
+			inspection.GET("/export/:inspectionId", inspectionHandler.ExportInspection)
 		}
 
 	}

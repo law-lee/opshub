@@ -23,6 +23,17 @@ func NewTerminalAuditHandler(db *gorm.DB) *TerminalAuditHandler {
 }
 
 // ListTerminalSessions 获取终端会话列表
+// @Summary 获取终端会话列表
+// @Description 分页获取终端审计会话列表，支持搜索
+// @Tags 终端审计
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键字"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /terminal-sessions [get]
 func (h *TerminalAuditHandler) ListTerminalSessions(c *gin.Context) {
 	// 获取分页参数
 	pageStr := c.DefaultQuery("page", "1")
@@ -94,6 +105,16 @@ func (h *TerminalAuditHandler) ListTerminalSessions(c *gin.Context) {
 }
 
 // PlayTerminalSession 播放终端会话录制
+// @Summary 播放终端会话
+// @Description 获取终端会话的录制文件内容用于回放
+// @Tags 终端审计
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "会话ID"
+// @Success 200 {string} string "录制文件内容"
+// @Failure 404 {object} response.Response "会话不存在"
+// @Router /terminal-sessions/{id}/play [get]
 func (h *TerminalAuditHandler) PlayTerminalSession(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -126,6 +147,16 @@ func (h *TerminalAuditHandler) PlayTerminalSession(c *gin.Context) {
 }
 
 // DeleteTerminalSession 删除终端会话
+// @Summary 删除终端会话
+// @Description 删除指定的终端会话记录及其录制文件
+// @Tags 终端审计
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "会话ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 404 {object} response.Response "会话不存在"
+// @Router /terminal-sessions/{id} [delete]
 func (h *TerminalAuditHandler) DeleteTerminalSession(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)

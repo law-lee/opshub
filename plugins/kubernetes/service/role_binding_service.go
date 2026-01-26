@@ -341,7 +341,7 @@ func (s *RoleBindingService) GetClusterCredentialUsers(ctx context.Context, clus
 			continue
 		}
 
-		// 解析格式: opshub-{username}
+		// 解析格式: opshub-{username}-{suffix} 或 opshub-{username}
 		parts := strings.SplitN(saName, "-", 2)
 		if len(parts) != 2 {
 			continue
@@ -366,17 +366,24 @@ func (s *RoleBindingService) GetClusterCredentialUsers(ctx context.Context, clus
 			continue
 		}
 
-		// 获取用户在该集群的凭据记录
+		// 获取用户在该集群的凭据记录 - 必须是激活状态且未被吊销
 		var kubeConfig model.UserKubeConfig
-		err = s.db.Where("cluster_id = ? AND user_id = ? AND service_account = ?", clusterID, user.ID, saName).
+		err = s.db.Where("cluster_id = ? AND user_id = ? AND service_account = ? AND is_active = 1 AND revoked_at IS NULL",
+			clusterID, user.ID, saName).
 			First(&kubeConfig).Error
 
-		// 如果没有凭据记录，也显示（可能是直接在K8s中创建的）
-		createdAt := sa.CreationTimestamp.Format("2006-01-02 15:04:05")
-		if err == nil {
-			// 如果有记录，使用数据库中的创建时间
-			createdAt = kubeConfig.CreatedAt.Format("2006-01-02 15:04:05")
+		// 如果没有找到激活的凭据记录，则不显示此ServiceAccount
+		// 这确保了已吊销的凭据即使在Kubernetes中仍然存在也不会显示
+		if err != nil {
+			// 如果数据库中没有激活的凭据记录，说明：
+			// 1. 凭据已被吊销 (is_active=0 或 revoked_at != null)
+			// 2. 或者是直接在K8s中创建的无跟踪凭据
+			// 为了安全起见，只显示数据库中有记录的凭据
+			continue
 		}
+
+		// 使用数据库中的创建时间
+		createdAt := kubeConfig.CreatedAt.Format("2006-01-02 15:04:05")
 
 		credentialUsers = append(credentialUsers, map[string]interface{}{
 			"username":       username,      // 平台用户名

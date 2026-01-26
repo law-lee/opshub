@@ -53,6 +53,21 @@ func toDataLogListResponse(log *audit.SysDataLog) DataLogListResponse {
 }
 
 // ListDataLogs 数据日志列表
+// @Summary 获取数据日志列表
+// @Description 分页获取数据变更日志，支持按用户名、表名、操作类型和时间范围筛选
+// @Tags 审计管理-数据日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param username query string false "用户名"
+// @Param tableName query string false "表名"
+// @Param action query string false "操作类型"
+// @Param startTime query string false "开始时间"
+// @Param endTime query string false "结束时间"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /audit/data-logs [get]
 func (s *DataLogService) ListDataLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -82,6 +97,16 @@ func (s *DataLogService) ListDataLogs(c *gin.Context) {
 }
 
 // GetDataLog 获取数据日志详情
+// @Summary 获取数据日志详情
+// @Description 获取单条数据变更日志的详细信息
+// @Tags 审计管理-数据日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "数据日志ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "日志不存在"
+// @Router /audit/data-logs/{id} [get]
 func (s *DataLogService) GetDataLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -100,6 +125,16 @@ func (s *DataLogService) GetDataLog(c *gin.Context) {
 }
 
 // DeleteDataLog 删除数据日志
+// @Summary 删除数据日志
+// @Description 删除指定的数据变更日志记录
+// @Tags 审计管理-数据日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "数据日志ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /audit/data-logs/{id} [delete]
 func (s *DataLogService) DeleteDataLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -117,6 +152,16 @@ func (s *DataLogService) DeleteDataLog(c *gin.Context) {
 }
 
 // DeleteDataLogsBatch 批量删除数据日志
+// @Summary 批量删除数据日志
+// @Description 批量删除多条数据变更日志记录
+// @Tags 审计管理-数据日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "日志ID列表" example({"ids": [1, 2, 3]})
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /audit/data-logs/batch [delete]
 func (s *DataLogService) DeleteDataLogsBatch(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`

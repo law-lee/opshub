@@ -420,368 +420,135 @@ import '@/plugins/{plugin-name}'
 
 ## 五、Test 插件完整开发示例
 
-下面以一个完整的 `test` 插件为例，演示插件开发的全流程。该插件实现一个简单的"测试项"管理功能。
+下面以实际的 `test` 插件为例，演示一个简单的插件开发流程。该插件展示插件安装成功后的欢迎页面。
 
 ### 5.1 功能设计
 
-- **功能**：测试项的增删改查
-- **数据模型**：TestItem（名称、描述、状态）
-- **API 接口**：
-  - `GET /api/v1/plugins/test/items` - 获取列表
-  - `GET /api/v1/plugins/test/items/:id` - 获取详情
-  - `POST /api/v1/plugins/test/items` - 创建
-  - `PUT /api/v1/plugins/test/items/:id` - 更新
-  - `DELETE /api/v1/plugins/test/items/:id` - 删除
+- **功能**：显示插件信息和测试交互功能
+- **后端 API**：
+  - `GET /api/v1/plugins/test/hello` - 测试接口
+  - `GET /api/v1/plugins/test/info` - 获取插件信息
+- **前端页面**：插件欢迎页面（展示插件信息、测试功能）
 
 ### 5.2 后端代码
 
-#### 5.2.1 数据模型
-
-```go
-// plugins/test/model/test_item.go
-package model
-
-import "time"
-
-type TestItem struct {
-    ID          uint      `gorm:"primaryKey" json:"id"`
-    Name        string    `gorm:"size:100;not null;index" json:"name"`
-    Description string    `gorm:"size:500" json:"description"`
-    Status      int       `gorm:"default:1;comment:1-启用 0-禁用" json:"status"`
-    CreatedBy   string    `gorm:"size:50" json:"createdBy"`
-    CreatedAt   time.Time `json:"createdAt"`
-    UpdatedAt   time.Time `json:"updatedAt"`
-}
-
-func (TestItem) TableName() string {
-    return "test_items"
-}
-
-// 请求和响应结构
-type CreateTestItemRequest struct {
-    Name        string `json:"name" binding:"required,max=100"`
-    Description string `json:"description" binding:"max=500"`
-    Status      int    `json:"status"`
-}
-
-type UpdateTestItemRequest struct {
-    Name        string `json:"name" binding:"max=100"`
-    Description string `json:"description" binding:"max=500"`
-    Status      *int   `json:"status"`
-}
-
-type ListTestItemRequest struct {
-    Page     int    `form:"page" binding:"min=1"`
-    PageSize int    `form:"pageSize" binding:"min=1,max=100"`
-    Name     string `form:"name"`
-    Status   *int   `form:"status"`
-}
-```
-
-#### 5.2.2 插件主文件
+#### 5.2.1 插件主文件
 
 ```go
 // plugins/test/plugin.go
 package test
 
 import (
-    "github.com/gin-gonic/gin"
-    "github.com/ydcloud-dy/opshub/internal/plugin"
-    "github.com/ydcloud-dy/opshub/plugins/test/model"
-    "github.com/ydcloud-dy/opshub/plugins/test/server"
-    "gorm.io/gorm"
+	"github.com/gin-gonic/gin"
+	"github.com/ydcloud-dy/opshub/internal/plugin"
+	"gorm.io/gorm"
 )
 
-type Plugin struct {
-    db *gorm.DB
+// TestPlugin 测试插件
+type TestPlugin struct{}
+
+// New 创建测试插件实例
+func New() plugin.Plugin {
+	return &TestPlugin{}
 }
 
-func New() *Plugin {
-    return &Plugin{}
+// Name 插件名称
+func (p *TestPlugin) Name() string {
+	return "test"
 }
 
-func (p *Plugin) Name() string {
-    return "test"
+// Description 插件描述
+func (p *TestPlugin) Description() string {
+	return "这是一个简单的测试插件，用于测试插件安装功能"
 }
 
-func (p *Plugin) Description() string {
-    return "测试插件 - 用于演示插件开发流程"
+// Version 插件版本
+func (p *TestPlugin) Version() string {
+	return "1.0.0"
 }
 
-func (p *Plugin) Version() string {
-    return "1.0.0"
+// Author 插件作者
+func (p *TestPlugin) Author() string {
+	return "J"
 }
 
-func (p *Plugin) Author() string {
-    return "OpsHub Team"
+// Enable 启用插件
+func (p *TestPlugin) Enable(db *gorm.DB) error {
+	// 可以在这里初始化数据库表、配置等
+	// 例如：db.AutoMigrate(&TestModel{})
+	return nil
 }
 
-func (p *Plugin) Enable(db *gorm.DB) error {
-    p.db = db
-
-    // 自动迁移数据库表
-    if err := db.AutoMigrate(&model.TestItem{}); err != nil {
-        return err
-    }
-
-    return nil
+// Disable 禁用插件
+func (p *TestPlugin) Disable(db *gorm.DB) error {
+	// 清理资源
+	return nil
 }
 
-func (p *Plugin) Disable(db *gorm.DB) error {
-    // 禁用时的清理操作（如有后台任务，在此停止）
-    return nil
+// RegisterRoutes 注册路由
+func (p *TestPlugin) RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
+	// 创建测试路由组
+	testGroup := router.Group("/test")
+	{
+		// 测试接口
+		testGroup.GET("/hello", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"code":    0,
+				"message": "Hello from Test Plugin!",
+				"data": gin.H{
+					"plugin":  "test",
+					"version": "1.0.0",
+					"status":  "running",
+				},
+			})
+		})
+
+		// 获取插件信息
+		testGroup.GET("/info", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"code":    0,
+				"message": "success",
+				"data": gin.H{
+					"name":        p.Name(),
+					"description": p.Description(),
+					"version":     p.Version(),
+					"author":      p.Author(),
+				},
+			})
+		})
+	}
 }
 
-func (p *Plugin) RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
-    server.RegisterRoutes(router, db)
-}
-
-func (p *Plugin) GetMenus() []plugin.MenuConfig {
-    return []plugin.MenuConfig{
-        {
-            Name:       "测试中心",
-            Path:       "/test",
-            Icon:       "Experiment",
-            Sort:       200,
-            Hidden:     false,
-            ParentPath: "",
-            Permission: "plugin:test:view",
-        },
-        {
-            Name:       "测试项管理",
-            Path:       "/test/items",
-            Icon:       "List",
-            Sort:       1,
-            Hidden:     false,
-            ParentPath: "/test",
-            Permission: "plugin:test:items:view",
-        },
-    }
+// GetMenus 获取菜单配置
+func (p *TestPlugin) GetMenus() []plugin.MenuConfig {
+	return []plugin.MenuConfig{
+		{
+			Name:       "测试插件",
+			Path:       "/test",
+			Icon:       "Grape",
+			Sort:       95,
+			Hidden:     false,
+			ParentPath: "",
+		},
+		{
+			Name:       "测试首页",
+			Path:       "/test/home",
+			Icon:       "House",
+			Sort:       1,
+			Hidden:     false,
+			ParentPath: "/test",
+		},
+	}
 }
 ```
 
-#### 5.2.3 路由注册
-
-```go
-// plugins/test/server/router.go
-package server
-
-import (
-    "github.com/gin-gonic/gin"
-    "gorm.io/gorm"
-)
-
-func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
-    handler := NewHandler(db)
-
-    // 创建 test 路由组
-    testGroup := router.Group("/test")
-    {
-        // 测试项管理
-        items := testGroup.Group("/items")
-        {
-            items.GET("", handler.ListItems)
-            items.GET("/:id", handler.GetItem)
-            items.POST("", handler.CreateItem)
-            items.PUT("/:id", handler.UpdateItem)
-            items.DELETE("/:id", handler.DeleteItem)
-        }
-    }
-}
-```
-
-#### 5.2.4 请求处理器
-
-```go
-// plugins/test/server/handler.go
-package server
-
-import (
-    "net/http"
-    "strconv"
-
-    "github.com/gin-gonic/gin"
-    "github.com/ydcloud-dy/opshub/plugins/test/model"
-    "gorm.io/gorm"
-)
-
-type Handler struct {
-    db *gorm.DB
-}
-
-func NewHandler(db *gorm.DB) *Handler {
-    return &Handler{db: db}
-}
-
-// ListItems 获取测试项列表
-func (h *Handler) ListItems(c *gin.Context) {
-    var req model.ListTestItemRequest
-    if err := c.ShouldBindQuery(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
-        return
-    }
-
-    // 默认值
-    if req.Page == 0 {
-        req.Page = 1
-    }
-    if req.PageSize == 0 {
-        req.PageSize = 10
-    }
-
-    var items []model.TestItem
-    var total int64
-
-    query := h.db.Model(&model.TestItem{})
-
-    // 条件过滤
-    if req.Name != "" {
-        query = query.Where("name LIKE ?", "%"+req.Name+"%")
-    }
-    if req.Status != nil {
-        query = query.Where("status = ?", *req.Status)
-    }
-
-    // 统计总数
-    query.Count(&total)
-
-    // 分页查询
-    offset := (req.Page - 1) * req.PageSize
-    if err := query.Offset(offset).Limit(req.PageSize).Order("id DESC").Find(&items).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{
-        "code":    0,
-        "message": "success",
-        "data": gin.H{
-            "list":     items,
-            "total":    total,
-            "page":     req.Page,
-            "pageSize": req.PageSize,
-        },
-    })
-}
-
-// GetItem 获取测试项详情
-func (h *Handler) GetItem(c *gin.Context) {
-    id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "无效的 ID"})
-        return
-    }
-
-    var item model.TestItem
-    if err := h.db.First(&item, id).Error; err != nil {
-        if err == gorm.ErrRecordNotFound {
-            c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "测试项不存在"})
-            return
-        }
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "success", "data": item})
-}
-
-// CreateItem 创建测试项
-func (h *Handler) CreateItem(c *gin.Context) {
-    var req model.CreateTestItemRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
-        return
-    }
-
-    item := model.TestItem{
-        Name:        req.Name,
-        Description: req.Description,
-        Status:      req.Status,
-        CreatedBy:   c.GetString("username"), // 从上下文获取当前用户
-    }
-
-    if err := h.db.Create(&item).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "创建成功", "data": item})
-}
-
-// UpdateItem 更新测试项
-func (h *Handler) UpdateItem(c *gin.Context) {
-    id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "无效的 ID"})
-        return
-    }
-
-    var item model.TestItem
-    if err := h.db.First(&item, id).Error; err != nil {
-        if err == gorm.ErrRecordNotFound {
-            c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "测试项不存在"})
-            return
-        }
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
-        return
-    }
-
-    var req model.UpdateTestItemRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
-        return
-    }
-
-    // 更新字段
-    updates := make(map[string]interface{})
-    if req.Name != "" {
-        updates["name"] = req.Name
-    }
-    if req.Description != "" {
-        updates["description"] = req.Description
-    }
-    if req.Status != nil {
-        updates["status"] = *req.Status
-    }
-
-    if err := h.db.Model(&item).Updates(updates).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "更新成功", "data": item})
-}
-
-// DeleteItem 删除测试项
-func (h *Handler) DeleteItem(c *gin.Context) {
-    id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "无效的 ID"})
-        return
-    }
-
-    result := h.db.Delete(&model.TestItem{}, id)
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": result.Error.Error()})
-        return
-    }
-
-    if result.RowsAffected == 0 {
-        c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "测试项不存在"})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{"code": 0, "message": "删除成功"})
-}
-```
-
-#### 5.2.5 注册后端插件
+#### 5.2.2 注册后端插件
 
 在 `internal/server/http.go` 中添加：
 
 ```go
 import (
-    testplugin "github.com/ydcloud-dy/opshub/plugins/test"
+	testplugin "github.com/ydcloud-dy/opshub/plugins/test"
 )
 
 // 在 NewHTTPServer 函数中注册插件
@@ -790,486 +557,222 @@ pluginMgr.Register(testplugin.New())
 
 ### 5.3 前端代码
 
-#### 5.3.1 API 接口定义
-
-```typescript
-// web/src/api/test.ts
-import request from '@/utils/request'
-
-// 类型定义
-export interface TestItem {
-    id: number
-    name: string
-    description: string
-    status: number
-    createdBy: string
-    createdAt: string
-    updatedAt: string
-}
-
-export interface ListTestItemParams {
-    page?: number
-    pageSize?: number
-    name?: string
-    status?: number
-}
-
-export interface CreateTestItemData {
-    name: string
-    description?: string
-    status?: number
-}
-
-export interface UpdateTestItemData {
-    name?: string
-    description?: string
-    status?: number
-}
-
-// API 函数
-export const getTestItemList = (params: ListTestItemParams) => {
-    return request.get('/api/v1/plugins/test/items', { params })
-}
-
-export const getTestItem = (id: number) => {
-    return request.get(`/api/v1/plugins/test/items/${id}`)
-}
-
-export const createTestItem = (data: CreateTestItemData) => {
-    return request.post('/api/v1/plugins/test/items', data)
-}
-
-export const updateTestItem = (id: number, data: UpdateTestItemData) => {
-    return request.put(`/api/v1/plugins/test/items/${id}`, data)
-}
-
-export const deleteTestItem = (id: number) => {
-    return request.delete(`/api/v1/plugins/test/items/${id}`)
-}
-```
-
-#### 5.3.2 插件入口文件
+#### 5.3.1 插件入口文件
 
 ```typescript
 // web/src/plugins/test/index.ts
-import { Plugin, PluginMenuConfig, PluginRouteConfig } from '../types'
+import type { Plugin, PluginMenuConfig, PluginRouteConfig } from '../types'
 import { pluginManager } from '../manager'
+import TestHome from './components/TestHome.vue'
 
+/**
+ * 测试插件
+ */
 class TestPlugin implements Plugin {
-    name = 'test'
-    description = '测试插件 - 用于演示插件开发流程'
-    version = '1.0.0'
-    author = 'OpsHub Team'
+  name = 'test'
+  description = '这是一个简单的测试插件，用于测试插件安装功能'
+  version = '1.0.0'
+  author = 'J'
 
-    install(): void {
-        console.log(`[Test Plugin] v${this.version} 已安装`)
-    }
+  async install() {
+    console.log('[Test Plugin] 插件安装中...')
+  }
 
-    uninstall(): void {
-        console.log(`[Test Plugin] 已卸载`)
-    }
+  async uninstall() {
+    console.log('[Test Plugin] 插件卸载中...')
+  }
 
-    getMenus(): PluginMenuConfig[] {
-        return [
-            {
-                name: '测试中心',
-                path: '/test',
-                icon: 'Experiment',
-                sort: 200,
-                hidden: false,
-                parentPath: '',
-                permission: 'plugin:test:view'
-            },
-            {
-                name: '测试项管理',
-                path: '/test/items',
-                icon: 'List',
-                sort: 1,
-                hidden: false,
-                parentPath: '/test',
-                permission: 'plugin:test:items:view'
-            }
-        ]
-    }
+  getMenus(): PluginMenuConfig[] {
+    return [
+      {
+        name: '测试插件',
+        path: '/test',
+        icon: 'Grape',
+        sort: 95,
+        hidden: false,
+        parentPath: '',
+      },
+      {
+        name: '测试首页',
+        path: '/test/home',
+        icon: 'House',
+        sort: 1,
+        hidden: false,
+        parentPath: '/test',
+      }
+    ]
+  }
 
-    getRoutes(): PluginRouteConfig[] {
-        return [
-            {
-                path: '/test',
-                name: 'Test',
-                component: () => import('@/views/test/Index.vue'),
-                meta: {
-                    title: '测试中心',
-                    icon: 'Experiment'
-                },
-                children: [
-                    {
-                        path: 'items',
-                        name: 'TestItems',
-                        component: () => import('@/views/test/Items.vue'),
-                        meta: {
-                            title: '测试项管理',
-                            icon: 'List',
-                            activeMenu: '/test/items'
-                        }
-                    }
-                ]
-            }
-        ]
-    }
+  getRoutes(): PluginRouteConfig[] {
+    return [
+      {
+        path: '/test/home',
+        name: 'TestHome',
+        component: TestHome,
+        meta: { title: '测试首页' }
+      }
+    ]
+  }
 }
 
-// 创建实例并注册
+// 创建插件实例并注册
 const testPlugin = new TestPlugin()
 pluginManager.register(testPlugin)
 
 export default testPlugin
 ```
 
-#### 5.3.3 页面组件 - 容器页面
+#### 5.3.2 页面组件 - TestHome.vue
 
 ```vue
-<!-- web/src/views/test/Index.vue -->
 <template>
-    <router-view />
+  <div class="test-home-container">
+    <el-card class="welcome-card">
+      <template #header>
+        <div class="card-header">
+          <el-icon class="header-icon" color="#409eff"><Grape /></el-icon>
+          <span class="header-title">测试插件</span>
+        </div>
+      </template>
+
+      <div class="content">
+        <h1>🎉 测试插件安装成功！</h1>
+        <p class="subtitle">恭喜你，插件系统运行正常</p>
+
+        <el-divider />
+
+        <div class="info-section">
+          <h3>插件信息</h3>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="插件名称">测试插件</el-descriptions-item>
+            <el-descriptions-item label="插件版本">1.0.0</el-descriptions-item>
+            <el-descriptions-item label="插件作者">J</el-descriptions-item>
+            <el-descriptions-item label="安装时间">{{ currentTime }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <el-divider />
+
+        <div class="action-section">
+          <h3>测试功能</h3>
+          <el-space wrap>
+            <el-button type="primary" @click="showMessage">显示消息</el-button>
+            <el-button type="success" @click="counter++">计数器: {{ counter }}</el-button>
+            <el-button type="warning" @click="toggleColor">切换颜色</el-button>
+          </el-space>
+
+          <div v-if="showColorBlock" class="color-block" :style="{ background: currentColor }">
+            当前颜色: {{ currentColor }}
+          </div>
+        </div>
+      </div>
+    </el-card>
+  </div>
 </template>
 
 <script setup lang="ts">
-// 容器组件，用于嵌套子路由
-</script>
-```
+import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Grape } from '@element-plus/icons-vue'
 
-#### 5.3.4 页面组件 - 列表页面
+const currentTime = ref(new Date().toLocaleString('zh-CN'))
+const counter = ref(0)
+const showColorBlock = ref(false)
+const currentColor = ref('#409eff')
 
-```vue
-<!-- web/src/views/test/Items.vue -->
-<template>
-    <div class="test-items-container">
-        <!-- 搜索区域 -->
-        <el-card class="search-card" shadow="never">
-            <el-form :model="searchForm" inline>
-                <el-form-item label="名称">
-                    <el-input
-                        v-model="searchForm.name"
-                        placeholder="请输入名称"
-                        clearable
-                        @keyup.enter="handleSearch"
-                    />
-                </el-form-item>
-                <el-form-item label="状态">
-                    <el-select v-model="searchForm.status" placeholder="全部" clearable>
-                        <el-option label="启用" :value="1" />
-                        <el-option label="禁用" :value="0" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" @click="handleSearch">搜索</el-button>
-                    <el-button @click="handleReset">重置</el-button>
-                </el-form-item>
-            </el-form>
-        </el-card>
+const colors = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399']
+let colorIndex = 0
 
-        <!-- 操作区域 -->
-        <el-card class="table-card" shadow="never">
-            <template #header>
-                <div class="card-header">
-                    <span>测试项列表</span>
-                    <el-button type="primary" @click="handleAdd">
-                        <el-icon><Plus /></el-icon>
-                        新增
-                    </el-button>
-                </div>
-            </template>
-
-            <!-- 表格 -->
-            <el-table
-                :data="tableData"
-                v-loading="loading"
-                border
-                stripe
-            >
-                <el-table-column prop="id" label="ID" width="80" />
-                <el-table-column prop="name" label="名称" min-width="150" />
-                <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-                <el-table-column prop="status" label="状态" width="100">
-                    <template #default="{ row }">
-                        <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-                            {{ row.status === 1 ? '启用' : '禁用' }}
-                        </el-tag>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="createdBy" label="创建人" width="120" />
-                <el-table-column prop="createdAt" label="创建时间" width="180" />
-                <el-table-column label="操作" width="180" fixed="right">
-                    <template #default="{ row }">
-                        <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-                        <el-popconfirm
-                            title="确定要删除吗？"
-                            @confirm="handleDelete(row.id)"
-                        >
-                            <template #reference>
-                                <el-button type="danger" link>删除</el-button>
-                            </template>
-                        </el-popconfirm>
-                    </template>
-                </el-table-column>
-            </el-table>
-
-            <!-- 分页 -->
-            <el-pagination
-                v-model:current-page="pagination.page"
-                v-model:page-size="pagination.pageSize"
-                :page-sizes="[10, 20, 50, 100]"
-                :total="pagination.total"
-                layout="total, sizes, prev, pager, next, jumper"
-                @size-change="handleSizeChange"
-                @current-change="handleCurrentChange"
-            />
-        </el-card>
-
-        <!-- 新增/编辑对话框 -->
-        <el-dialog
-            v-model="dialogVisible"
-            :title="dialogTitle"
-            width="500px"
-            @close="handleDialogClose"
-        >
-            <el-form
-                ref="formRef"
-                :model="formData"
-                :rules="formRules"
-                label-width="80px"
-            >
-                <el-form-item label="名称" prop="name">
-                    <el-input v-model="formData.name" placeholder="请输入名称" />
-                </el-form-item>
-                <el-form-item label="描述" prop="description">
-                    <el-input
-                        v-model="formData.description"
-                        type="textarea"
-                        :rows="3"
-                        placeholder="请输入描述"
-                    />
-                </el-form-item>
-                <el-form-item label="状态" prop="status">
-                    <el-radio-group v-model="formData.status">
-                        <el-radio :label="1">启用</el-radio>
-                        <el-radio :label="0">禁用</el-radio>
-                    </el-radio-group>
-                </el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="handleSubmit" :loading="submitLoading">
-                    确定
-                </el-button>
-            </template>
-        </el-dialog>
-    </div>
-</template>
-
-<script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
-import {
-    getTestItemList,
-    createTestItem,
-    updateTestItem,
-    deleteTestItem,
-    type TestItem,
-    type CreateTestItemData
-} from '@/api/test'
-
-// 搜索表单
-const searchForm = reactive({
-    name: '',
-    status: undefined as number | undefined
-})
-
-// 分页
-const pagination = reactive({
-    page: 1,
-    pageSize: 10,
-    total: 0
-})
-
-// 表格数据
-const tableData = ref<TestItem[]>([])
-const loading = ref(false)
-
-// 对话框
-const dialogVisible = ref(false)
-const dialogTitle = ref('新增测试项')
-const editingId = ref<number | null>(null)
-const formRef = ref<FormInstance>()
-const submitLoading = ref(false)
-
-// 表单数据
-const formData = reactive<CreateTestItemData>({
-    name: '',
-    description: '',
-    status: 1
-})
-
-// 表单验证规则
-const formRules: FormRules = {
-    name: [
-        { required: true, message: '请输入名称', trigger: 'blur' },
-        { max: 100, message: '名称不能超过100个字符', trigger: 'blur' }
-    ],
-    description: [
-        { max: 500, message: '描述不能超过500个字符', trigger: 'blur' }
-    ]
+const showMessage = () => {
+  ElMessage.success('测试插件功能正常！')
 }
 
-// 获取列表数据
-const fetchData = async () => {
-    loading.value = true
-    try {
-        const res = await getTestItemList({
-            page: pagination.page,
-            pageSize: pagination.pageSize,
-            name: searchForm.name || undefined,
-            status: searchForm.status
-        })
-        if (res.data.code === 0) {
-            tableData.value = res.data.data.list
-            pagination.total = res.data.data.total
-        }
-    } catch (error) {
-        console.error('获取数据失败:', error)
-    } finally {
-        loading.value = false
-    }
+const toggleColor = () => {
+  showColorBlock.value = true
+  colorIndex = (colorIndex + 1) % colors.length
+  currentColor.value = colors[colorIndex]
 }
-
-// 搜索
-const handleSearch = () => {
-    pagination.page = 1
-    fetchData()
-}
-
-// 重置
-const handleReset = () => {
-    searchForm.name = ''
-    searchForm.status = undefined
-    handleSearch()
-}
-
-// 分页变化
-const handleSizeChange = () => {
-    pagination.page = 1
-    fetchData()
-}
-
-const handleCurrentChange = () => {
-    fetchData()
-}
-
-// 新增
-const handleAdd = () => {
-    editingId.value = null
-    dialogTitle.value = '新增测试项'
-    formData.name = ''
-    formData.description = ''
-    formData.status = 1
-    dialogVisible.value = true
-}
-
-// 编辑
-const handleEdit = (row: TestItem) => {
-    editingId.value = row.id
-    dialogTitle.value = '编辑测试项'
-    formData.name = row.name
-    formData.description = row.description
-    formData.status = row.status
-    dialogVisible.value = true
-}
-
-// 删除
-const handleDelete = async (id: number) => {
-    try {
-        const res = await deleteTestItem(id)
-        if (res.data.code === 0) {
-            ElMessage.success('删除成功')
-            fetchData()
-        } else {
-            ElMessage.error(res.data.message || '删除失败')
-        }
-    } catch (error) {
-        ElMessage.error('删除失败')
-    }
-}
-
-// 提交表单
-const handleSubmit = async () => {
-    if (!formRef.value) return
-
-    await formRef.value.validate(async (valid) => {
-        if (!valid) return
-
-        submitLoading.value = true
-        try {
-            let res
-            if (editingId.value) {
-                res = await updateTestItem(editingId.value, formData)
-            } else {
-                res = await createTestItem(formData)
-            }
-
-            if (res.data.code === 0) {
-                ElMessage.success(editingId.value ? '更新成功' : '创建成功')
-                dialogVisible.value = false
-                fetchData()
-            } else {
-                ElMessage.error(res.data.message || '操作失败')
-            }
-        } catch (error) {
-            ElMessage.error('操作失败')
-        } finally {
-            submitLoading.value = false
-        }
-    })
-}
-
-// 对话框关闭
-const handleDialogClose = () => {
-    formRef.value?.resetFields()
-}
-
-// 初始化
-onMounted(() => {
-    fetchData()
-})
 </script>
 
-<style scoped>
-.test-items-container {
-    padding: 20px;
-}
+<style scoped lang="scss">
+.test-home-container {
+  padding: 24px;
 
-.search-card {
-    margin-bottom: 20px;
-}
+  .welcome-card {
+    max-width: 800px;
+    margin: 0 auto;
 
-.table-card .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
 
-.el-pagination {
-    margin-top: 20px;
-    justify-content: flex-end;
+      .header-icon {
+        font-size: 28px;
+      }
+
+      .header-title {
+        font-size: 20px;
+        font-weight: 600;
+      }
+    }
+  }
+
+  .content {
+    text-align: center;
+
+    h1 {
+      color: #303133;
+      margin-bottom: 12px;
+    }
+
+    .subtitle {
+      color: #606266;
+      font-size: 16px;
+      margin-bottom: 24px;
+    }
+
+    .info-section,
+    .action-section {
+      margin: 24px 0;
+
+      h3 {
+        margin-bottom: 16px;
+        color: #303133;
+      }
+    }
+
+    .color-block {
+      margin-top: 20px;
+      padding: 40px;
+      border-radius: 8px;
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+  }
 }
 </style>
 ```
 
-#### 5.3.5 注册前端插件
+#### 5.3.3 注册前端插件
+
+在 `web/src/main.ts` 中添加：
 
 ```typescript
-// web/src/main.ts
 // 在其他插件导入后添加
 import '@/plugins/test'
 ```
@@ -1283,23 +786,130 @@ opshub/
 ├── plugins/
 │   └── test/
 │       ├── plugin.go           # 插件主文件
-│       ├── model/
-│       │   └── test_item.go    # 数据模型
 │       └── server/
-│           ├── router.go       # 路由注册
-│           └── handler.go      # 请求处理器
+│           └── router.go       # 路由注册（可选）
 │
 └── web/src/
-    ├── api/
-    │   └── test.ts             # API 接口
     ├── plugins/
     │   └── test/
-    │       └── index.ts        # 插件入口
+    │       ├── index.ts        # 插件入口
+    │       └── components/
+    │           └── TestHome.vue # 首页组件
     └── views/
         └── test/
-            ├── Index.vue       # 容器组件
-            └── Items.vue       # 列表页面
+            └── Index.vue       # 容器组件
 ```
+
+### 5.5 测试插件
+
+1. **后端测试**：调用 API 接口
+   ```bash
+   curl http://localhost:9876/api/v1/plugins/test/hello
+   curl http://localhost:9876/api/v1/plugins/test/info
+   ```
+
+2. **前端测试**：访问菜单
+   - 登录系统
+   - 在左侧菜单看到"测试插件"菜单
+   - 点击"测试首页"进入插件页面
+   - 测试页面上的各个功能按钮
+
+### 5.5 一键安装后的手动配置
+
+虽然系统支持一键安装/卸载，但新插件需要手动配置代码才能完全集成。以下是详细步骤：
+
+#### 5.5.1 后端配置
+
+**第1步**：在 `internal/server/http.go` 中导入并注册插件
+
+找到 `NewHTTPServer()` 函数，在现有插件注册代码后添加：
+
+```go
+import (
+	// ... 其他导入
+	testplugin "github.com/ydcloud-dy/opshub/plugins/test"
+)
+
+func NewHTTPServer(...) {
+	// ... 其他代码
+
+	// 注册所有内置插件
+	pluginMgr.Register(kubernetes.New())     // 已存在
+	pluginMgr.Register(task.New())           // 已存在
+	pluginMgr.Register(monitor.New())        // 已存在
+	pluginMgr.Register(testplugin.New())     // 新增：测试插件
+
+	// ... 其他代码
+}
+```
+
+**第2步**：重启后端服务
+
+```bash
+go run main.go server
+```
+
+此时后端 API 应该可以访问：
+```bash
+curl http://localhost:9876/api/v1/plugins/test/hello
+```
+
+#### 5.5.2 前端配置
+
+**第1步**：在 `web/src/main.ts` 中导入插件
+
+找到已有的插件导入，添加新插件：
+
+```typescript
+// web/src/main.ts
+// ... 其他代码
+
+// 导入插件
+import '@/plugins/kubernetes'  // 已存在
+import '@/plugins/task'        // 已存在
+import '@/plugins/monitor'     // 已存在
+import '@/plugins/test'        // 新增：测试插件
+
+// ... 其他代码
+```
+
+**第2步**：重启前端开发服务
+
+```bash
+cd web
+npm run dev
+```
+
+此时可以：
+- 看到左侧菜单中出现"测试插件"菜单
+- 点击菜单进入插件页面
+- 使用插件的所有功能
+
+#### 5.5.3 验证配置
+
+| 配置项 | 检查方式 | 预期结果 |
+|-------|---------|---------|
+| 后端 API | `curl /api/v1/plugins/test/hello` | 返回 200 和 JSON 数据 |
+| 后端路由 | `curl /api/v1/plugins/test/info` | 返回 200 和插件信息 |
+| 前端菜单 | 登录系统，查看左侧菜单 | 显示"测试插件"菜单 |
+| 前端路由 | 点击菜单项 | 正常跳转到插件页面 |
+| 插件状态 | 访问插件管理页面 | 插件显示为"已启用" |
+
+### 5.6 关键要点总结
+
+| 要点 | 说明 |
+|-----|------|
+| 后端入口 | `plugins/test/plugin.go` - 必须实现 Plugin 接口 |
+| 后端注册 | `internal/server/http.go` 中导入并调用 `pluginMgr.Register()` |
+| 前端入口 | `web/src/plugins/test/index.ts` - 注册插件和菜单 |
+| 前端注册 | `web/src/main.ts` 中导入插件：`import '@/plugins/test'` |
+| 路由注册 | `RegisterRoutes()` - 在此方法中注册 API 路由 |
+| 菜单配置 | `GetMenus()` - 返回菜单配置数组 |
+| 前端路由 | `getRoutes()` - 返回动态路由配置 |
+| 组件导入 | 使用 dynamic import：`() => import('@/views/test/Index.vue')` |
+| 热更新 | 后端：重启 Go 服务；前端：自动热更新（npm run dev）|
+| 一键安装 | 通过管理界面安装，但需要手动添加代码才能在应用启动时加载 |
+
 
 ---
 

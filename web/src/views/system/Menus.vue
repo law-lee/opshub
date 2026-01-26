@@ -622,9 +622,29 @@ const loadMenus = async () => {
   }
 }
 
-// 将插件菜单插入到系统菜单树中
+// 检查菜单code是否已存在于树中
+const menuCodeExists = (tree: any[], code: string): boolean => {
+  for (const menu of tree) {
+    if (menu.code === code) {
+      return true
+    }
+    if (menu.children && menu.children.length > 0) {
+      if (menuCodeExists(menu.children, code)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// 将插件菜单插入到系统菜单树中（去重：不添加已存在的菜单）
 const insertPluginMenus = (tree: any[], pluginMenus: any[]) => {
   pluginMenus.forEach(pluginMenu => {
+    // 检查该菜单是否已存在（通过code判断）
+    if (menuCodeExists(tree, pluginMenu.code)) {
+      return // 跳过已存在的菜单
+    }
+
     const parentId = pluginMenu.parentId
 
     if (!parentId) {

@@ -970,10 +970,14 @@ func (s *ClusterService) RevokeUserKubeConfig(ctx context.Context, clusterID uin
 		return fmt.Errorf("删除 ServiceAccount 失败: %w", err)
 	}
 
-	// 删除数据库记录
-	// 根据 service_account 和 cluster_id 查找并删除记录
+	// 更新数据库记录为已吊销（而不是删除）
+	// 这样可以保留审计日志，并且GetClusterCredentialUsers会过滤这些记录
+	now := time.Now()
 	err = s.db.Where("cluster_id = ? AND service_account = ?", clusterID, username).
-		Delete(&model.UserKubeConfig{}).Error
+		Updates(map[string]interface{}{
+			"is_active":  false,
+			"revoked_at": now,
+		}).Error
 	if err != nil {
 		// 记录错误但不影响整体流程（K8s资源已删除）
 	}
@@ -1328,11 +1332,16 @@ func (s *ClusterService) RevokeCredentialFully(ctx context.Context, clusterID ui
 		return nil
 	}
 
-	// 5. 删除数据库记录 - k8s_user_kube_configs
+	// 5. 标记凭据记录为已吊销（而不是删除）
+	// 这样可以保留审计日志，并且GetClusterCredentialUsers会过滤这些记录
+	now := time.Now()
 	s.db.Where("cluster_id = ? AND user_id = ? AND service_account = ?", clusterID, user.ID, serviceAccount).
-		Delete(&model.UserKubeConfig{})
+		Updates(map[string]interface{}{
+			"is_active":  false,
+			"revoked_at": now,
+		})
 
-	// 6. 删除数据库记录 - k8s_user_role_bindings
+	// 6. 删除数据库记录 - k8s_user_role_bindings（角色绑定可以删除，因为凭据本身已吊销）
 	s.db.Table("k8s_user_role_bindings").
 		Where("cluster_id = ? AND user_id = ?", clusterID, user.ID).
 		Delete(&model.K8sUserRoleBinding{})

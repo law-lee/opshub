@@ -43,7 +43,7 @@ func (p *Plugin) Version() string {
 
 // Author 返回插件作者
 func (p *Plugin) Author() string {
-	return "OpsHub Team"
+	return "J"
 }
 
 // Enable 启用插件

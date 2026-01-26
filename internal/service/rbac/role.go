@@ -20,6 +20,16 @@ func NewRoleService(roleUseCase *rbac.RoleUseCase) *RoleService {
 }
 
 // CreateRole 创建角色
+// @Summary 创建角色
+// @Description 管理员创建新角色
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body rbac.SysRole true "角色信息"
+// @Success 200 {object} response.Response "创建成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /roles [post]
 func (s *RoleService) CreateRole(c *gin.Context) {
 	var req rbac.SysRole
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -36,6 +46,17 @@ func (s *RoleService) CreateRole(c *gin.Context) {
 }
 
 // UpdateRole 更新角色
+// @Summary 更新角色
+// @Description 管理员更新角色信息
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Param body body rbac.SysRole true "角色信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /roles/{id} [put]
 func (s *RoleService) UpdateRole(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -60,6 +81,16 @@ func (s *RoleService) UpdateRole(c *gin.Context) {
 }
 
 // DeleteRole 删除角色
+// @Summary 删除角色
+// @Description 管理员删除角色
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /roles/{id} [delete]
 func (s *RoleService) DeleteRole(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -77,6 +108,16 @@ func (s *RoleService) DeleteRole(c *gin.Context) {
 }
 
 // GetRole 获取角色详情
+// @Summary 获取角色详情
+// @Description 获取单个角色的详细信息
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "角色不存在"
+// @Router /roles/{id} [get]
 func (s *RoleService) GetRole(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -95,6 +136,17 @@ func (s *RoleService) GetRole(c *gin.Context) {
 }
 
 // ListRoles 角色列表
+// @Summary 获取角色列表
+// @Description 分页获取角色列表，支持关键字搜索
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键字"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /roles [get]
 func (s *RoleService) ListRoles(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -115,6 +167,14 @@ func (s *RoleService) ListRoles(c *gin.Context) {
 }
 
 // GetAllRoles 获取所有角色（不分页）
+// @Summary 获取所有角色
+// @Description 获取所有角色列表，不分页
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} response.Response "获取成功"
+// @Router /roles/all [get]
 func (s *RoleService) GetAllRoles(c *gin.Context) {
 	roles, err := s.roleUseCase.GetAll(c.Request.Context())
 	if err != nil {
@@ -125,11 +185,23 @@ func (s *RoleService) GetAllRoles(c *gin.Context) {
 	response.Success(c, roles)
 }
 
-// AssignRoleMenus 分配角色菜单
+// AssignRoleMenusRequest 分配角色菜单请求
 type AssignRoleMenusRequest struct {
 	MenuIDs []uint `json:"menuIds" binding:"required"`
 }
 
+// AssignRoleMenus 分配角色菜单
+// @Summary 分配角色菜单
+// @Description 为角色分配菜单权限
+// @Tags 角色管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "角色ID"
+// @Param body body AssignRoleMenusRequest true "菜单IDs"
+// @Success 200 {object} response.Response "分配成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /roles/{id}/menus [post]
 func (s *RoleService) AssignRoleMenus(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)

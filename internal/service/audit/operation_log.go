@@ -130,6 +130,16 @@ func (s *OperationLogService) GetOperationLog(c *gin.Context) {
 }
 
 // DeleteOperationLog 删除操作日志
+// @Summary 删除操作日志
+// @Description 删除指定的操作日志记录
+// @Tags 审计管理-操作日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "操作日志ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /audit/operation-logs/{id} [delete]
 func (s *OperationLogService) DeleteOperationLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -147,6 +157,16 @@ func (s *OperationLogService) DeleteOperationLog(c *gin.Context) {
 }
 
 // DeleteOperationLogsBatch 批量删除操作日志
+// @Summary 批量删除操作日志
+// @Description 批量删除多条操作日志记录
+// @Tags 审计管理-操作日志
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "日志ID列表" example({"ids": [1, 2, 3]})
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /audit/operation-logs/batch [delete]
 func (s *OperationLogService) DeleteOperationLogsBatch(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`

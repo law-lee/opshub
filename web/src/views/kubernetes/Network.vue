@@ -466,12 +466,6 @@ const initTerminal = async () => {
   const token = localStorage.getItem('token')
   const clusterId = selectedClusterId.value
 
-    clusterId,
-    namespace: terminalData.value.namespace,
-    pod: terminalData.value.pod,
-    container: terminalData.value.container
-  })
-
   // 构建WebSocket URL - 在开发环境直接连接后端，生产环境使用当前域名
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.hostname

@@ -635,11 +635,6 @@ const handleSubmit = async () => {
         const roleIds = (userForm.roleIds || []).filter((id: any) => id != null)
         const positionIds = (userForm.positionIds || []).filter((id: any) => id != null)
 
-          roleIds,
-          positionIds,
-          rawPositionIds: userForm.positionIds
-        })
-
         if (isEdit.value) {
           // 清理userForm中的null值，避免发送到后端
           const userData = {

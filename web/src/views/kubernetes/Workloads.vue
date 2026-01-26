@@ -3497,12 +3497,6 @@ const initTerminal = async () => {
   const token = localStorage.getItem('token')
   const clusterId = selectedClusterId.value
 
-    clusterId,
-    namespace: terminalData.value.namespace,
-    pod: terminalData.value.pod,
-    container: terminalData.value.container
-  })
-
   // 构建WebSocket URL - 在开发环境直接连接后端，生产环境使用当前域名
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.hostname
@@ -3620,11 +3614,6 @@ const handleOpenFileBrowser = (podName: string, containerName: string, namespace
     ElMessage.error('请先选择集群')
     return
   }
-    clusterId: selectedClusterId.value,
-    namespace,
-    podName,
-    containerName
-  })
   selectedFileBrowserPod.value = podName
   selectedFileBrowserNamespace.value = namespace
   selectedFileBrowserContainer.value = containerName
@@ -4561,11 +4550,6 @@ const convertToKubernetesYaml = (data: any, cluster: string, namespace: string):
     // 空字符串需要转换为 null 来删除字段
     const value = data.priorityClassName || null
     podSpec.priorityClassName = value
-      原始值: data.priorityClassName,
-      类型: typeof data.priorityClassName,
-      设置值: value,
-      设置类型: typeof value
-    })
   }
 
   // DNS 配置 - 明确处理删除情况

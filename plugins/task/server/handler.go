@@ -39,6 +39,20 @@ func NewHandler(db *gorm.DB) *Handler {
 
 // ==================== 任务作业 ====================
 
+// ListJobTasks 获取任务作业列表
+// @Summary 获取任务作业列表
+// @Description 分页获取任务作业列表，支持按关键词、任务类型、状态筛选
+// @Tags 任务管理-任务作业
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键词"
+// @Param taskType query string false "任务类型"
+// @Param status query string false "任务状态"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /task/job-tasks [get]
 func (h *Handler) ListJobTasks(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -73,6 +87,17 @@ func (h *Handler) ListJobTasks(c *gin.Context) {
 	})
 }
 
+// GetJobTask 获取任务作业详情
+// @Summary 获取任务作业详情
+// @Description 获取指定任务作业的详细信息
+// @Tags 任务管理-任务作业
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "任务不存在"
+// @Router /task/job-tasks/{id} [get]
 func (h *Handler) GetJobTask(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var jobTask model.JobTask
@@ -83,6 +108,17 @@ func (h *Handler) GetJobTask(c *gin.Context) {
 	response.Success(c, jobTask)
 }
 
+// CreateJobTask 创建任务作业
+// @Summary 创建任务作业
+// @Description 创建新的任务作业
+// @Tags 任务管理-任务作业
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body model.JobTask true "任务信息"
+// @Success 200 {object} response.Response "创建成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /task/job-tasks [post]
 func (h *Handler) CreateJobTask(c *gin.Context) {
 	var jobTask model.JobTask
 	if err := c.ShouldBindJSON(&jobTask); err != nil {
@@ -98,6 +134,18 @@ func (h *Handler) CreateJobTask(c *gin.Context) {
 	response.Success(c, jobTask)
 }
 
+// UpdateJobTask 更新任务作业
+// @Summary 更新任务作业
+// @Description 更新指定任务作业的信息
+// @Tags 任务管理-任务作业
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Param body body model.JobTask true "任务信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 404 {object} response.Response "任务不存在"
+// @Router /task/job-tasks/{id} [put]
 func (h *Handler) UpdateJobTask(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var jobTask model.JobTask
@@ -113,12 +161,36 @@ func (h *Handler) UpdateJobTask(c *gin.Context) {
 	response.Success(c, jobTask)
 }
 
+// DeleteJobTask 删除任务作业
+// @Summary 删除任务作业
+// @Description 删除指定的任务作业记录（已禁用）
+// @Tags 任务管理-任务作业
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 403 {object} response.Response "操作已禁用"
+// @Router /task/job-tasks/{id} [delete]
 func (h *Handler) DeleteJobTask(c *gin.Context) {
 	response.ErrorCode(c, http.StatusForbidden, "删除任务记录功能已被禁用，如需删除请联系系统管理员")
 }
 
 // ==================== 任务模板 ====================
 
+// ListJobTemplates 获取任务模板列表
+// @Summary 获取任务模板列表
+// @Description 分页获取任务模板列表，支持按关键词、分类筛选
+// @Tags 任务管理-任务模板
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键词"
+// @Param category query string false "模板分类"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /task/job-templates [get]
 func (h *Handler) ListJobTemplates(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -149,6 +221,16 @@ func (h *Handler) ListJobTemplates(c *gin.Context) {
 	})
 }
 
+// GetAllJobTemplates 获取所有启用的任务模板
+// @Summary 获取所有任务模板
+// @Description 获取所有启用状态的任务模板，用于下拉选择
+// @Tags 任务管理-任务模板
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param category query string false "模板分类"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /task/job-templates/all [get]
 func (h *Handler) GetAllJobTemplates(c *gin.Context) {
 	category := c.Query("category")
 	var templates []*model.JobTemplate
@@ -160,6 +242,17 @@ func (h *Handler) GetAllJobTemplates(c *gin.Context) {
 	response.Success(c, templates)
 }
 
+// GetJobTemplate 获取任务模板详情
+// @Summary 获取任务模板详情
+// @Description 获取指定任务模板的详细信息
+// @Tags 任务管理-任务模板
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "模板ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "模板不存在"
+// @Router /task/job-templates/{id} [get]
 func (h *Handler) GetJobTemplate(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var template model.JobTemplate
@@ -170,6 +263,17 @@ func (h *Handler) GetJobTemplate(c *gin.Context) {
 	response.Success(c, template)
 }
 
+// CreateJobTemplate 创建任务模板
+// @Summary 创建任务模板
+// @Description 创建新的任务模板
+// @Tags 任务管理-任务模板
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body model.JobTemplate true "模板信息"
+// @Success 200 {object} response.Response "创建成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /task/job-templates [post]
 func (h *Handler) CreateJobTemplate(c *gin.Context) {
 	var template model.JobTemplate
 	if err := c.ShouldBindJSON(&template); err != nil {
@@ -189,6 +293,18 @@ func (h *Handler) CreateJobTemplate(c *gin.Context) {
 	response.Success(c, template)
 }
 
+// UpdateJobTemplate 更新任务模板
+// @Summary 更新任务模板
+// @Description 更新指定任务模板的信息
+// @Tags 任务管理-任务模板
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "模板ID"
+// @Param body body model.JobTemplate true "模板信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 404 {object} response.Response "模板不存在"
+// @Router /task/job-templates/{id} [put]
 func (h *Handler) UpdateJobTemplate(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var template model.JobTemplate
@@ -204,12 +320,36 @@ func (h *Handler) UpdateJobTemplate(c *gin.Context) {
 	response.Success(c, template)
 }
 
+// DeleteJobTemplate 删除任务模板
+// @Summary 删除任务模板
+// @Description 删除指定的任务模板（已禁用）
+// @Tags 任务管理-任务模板
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "模板ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 403 {object} response.Response "操作已禁用"
+// @Router /task/job-templates/{id} [delete]
 func (h *Handler) DeleteJobTemplate(c *gin.Context) {
 	response.ErrorCode(c, http.StatusForbidden, "删除模板功能已被禁用，如需删除请联系系统管理员")
 }
 
 // ==================== Ansible任务 ====================
 
+// ListAnsibleTasks 获取Ansible任务列表
+// @Summary 获取Ansible任务列表
+// @Description 分页获取Ansible任务列表，支持按关键词、状态筛选
+// @Tags 任务管理-Ansible任务
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键词"
+// @Param status query string false "任务状态"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /task/ansible-tasks [get]
 func (h *Handler) ListAnsibleTasks(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -240,6 +380,17 @@ func (h *Handler) ListAnsibleTasks(c *gin.Context) {
 	})
 }
 
+// GetAnsibleTask 获取Ansible任务详情
+// @Summary 获取Ansible任务详情
+// @Description 获取指定Ansible任务的详细信息
+// @Tags 任务管理-Ansible任务
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "任务不存在"
+// @Router /task/ansible-tasks/{id} [get]
 func (h *Handler) GetAnsibleTask(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var task model.AnsibleTask
@@ -250,6 +401,17 @@ func (h *Handler) GetAnsibleTask(c *gin.Context) {
 	response.Success(c, task)
 }
 
+// CreateAnsibleTask 创建Ansible任务
+// @Summary 创建Ansible任务
+// @Description 创建新的Ansible任务
+// @Tags 任务管理-Ansible任务
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body model.AnsibleTask true "任务信息"
+// @Success 200 {object} response.Response "创建成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /task/ansible-tasks [post]
 func (h *Handler) CreateAnsibleTask(c *gin.Context) {
 	var ansibleTask model.AnsibleTask
 	if err := c.ShouldBindJSON(&ansibleTask); err != nil {
@@ -274,6 +436,18 @@ func (h *Handler) CreateAnsibleTask(c *gin.Context) {
 	response.Success(c, ansibleTask)
 }
 
+// UpdateAnsibleTask 更新Ansible任务
+// @Summary 更新Ansible任务
+// @Description 更新指定Ansible任务的信息
+// @Tags 任务管理-Ansible任务
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Param body body model.AnsibleTask true "任务信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 404 {object} response.Response "任务不存在"
+// @Router /task/ansible-tasks/{id} [put]
 func (h *Handler) UpdateAnsibleTask(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var ansibleTask model.AnsibleTask
@@ -289,6 +463,17 @@ func (h *Handler) UpdateAnsibleTask(c *gin.Context) {
 	response.Success(c, ansibleTask)
 }
 
+// DeleteAnsibleTask 删除Ansible任务
+// @Summary 删除Ansible任务
+// @Description 删除指定的Ansible任务（已禁用）
+// @Tags 任务管理-Ansible任务
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 403 {object} response.Response "操作已禁用"
+// @Router /task/ansible-tasks/{id} [delete]
 func (h *Handler) DeleteAnsibleTask(c *gin.Context) {
 	response.ErrorCode(c, http.StatusForbidden, "删除Ansible任务功能已被禁用，如需删除请联系系统管理员")
 }
@@ -320,6 +505,17 @@ type HostExecutionResult struct {
 }
 
 // ExecuteTask 执行任务
+// @Summary 执行任务
+// @Description 在指定主机上执行Shell或Python脚本
+// @Tags 任务管理-任务执行
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body ExecuteTaskRequest true "执行参数"
+// @Success 200 {object} response.Response "执行成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Failure 403 {object} response.Response "命令被拦截"
+// @Router /task/execute [post]
 func (h *Handler) ExecuteTask(c *gin.Context) {
 	var req ExecuteTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -914,6 +1110,21 @@ func ptrTime(t time.Time) *time.Time {
 // ==================== 执行记录 ====================
 
 // ListExecutionHistory 获取执行记录列表
+// @Summary 获取执行记录列表
+// @Description 分页获取任务执行记录列表，支持按关键词、任务类型、状态和日期范围筛选
+// @Tags 任务管理-执行记录
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Param keyword query string false "搜索关键词"
+// @Param taskType query string false "任务类型"
+// @Param status query string false "执行状态"
+// @Param startDate query string false "开始日期"
+// @Param endDate query string false "结束日期"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /task/execution-history [get]
 func (h *Handler) ListExecutionHistory(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -1044,6 +1255,16 @@ func (h *Handler) ListExecutionHistory(c *gin.Context) {
 }
 
 // GetExecutionHistory 获取执行记录详情
+// @Summary 获取执行记录详情
+// @Description 获取指定执行记录的详细信息
+// @Tags 任务管理-执行记录
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "记录ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "记录不存在"
+// @Router /task/execution-history/{id} [get]
 func (h *Handler) GetExecutionHistory(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	var jobTask model.JobTask
@@ -1101,6 +1322,16 @@ func (h *Handler) GetExecutionHistory(c *gin.Context) {
 }
 
 // DeleteExecutionHistory 删除执行记录
+// @Summary 删除执行记录
+// @Description 删除指定的执行记录
+// @Tags 任务管理-执行记录
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "记录ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 500 {object} response.Response "删除失败"
+// @Router /task/execution-history/{id} [delete]
 func (h *Handler) DeleteExecutionHistory(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err := h.db.Delete(&model.JobTask{}, id).Error; err != nil {
@@ -1111,6 +1342,16 @@ func (h *Handler) DeleteExecutionHistory(c *gin.Context) {
 }
 
 // BatchDeleteExecutionHistory 批量删除执行记录
+// @Summary 批量删除执行记录
+// @Description 批量删除多条执行记录
+// @Tags 任务管理-执行记录
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "记录ID列表" example({"ids": [1, 2, 3]})
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /task/execution-history/batch [delete]
 func (h *Handler) BatchDeleteExecutionHistory(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`
@@ -1131,6 +1372,15 @@ func (h *Handler) BatchDeleteExecutionHistory(c *gin.Context) {
 }
 
 // ExportExecutionHistory 导出执行记录
+// @Summary 导出执行记录
+// @Description 导出执行记录数据
+// @Tags 任务管理-执行记录
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object false "记录ID列表，不传则导出全部" example({"ids": [1, 2, 3]})
+// @Success 200 {object} response.Response "导出成功"
+// @Router /task/execution-history/export [post]
 func (h *Handler) ExportExecutionHistory(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids"`
@@ -1241,7 +1491,7 @@ func (h *Handler) ExportExecutionHistory(c *gin.Context) {
 
 // ==================== 文件分发 ====================
 
-// DistributeFilesRequest 文件分发请求
+// FileDistributionResult 文件分发结果
 type FileDistributionResult struct {
 	HostID   uint   `json:"hostId"`
 	HostName string `json:"hostName"`
@@ -1251,6 +1501,18 @@ type FileDistributionResult struct {
 }
 
 // DistributeFiles 文件分发
+// @Summary 文件分发
+// @Description 将文件分发到指定的目标主机
+// @Tags 任务管理-文件分发
+// @Accept multipart/form-data
+// @Produce json
+// @Security Bearer
+// @Param files formData file true "上传的文件"
+// @Param targetPath formData string true "目标路径"
+// @Param hostIds formData string true "主机ID列表(JSON数组)"
+// @Success 200 {object} response.Response "分发成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /task/distribute-files [post]
 func (h *Handler) DistributeFiles(c *gin.Context) {
 	// 解析表单
 	form, err := c.MultipartForm()

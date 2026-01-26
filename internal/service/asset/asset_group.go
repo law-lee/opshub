@@ -20,6 +20,16 @@ func NewAssetGroupService(groupUseCase *asset.AssetGroupUseCase) *AssetGroupServ
 }
 
 // CreateGroup 创建分组
+// @Summary 创建资产分组
+// @Description 创建新的资产分组
+// @Tags 资产分组管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body asset.AssetGroupRequest true "分组信息"
+// @Success 200 {object} response.Response "创建成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /asset-groups [post]
 func (s *AssetGroupService) CreateGroup(c *gin.Context) {
 	var req asset.AssetGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -37,6 +47,17 @@ func (s *AssetGroupService) CreateGroup(c *gin.Context) {
 }
 
 // UpdateGroup 更新分组
+// @Summary 更新资产分组
+// @Description 更新指定的资产分组信息
+// @Tags 资产分组管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "分组ID"
+// @Param body body asset.AssetGroupRequest true "分组信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /asset-groups/{id} [put]
 func (s *AssetGroupService) UpdateGroup(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -62,6 +83,16 @@ func (s *AssetGroupService) UpdateGroup(c *gin.Context) {
 }
 
 // DeleteGroup 删除分组
+// @Summary 删除资产分组
+// @Description 删除指定的资产分组
+// @Tags 资产分组管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "分组ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "参数错误"
+// @Router /asset-groups/{id} [delete]
 func (s *AssetGroupService) DeleteGroup(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -79,6 +110,16 @@ func (s *AssetGroupService) DeleteGroup(c *gin.Context) {
 }
 
 // GetGroup 获取分组详情
+// @Summary 获取资产分组详情
+// @Description 获取指定资产分组的详细信息
+// @Tags 资产分组管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "分组ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Failure 404 {object} response.Response "分组不存在"
+// @Router /asset-groups/{id} [get]
 func (s *AssetGroupService) GetGroup(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -97,6 +138,14 @@ func (s *AssetGroupService) GetGroup(c *gin.Context) {
 }
 
 // GetGroupTree 获取分组树
+// @Summary 获取资产分组树
+// @Description 获取资产分组的树形结构数据
+// @Tags 资产分组管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} response.Response "获取成功"
+// @Router /asset-groups/tree [get]
 func (s *AssetGroupService) GetGroupTree(c *gin.Context) {
 	tree, err := s.groupUseCase.GetTree(c.Request.Context())
 	if err != nil {
@@ -114,6 +163,14 @@ func (s *AssetGroupService) GetGroupTree(c *gin.Context) {
 }
 
 // GetParentOptions 获取父级分组选项
+// @Summary 获取父级分组选项
+// @Description 获取可选的父级资产分组列表
+// @Tags 资产分组管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} response.Response "获取成功"
+// @Router /asset-groups/parent-options [get]
 func (s *AssetGroupService) GetParentOptions(c *gin.Context) {
 	options, err := s.groupUseCase.GetParentOptions(c.Request.Context())
 	if err != nil {

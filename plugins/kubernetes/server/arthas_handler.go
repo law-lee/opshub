@@ -132,8 +132,8 @@ func (h *ArthasHandler) ListJavaProcesses(c *gin.Context) {
 	}
 
 	// 执行 jps -l 命令获取Java进程列表
-	// 如果jps不存在，则尝试用ps命令
-	output, err := h.execCommand(c.Request.Context(), uint(clusterID), currentUserID.(uint), namespace, pod, container, []string{"sh", "-c", "jps -l 2>/dev/null || ps aux 2>/dev/null | grep java | grep -v grep || echo ''"})
+	// 如果jps不存在，则尝试用ps命令（使用 -o pid,args 格式，输出 PID 和命令行）
+	output, err := h.execCommand(c.Request.Context(), uint(clusterID), currentUserID.(uint), namespace, pod, container, []string{"sh", "-c", "jps -l 2>/dev/null || ps -eo pid,args 2>/dev/null | grep java | grep -v grep || echo ''"})
 
 	// 如果命令执行失败（例如容器中没有sh），返回空数组而不是错误
 	if err != nil {
@@ -167,16 +167,45 @@ func parseJavaProcesses(output string) []ProcessInfo {
 		}
 
 		// jps -l 格式: PID MainClass
+		// ps -eo pid,args 格式: PID command args...
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
+			pid := parts[0]
+
+			// 验证第一个字段是否是数字（PID）
+			if _, err := strconv.Atoi(pid); err != nil {
+				// 如果不是数字，可能是 ps aux 格式，尝试解析第二个字段作为 PID
+				if len(parts) >= 2 {
+					if _, err := strconv.Atoi(parts[1]); err == nil {
+						pid = parts[1]
+						// 跳过用户名和PID，剩余部分作为命令
+						if len(parts) > 2 {
+							parts = append([]string{pid}, parts[2:]...)
+						}
+					} else {
+						continue // 无法解析 PID，跳过此行
+					}
+				}
+			}
+
 			// 跳过 jps 自身
-			if strings.Contains(parts[1], "Jps") || strings.Contains(parts[1], "sun.tools.jps") {
+			mainClass := ""
+			if len(parts) >= 2 {
+				mainClass = parts[1]
+			}
+			if strings.Contains(mainClass, "Jps") || strings.Contains(mainClass, "sun.tools.jps") {
+				continue
+			}
+
+			// 跳过 arthas-boot.jar 进程（这些是诊断工具本身）
+			cmdLine := strings.Join(parts[1:], " ")
+			if strings.Contains(cmdLine, "arthas-boot.jar") {
 				continue
 			}
 
 			processes = append(processes, ProcessInfo{
-				PID:       parts[0],
-				MainClass: parts[1],
+				PID:       pid,
+				MainClass: mainClass,
 			})
 		}
 	}
@@ -243,78 +272,147 @@ TARGET_PID=%s
 COMMAND='%s'
 echo "[INFO] Executing Arthas command on process $TARGET_PID: $COMMAND"
 
-# 生成随机端口 (9000-9999)
-RANDOM_PORT=$((9000 + $$ %% 1000))
-echo "[INFO] Using telnet port: $RANDOM_PORT"
+# 查找可用的 JDK（需要有 tools.jar 或 jdk.attach 模块）
+find_jdk() {
+    # 常见的 Java 安装路径
+    JAVA_PATHS="/usr/lib/jvm /opt/java /opt/jdk /usr/java /opt /Library/Java/JavaVirtualMachines"
 
-# 执行命令的函数
-execute_arthas_command() {
-    local port=$1
-    local retry_count=0
-    local max_retries=3
+    for base in $JAVA_PATHS; do
+        if [ -d "$base" ]; then
+            # 查找所有 java 可执行文件
+            for java_bin in $(find "$base" -name "java" -type f 2>/dev/null | grep -E "/bin/java$" | head -10); do
+                java_home=$(dirname $(dirname "$java_bin"))
 
-    while [ $retry_count -lt $max_retries ]; do
-        retry_count=$((retry_count + 1))
-        echo "[INFO] Attempting to execute command (attempt $retry_count/$max_retries) on port $port..."
-
-        # 使用指定端口执行命令
-        OUTPUT=$(java -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $port --http-port -1 -c "$COMMAND" 2>&1)
-        EXIT_CODE=$?
-
-        # 检查是否成功获取到数据
-        if echo "$OUTPUT" | grep -qE "ID.*NAME|heap|nonheap|Memory|THREAD|RUNNABLE|WAITING|BLOCKED|TIMED_|@|gc\.|eden|os\.|java\.|user\.|sun\."; then
-            echo "$OUTPUT"
-            return 0
+                # 检查是否有 tools.jar (Java 8) 或 jmods 目录 (Java 9+)
+                if [ -f "$java_home/lib/tools.jar" ]; then
+                    echo "[DEBUG] Found JDK with tools.jar: $java_home" >&2
+                    echo "$java_bin"
+                    return 0
+                fi
+                if [ -d "$java_home/jmods" ]; then
+                    echo "[DEBUG] Found JDK with jmods: $java_home" >&2
+                    echo "$java_bin"
+                    return 0
+                fi
+            done
         fi
-
-        # 检查是否是端口冲突错误
-        if echo "$OUTPUT" | grep -qE "telnet port.*is used|process detection timeout|unexpected process"; then
-            echo "[WARN] Port $port conflict, trying different port..."
-            port=$((port + 1))
-            sleep 2
-            continue
-        fi
-
-        # 检查是否是连接错误 - 可能需要等待 telnet 服务启动
-        if echo "$OUTPUT" | grep -qE "Connection refused|Connect.*error"; then
-            echo "[WARN] Connection refused on port $port, retrying..."
-            sleep 3
-            continue
-        fi
-
-        # 其他情况，输出结果
-        echo "$OUTPUT"
-
-        # 如果有部分有效输出，认为成功
-        if [ $EXIT_CODE -eq 0 ]; then
-            return 0
-        fi
-
-        sleep 2
     done
 
+    # 如果没找到，尝试使用 JAVA_HOME
+    if [ -n "$JAVA_HOME" ]; then
+        if [ -f "$JAVA_HOME/lib/tools.jar" ] || [ -d "$JAVA_HOME/jmods" ]; then
+            echo "$JAVA_HOME/bin/java"
+            return 0
+        fi
+    fi
+
+    # 没有找到 JDK
     return 1
 }
 
-# 尝试执行命令
-if execute_arthas_command $RANDOM_PORT; then
+# 查找 JDK
+JAVA_BIN=$(find_jdk)
+if [ -z "$JAVA_BIN" ]; then
+    echo "[ERROR] 未找到 JDK 环境"
+    echo "[ERROR] Arthas 需要完整的 JDK（不是 JRE）才能运行"
+    echo "[ERROR] 当前 Java 环境: $(java -version 2>&1 | head -1)"
+    echo ""
+    echo "[HINT] 解决方案:"
+    echo "  1. 修改容器基础镜像，使用 JDK 而不是 JRE"
+    echo "     例如: eclipse-temurin:17-jdk 或 openjdk:17-jdk"
+    echo "  2. 在 Dockerfile 中安装完整的 JDK"
+    exit 1
+fi
+
+echo "[INFO] Using Java: $JAVA_BIN"
+
+# 使用固定端口，基于进程ID计算
+BASE_PORT=$((3658 + (TARGET_PID %% 100)))
+echo "[INFO] Using telnet port: $BASE_PORT"
+
+# 等待端口就绪的函数
+wait_for_port() {
+    local port=$1
+    local max_wait=15
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+        # 检查端口是否在监听
+        if (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; then
+            echo "[INFO] Port $port is ready"
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+        echo "[INFO] Waiting for port $port... ($waited/$max_wait)"
+    done
+    return 1
+}
+
+# 主执行逻辑
+PORT=$BASE_PORT
+MAX_ATTEMPTS=3
+ATTEMPT=0
+
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+    ATTEMPT=$((ATTEMPT + 1))
+    echo "[INFO] Attempt $ATTEMPT/$MAX_ATTEMPTS on port $PORT"
+
+    # 执行命令，使用找到的 JDK
+    OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $PORT --http-port -1 -c "$COMMAND" 2>&1)
+
+    # 检查是否成功获取到数据
+    if echo "$OUTPUT" | grep -qE "ID.*NAME|heap|nonheap|Memory|THREAD|RUNNABLE|WAITING|BLOCKED|TIMED_|@|gc\.|eden|os\.|java\.|user\.|sun\."; then
+        echo "$OUTPUT"
+        exit 0
+    fi
+
+    # 检查错误类型
+    if echo "$OUTPUT" | grep -q "telnet port.*is used"; then
+        echo "[WARN] Port $PORT already in use, trying next port..."
+        PORT=$((PORT + 1))
+        sleep 1
+        continue
+    fi
+
+    # 如果 attach 成功但连接失败，等待 telnet 服务启动
+    if echo "$OUTPUT" | grep -q "Attach process.*success"; then
+        echo "[INFO] Agent attached, waiting for telnet server to start..."
+
+        # 等待端口就绪
+        if wait_for_port $PORT; then
+            # 端口就绪后重新执行命令
+            echo "[INFO] Retrying command..."
+            OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $PORT --http-port -1 -c "$COMMAND" 2>&1)
+            if echo "$OUTPUT" | grep -qE "ID.*NAME|heap|nonheap|Memory|THREAD|RUNNABLE|WAITING|BLOCKED|TIMED_|@|gc\.|eden|os\.|java\.|user\.|sun\."; then
+                echo "$OUTPUT"
+                exit 0
+            fi
+        fi
+
+        # 如果还是失败，显示输出并继续尝试
+        echo "$OUTPUT"
+    else
+        echo "$OUTPUT"
+    fi
+
+    # 等待一段时间后重试
+    if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+        echo "[INFO] Waiting before retry..."
+        sleep 5
+    fi
+done
+
+# 最后一次尝试用不同端口
+FINAL_PORT=$((BASE_PORT + 100))
+echo "[INFO] Final attempt with port $FINAL_PORT"
+OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $FINAL_PORT --http-port -1 -c "$COMMAND" 2>&1)
+echo "$OUTPUT"
+
+if echo "$OUTPUT" | grep -qE "ID.*NAME|heap|nonheap|Memory|THREAD|RUNNABLE|WAITING|BLOCKED|TIMED_|@|gc\.|eden|os\.|java\.|user\.|sun\."; then
     exit 0
 fi
 
-# 如果失败，尝试使用另一个端口
-RANDOM_PORT2=$((RANDOM_PORT + 100))
-echo "[INFO] Retrying with different port: $RANDOM_PORT2"
-
-if execute_arthas_command $RANDOM_PORT2; then
-    exit 0
-fi
-
-echo ""
 echo "[ERROR] Failed to execute Arthas command after multiple attempts"
-echo "[HINT] Possible solutions:"
-echo "  1. Restart this Pod and try again"
-echo "  2. Check if JVM has enough memory"
-echo "  3. The JVM may not support Arthas agent attachment"
 exit 1
 `, processID, command)
 
@@ -339,62 +437,105 @@ fi
 TARGET_PID=%s
 echo "[INFO] Executing Arthas ognl command on process $TARGET_PID"
 
-# 生成随机端口 (9000-9999)
-RANDOM_PORT=$((9000 + $$ %% 1000))
+# 查找可用的 JDK
+find_jdk() {
+    JAVA_PATHS="/usr/lib/jvm /opt/java /opt/jdk /usr/java /Library/Java/JavaVirtualMachines"
+    for base in $JAVA_PATHS; do
+        if [ -d "$base" ]; then
+            for java_bin in $(find "$base" -name "java" -type f 2>/dev/null | grep -E "/bin/java$"); do
+                java_home=$(dirname $(dirname "$java_bin"))
+                if [ -f "$java_home/lib/tools.jar" ] || [ -d "$java_home/jmods" ]; then
+                    echo "$java_bin"
+                    return 0
+                fi
+            done
+        fi
+    done
+    if [ -n "$JAVA_HOME" ]; then
+        if [ -f "$JAVA_HOME/lib/tools.jar" ] || [ -d "$JAVA_HOME/jmods" ]; then
+            echo "$JAVA_HOME/bin/java"
+            return 0
+        fi
+    fi
+    echo "java"
+    return 1
+}
 
-# 执行 ognl 命令
-MAX_RETRY=3
-RETRY=0
-SUCCESS=0
-PORT=$RANDOM_PORT
+JAVA_BIN=$(find_jdk)
+echo "[INFO] Using Java: $JAVA_BIN"
 
-while [ $RETRY -lt $MAX_RETRY ]; do
-    RETRY=$((RETRY + 1))
-    echo "[INFO] Executing ognl command (attempt $RETRY/$MAX_RETRY) on port $PORT..."
+# 使用固定端口，基于进程ID计算
+BASE_PORT=$((3658 + (TARGET_PID %% 100)))
 
-    OUTPUT=$(java -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $PORT --http-port -1 -c "ognl '%s'" 2>&1)
-    EXIT_CODE=$?
+# 等待端口就绪的函数
+wait_for_port() {
+    local port=$1
+    local max_wait=15
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+        if (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    return 1
+}
 
-    # 检查是否是端口冲突
-    if echo "$OUTPUT" | grep -qE "telnet port.*is used|process detection timeout|unexpected process"; then
-        echo "[WARN] Port $PORT conflict, trying different port..."
+# 主执行逻辑
+PORT=$BASE_PORT
+MAX_ATTEMPTS=3
+ATTEMPT=0
+
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+    ATTEMPT=$((ATTEMPT + 1))
+    echo "[INFO] Attempt $ATTEMPT/$MAX_ATTEMPTS on port $PORT"
+
+    OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $PORT --http-port -1 -c "ognl '%s'" 2>&1)
+
+    # 检查是否成功
+    if echo "$OUTPUT" | grep -qE "@HashMap|@Properties|@String|@Integer|@Long"; then
+        echo "$OUTPUT"
+        exit 0
+    fi
+
+    # 端口冲突
+    if echo "$OUTPUT" | grep -q "telnet port.*is used"; then
         PORT=$((PORT + 1))
-        sleep 2
+        sleep 1
         continue
     fi
 
-    if [ $EXIT_CODE -eq 0 ]; then
+    # attach 成功但连接失败
+    if echo "$OUTPUT" | grep -q "Attach process.*success"; then
+        echo "[INFO] Agent attached, waiting for telnet server..."
+        if wait_for_port $PORT; then
+            OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $PORT --http-port -1 -c "ognl '%s'" 2>&1)
+            if echo "$OUTPUT" | grep -qE "@HashMap|@Properties|@String|@Integer|@Long"; then
+                echo "$OUTPUT"
+                exit 0
+            fi
+        fi
         echo "$OUTPUT"
-        SUCCESS=1
-        break
-    fi
-
-    if echo "$OUTPUT" | grep -qE "@HashMap|@Properties|@String"; then
-        echo "$OUTPUT"
-        SUCCESS=1
-        break
-    fi
-
-    if echo "$OUTPUT" | grep -qE "Connection refused|Connect.*error"; then
-        echo "[WARN] Connection issue, retrying..."
-        sleep 3
     elif echo "$OUTPUT" | grep -qE "No process|Can not find"; then
         echo "[ERROR] Process $TARGET_PID not found"
         exit 1
-    elif echo "$OUTPUT" | grep -qE "Unable to attach|attach not supported"; then
-        echo "[ERROR] This JVM does not support Arthas attach"
+    elif echo "$OUTPUT" | grep -qE "Unable to attach|attach not supported|tools.jar"; then
+        echo "[ERROR] This JVM does not support Arthas attach (JDK required, not JRE)"
+        echo "$OUTPUT"
         exit 1
     else
         echo "$OUTPUT"
-        sleep 2
+    fi
+
+    if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+        sleep 5
     fi
 done
 
-if [ $SUCCESS -ne 1 ]; then
-    echo "[ERROR] Failed to execute Arthas ognl command after $MAX_RETRY attempts"
-    exit 1
-fi
-`, processID, ognlExpr)
+echo "[ERROR] Failed to execute Arthas ognl command"
+exit 1
+`, processID, ognlExpr, ognlExpr)
 
 	return []string{"sh", "-c", script}
 }
@@ -1604,24 +1745,71 @@ OUTPUT_FILE="%s"
 
 echo "[INFO] Starting Arthas profiler on process $TARGET_PID with options: $PROFILER_OPTS"
 
+# 查找可用的 JDK
+find_jdk() {
+    JAVA_PATHS="/usr/lib/jvm /opt/java /opt/jdk /usr/java /opt /Library/Java/JavaVirtualMachines"
+    for base in $JAVA_PATHS; do
+        if [ -d "$base" ]; then
+            for java_bin in $(find "$base" -name "java" -type f 2>/dev/null | grep -E "/bin/java$" | head -10); do
+                java_home=$(dirname $(dirname "$java_bin"))
+                if [ -f "$java_home/lib/tools.jar" ] || [ -d "$java_home/jmods" ]; then
+                    echo "$java_bin"
+                    return 0
+                fi
+            done
+        fi
+    done
+    if [ -n "$JAVA_HOME" ]; then
+        if [ -f "$JAVA_HOME/lib/tools.jar" ] || [ -d "$JAVA_HOME/jmods" ]; then
+            echo "$JAVA_HOME/bin/java"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+JAVA_BIN=$(find_jdk)
+if [ -z "$JAVA_BIN" ]; then
+    echo "[ERROR] 未找到 JDK 环境，Arthas 需要完整的 JDK"
+    exit 1
+fi
+echo "[INFO] Using Java: $JAVA_BIN"
+
 # 删除旧的输出文件
 rm -f "$OUTPUT_FILE" 2>/dev/null
 
-# 生成随机端口 (9000-9999)
-RANDOM_PORT=$((9000 + $$ %% 1000))
+# 使用固定端口，基于进程ID计算
+BASE_PORT=$((3658 + (TARGET_PID %% 100)))
+
+# 等待端口就绪的函数
+wait_for_port() {
+    local port=$1
+    local max_wait=20
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+        if (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; then
+            echo "[INFO] Port $port is ready"
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+        echo "[INFO] Waiting for telnet port $port... ($waited/$max_wait)"
+    done
+    return 1
+}
 
 # 执行 profiler 的函数
 execute_profiler() {
     local port=$1
     local retry_count=0
-    local max_retries=2
+    local max_retries=3
 
     while [ $retry_count -lt $max_retries ]; do
         retry_count=$((retry_count + 1))
         echo "[INFO] Executing profiler command (attempt $retry_count/$max_retries) on port $port..."
 
         PROFILER_CMD="profiler start $PROFILER_OPTS"
-        OUTPUT=$(java -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $port --http-port -1 -c "$PROFILER_CMD" 2>&1)
+        OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $port --http-port -1 -c "$PROFILER_CMD" 2>&1)
 
         # 检查是否是端口冲突
         if echo "$OUTPUT" | grep -qE "telnet port.*is used|process detection timeout|unexpected process"; then
@@ -1629,6 +1817,15 @@ execute_profiler() {
             port=$((port + 1))
             sleep 2
             continue
+        fi
+
+        # 检查是否 attach 成功但连接失败
+        if echo "$OUTPUT" | grep -q "Attach process.*success" && echo "$OUTPUT" | grep -qE "Connection refused|Connect.*error"; then
+            echo "[INFO] Agent attached, waiting for telnet server..."
+            if wait_for_port $port; then
+                # 重试执行命令
+                OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $port --http-port -1 -c "$PROFILER_CMD" 2>&1)
+            fi
         fi
 
         echo "[INFO] Profiler command output:"
@@ -1645,7 +1842,7 @@ execute_profiler() {
 
         # 尝试使用 profiler stop 获取结果
         echo "[INFO] Output file not found, trying profiler stop..."
-        STOP_OUTPUT=$(java -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $port --http-port -1 -c "profiler stop -f $OUTPUT_FILE" 2>&1)
+        STOP_OUTPUT=$($JAVA_BIN -jar /tmp/arthas-boot.jar $TARGET_PID --telnet-port $port --http-port -1 -c "profiler stop -f $OUTPUT_FILE" 2>&1)
         echo "$STOP_OUTPUT"
 
         if [ -f "$OUTPUT_FILE" ]; then
@@ -1656,18 +1853,22 @@ execute_profiler() {
             return 0
         fi
 
-        sleep 2
+        sleep 3
     done
 
     return 1
 }
 
 # 执行 profiler
-if execute_profiler $RANDOM_PORT; then
+if execute_profiler $BASE_PORT; then
     exit 0
 fi
 
 echo "[ERROR] Failed to generate flame graph"
+echo "[HINT] 可能的原因:"
+echo "  1. 容器中没有完整的 JDK 环境"
+echo "  2. Arthas telnet 服务启动失败"
+echo "  3. 目标进程不支持 profiler"
 exit 1
 `, processID, profilerOpts, outputFile)
 
@@ -1707,15 +1908,59 @@ func (h *ArthasHandler) CheckArthasInstalled(c *gin.Context) {
 		return
 	}
 
-	// 检查Java是否存在 - 直接运行 java -version，不依赖 which 命令
-	// 很多精简的Java容器镜像没有 which 命令，但有 java
-	javaCheckScript := `java -version 2>&1 | head -3`
+	// 检查Java是否存在 - 尝试多种方式检测
+	// 方式1: 直接运行 java -version
+	// 方式2: 检查 JAVA_HOME
+	// 方式3: 检查常见路径
+	// 方式4: 检查是否有 Java 进程在运行
+	javaCheckScript := `
+# 方式1: 尝试 java -version
+if java -version 2>&1 | head -3 | grep -qiE "java version|openjdk version|runtime environment"; then
+    java -version 2>&1 | head -3
+    exit 0
+fi
+
+# 方式2: 通过 JAVA_HOME
+if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    $JAVA_HOME/bin/java -version 2>&1 | head -3
+    exit 0
+fi
+
+# 方式3: 检查常见路径
+for java_path in /usr/bin/java /usr/local/bin/java /opt/java/openjdk/bin/java /opt/jdk/bin/java; do
+    if [ -x "$java_path" ]; then
+        $java_path -version 2>&1 | head -3
+        exit 0
+    fi
+done
+
+# 方式4: 检查是否有 Java 进程（如果有 Java 进程，说明有 Java 环境）
+if ps aux 2>/dev/null | grep -v grep | grep -q java; then
+    echo "Java process detected"
+    exit 0
+fi
+
+if jps 2>/dev/null | grep -v Jps | grep -q .; then
+    echo "Java process detected via jps"
+    exit 0
+fi
+
+# 方式5: 尝试 find 查找 java
+java_bin=$(find /usr /opt -name "java" -type f 2>/dev/null | head -1)
+if [ -n "$java_bin" ] && [ -x "$java_bin" ]; then
+    $java_bin -version 2>&1 | head -3
+    exit 0
+fi
+
+exit 1
+`
 	output, err := h.execCommand(c.Request.Context(), uint(clusterID), currentUserID.(uint), namespace, pod, container, []string{"sh", "-c", javaCheckScript})
 
-	// 检查输出是否包含 Java 版本信息
+	// 检查输出是否包含 Java 版本信息或 Java 进程检测结果
 	hasJava := err == nil && (strings.Contains(strings.ToLower(output), "java version") ||
 		strings.Contains(strings.ToLower(output), "openjdk version") ||
-		strings.Contains(strings.ToLower(output), "runtime environment"))
+		strings.Contains(strings.ToLower(output), "runtime environment") ||
+		strings.Contains(strings.ToLower(output), "java process detected"))
 
 	javaVersion := ""
 	if hasJava {

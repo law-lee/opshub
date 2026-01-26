@@ -307,12 +307,35 @@ const buildMenuTree = (menus: any[]) => {
     return isVisible
   })
 
+  // 通过code/path/name去重，去掉完全相同的菜单
+  const uniqueMenus: any[] = []
+  const seenSignatures = new Set<string>()
+
+  for (const menu of filteredMenus) {
+    // 生成菜单的唯一标识
+    // 对于顶级菜单（parentId=0或parentPath为空），都使用'root'作为parentKey
+    let parentKey = 'root'
+    if (menu.parentId !== undefined && menu.parentId !== 0) {
+      parentKey = `parent_${menu.parentId}`
+    } else if (menu.parentPath !== undefined && menu.parentPath !== '' && menu.parentPath !== '/') {
+      parentKey = menu.parentPath
+    }
+
+    const signature = `${menu.name}_${parentKey}`
+
+    if (seenSignatures.has(signature)) {
+      continue
+    }
+    seenSignatures.add(signature)
+    uniqueMenus.push(menu)
+  }
 
   // 创建一个 Map 来快速查找菜单
   const menuMap = new Map()
+  // 为系统菜单创建一个path到menu的映射（用于插件菜单查找父菜单）
+  const pathToMenuMap = new Map()
 
-
-  filteredMenus.forEach(menu => {
+  uniqueMenus.forEach(menu => {
     // 统一使用 ID 或 path 作为唯一标识
     const menuId = menu.ID || menu.id || menu.path
     if (!menuId) {
@@ -324,6 +347,10 @@ const buildMenuTree = (menus: any[]) => {
     // 不设置 children 属性，只在需要时动态添加
     menuMap.set(menuId, menuWithoutChildren)
 
+    // 为系统菜单添加path映射（用于插件菜单查找）
+    if (menu.path && menu.path.startsWith('/')) {
+      pathToMenuMap.set(menu.path, menuWithoutChildren)
+    }
   })
 
   const tree: any[] = []
@@ -350,9 +377,16 @@ const buildMenuTree = (menus: any[]) => {
     }
 
     if (parentId && menuMap.has(parentId)) {
-      // 有父菜单，添加到父菜单的 children
+      // 有父菜单，添加到父菜单的 children（通过数字ID查找）
       const parent = menuMap.get(parentId)
       // 确保 children 数组存在
+      if (!parent.children) {
+        parent.children = []
+      }
+      parent.children.push(menuItem)
+    } else if (parentId && pathToMenuMap.has(parentId)) {
+      // 通过path查找父菜单（用于插件菜单）
+      const parent = pathToMenuMap.get(parentId)
       if (!parent.children) {
         parent.children = []
       }
@@ -442,16 +476,13 @@ const loadMenu = async () => {
     // 3. 获取插件菜单（根据授权路径过滤）
     const pluginMenus = await buildPluginMenus(allAuthorizedPaths)
 
-    // 4. 展平系统菜单树并过滤掉插件路径的菜单
-    // （这些菜单仅用于授权，实际显示由插件管理器提供）
+    // 4. 展平系统菜单树，并过滤掉那些已经由插件提供的菜单
+    const pluginProvidedMenuCodes = new Set(['kubernetes_application_diagnosis', 'kubernetes_cluster_inspection', 'monitor_domain', 'monitor_alert_channels', 'monitor_alert_receivers', 'monitor_alert_logs', 'task_templates', 'task_execute', 'task_file_distribution', 'kubernetes_clusters', 'kubernetes_nodes', 'kubernetes_namespaces', 'kubernetes_workloads', 'kubernetes_network', 'kubernetes_config', 'kubernetes_storage', 'kubernetes_access', 'kubernetes_audit'])
+
     const flattenMenus = (menus: any[], result: any[] = []) => {
       menus.forEach(menu => {
-        // 跳过插件路径的菜单
-        if (menu.path && pluginPathPrefixes.some(prefix => menu.path.startsWith(prefix))) {
-          // 仍然需要处理子菜单（如果有的话）
-          if (menu.children && menu.children.length > 0) {
-            flattenMenus(menu.children, result)
-          }
+        // 如果这个菜单的code在插件提供的列表中，跳过它（由插件提供）
+        if (menu.code && pluginProvidedMenuCodes.has(menu.code)) {
           return
         }
 
