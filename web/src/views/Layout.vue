@@ -2,7 +2,7 @@
   <el-container class="layout-container">
     <el-aside width="260px" v-if="!hideSidebar">
       <div class="logo">
-        <h3><span class="logo-ops">Ops</span><span class="logo-hub">Hub</span></h3>
+        <img :src="logoImage" alt="OpsHub Logo" class="logo-image" />
       </div>
 
       <el-menu
@@ -78,6 +78,9 @@
     <el-container>
       <el-header>
         <div class="header-content">
+          <div class="header-logo">
+            <img :src="headerImage" alt="Header" class="header-image" />
+          </div>
           <div class="breadcrumb">
             <el-breadcrumb separator="/">
               <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
@@ -133,6 +136,10 @@ import {
 } from '@element-plus/icons-vue'
 import { getUserMenu } from '@/api/menu'
 import { pluginManager } from '@/plugins/manager'
+
+// Logo 和 Header 图片路径（来自 public 文件夹）
+const logoImage = '/logo.png'
+const headerImage = '/header.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -577,47 +584,27 @@ onMounted(async () => {
 }
 
 .logo {
-  height: 64px;
-  line-height: 64px;
+  height: 120px;
+  line-height: 120px;
   text-align: center;
   background: #000000;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   margin: 0;
-  margin-top: 32px;
   flex-shrink: 0;
   width: 100%;
-}
-
-.logo h3 {
-  margin: 0;
-  color: #fff;
-  font-weight: 700;
-  letter-spacing: 2px;
-  font-size: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  height: auto;
-  line-height: 1;
+  padding: 10px 0;
 }
 
-.logo-ops {
-  color: #fff;
-  line-height: 1;
-}
-
-.logo-hub {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #FFB347 0%, #FF8C00 50%, #FF6B00 100%);
-  color: #000;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 700;
+.logo-image {
+  max-height: 100px;
+  max-width: 240px;
+  width: auto;
   height: auto;
-  line-height: 1;
+  object-fit: contain;
+  mix-blend-mode: lighten;
 }
 
 /* 用户信息区域 */
@@ -908,10 +895,34 @@ onMounted(async () => {
   width: 100%;
   display: flex;
   align-items: center;
+  gap: 20px;
+}
+
+.header-logo {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+
+.header-image {
+  max-height: 50px;
+  max-width: 400px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.breadcrumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
 }
 
 .el-main {
   background-color: #f0f2f5;
   padding: 20px;
 }
+
 </style>
