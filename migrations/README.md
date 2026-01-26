@@ -114,13 +114,26 @@ SHOW TABLES;
 - **管理员** (id=1, code='admin') - 拥有所有权限
 - **普通用户** (id=2, code='user') - 基本操作权限
 
-### 3. 默认菜单 (13 个)
+### 3. 默认菜单 (16 个)
 包括以下功能模块：
-- 仪表盘
-- 系统管理（用户、角色、部门、菜单）
-- 权限管理
-- 资产管理
-- 审计日志（操作日志、登录日志）
+- 仪表盘 (sort=0)
+- 容器管理 (sort=1) - Kubernetes插件
+- 监控中心 (sort=2) - Monitor插件
+- 任务中心 (sort=3) - Task插件
+- 系统管理 (sort=100)
+  - 用户管理 (parent_id=5)
+  - 角色管理 (parent_id=5)
+  - 部门管理 (parent_id=5)
+  - 菜单管理 (parent_id=5)
+- 权限管理 (sort=101)
+  - 角色权限 (parent_id=10)
+- 资产管理 (sort=102)
+  - 资产列表 (parent_id=12)
+- 审计日志 (sort=103)
+  - 操作日志 (parent_id=14)
+  - 登录日志 (parent_id=14)
+
+**注意**: 菜单通过 `parent_id` 建立父子关系。如果菜单显示不正确（子菜单显示为顶级菜单），请参考 [MENU_FIX_GUIDE.md](MENU_FIX_GUIDE.md) 进行修复。
 
 ### 4. 默认用户
 - **用户名**: admin

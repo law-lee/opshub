@@ -72,7 +72,7 @@ func toOperationLogListResponse(log *audit.SysOperationLog) OperationLogListResp
 // @Param startTime query string false "开始时间"
 // @Param endTime query string false "结束时间"
 // @Success 200 {object} response.Response{} "获取成功"
-// @Router /audit/operation-logs [get]
+// @Router /api/v1/audit/operation-logs [get]
 func (s *OperationLogService) ListOperationLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -111,7 +111,7 @@ func (s *OperationLogService) ListOperationLogs(c *gin.Context) {
 // @Security Bearer
 // @Param id path int true "操作日志ID"
 // @Success 200 {object} response.Response{} "获取成功"
-// @Router /audit/operation-logs/{id} [get]
+// @Router /api/v1/audit/operation-logs/{id} [get]
 func (s *OperationLogService) GetOperationLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -139,7 +139,7 @@ func (s *OperationLogService) GetOperationLog(c *gin.Context) {
 // @Param id path int true "操作日志ID"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /audit/operation-logs/{id} [delete]
+// @Router /api/v1/audit/operation-logs/{id} [delete]
 func (s *OperationLogService) DeleteOperationLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -166,7 +166,7 @@ func (s *OperationLogService) DeleteOperationLog(c *gin.Context) {
 // @Param body body object true "日志ID列表" example({"ids": [1, 2, 3]})
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /audit/operation-logs/batch [delete]
+// @Router /api/v1/audit/operation-logs/batch [delete]
 func (s *OperationLogService) DeleteOperationLogsBatch(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`

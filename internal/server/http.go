@@ -194,6 +194,14 @@ func (s *HTTPServer) enablePlugins() {
 }
 
 // listPlugins 获取所有插件列表
+// @Summary 获取插件列表
+// @Description 获取系统中所有已注册的插件列表
+// @Tags 插件管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} map[string]interface{} "插件列表"
+// @Router /api/v1/plugins [get]
 func (s *HTTPServer) listPlugins(c *gin.Context) {
 	plugins := s.pluginMgr.GetAllPlugins()
 	result := make([]map[string]interface{}, 0, len(plugins))
@@ -222,6 +230,16 @@ func (s *HTTPServer) listPlugins(c *gin.Context) {
 }
 
 // getPlugin 获取插件详情
+// @Summary 获取插件详情
+// @Description 获取指定插件的详细信息
+// @Tags 插件管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param name path string true "插件名称"
+// @Success 200 {object} map[string]interface{} "插件详情"
+// @Failure 404 {object} map[string]interface{} "插件不存在"
+// @Router /api/v1/plugins/{name} [get]
 func (s *HTTPServer) getPlugin(c *gin.Context) {
 	name := c.Param("name")
 	plugin, exists := s.pluginMgr.GetPlugin(name)
@@ -247,6 +265,16 @@ func (s *HTTPServer) getPlugin(c *gin.Context) {
 }
 
 // getPluginMenus 获取插件的菜单配置
+// @Summary 获取插件菜单
+// @Description 获取指定插件的菜单配置信息
+// @Tags 插件管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param name path string true "插件名称"
+// @Success 200 {object} map[string]interface{} "菜单配置"
+// @Failure 404 {object} map[string]interface{} "插件不存在"
+// @Router /api/v1/plugins/{name}/menus [get]
 func (s *HTTPServer) getPluginMenus(c *gin.Context) {
 	name := c.Param("name")
 	plugin, exists := s.pluginMgr.GetPlugin(name)
@@ -267,6 +295,16 @@ func (s *HTTPServer) getPluginMenus(c *gin.Context) {
 }
 
 // enablePlugin 启用插件
+// @Summary 启用插件
+// @Description 启用指定的插件
+// @Tags 插件管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param name path string true "插件名称"
+// @Success 200 {object} map[string]interface{} "启用成功"
+// @Failure 500 {object} map[string]interface{} "启用失败"
+// @Router /api/v1/plugins/{name}/enable [post]
 func (s *HTTPServer) enablePlugin(c *gin.Context) {
 	name := c.Param("name")
 
@@ -290,6 +328,16 @@ func (s *HTTPServer) enablePlugin(c *gin.Context) {
 }
 
 // disablePlugin 禁用插件
+// @Summary 禁用插件
+// @Description 禁用指定的插件
+// @Tags 插件管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param name path string true "插件名称"
+// @Success 200 {object} map[string]interface{} "禁用成功"
+// @Failure 500 {object} map[string]interface{} "禁用失败"
+// @Router /api/v1/plugins/{name}/disable [post]
 func (s *HTTPServer) disablePlugin(c *gin.Context) {
 	name := c.Param("name")
 

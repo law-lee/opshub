@@ -664,27 +664,30 @@ VALUES
 INSERT INTO `sys_menu` (`id`, `name`, `code`, `type`, `parent_id`, `path`, `component`, `icon`, `sort`, `visible`, `status`, `created_at`, `updated_at`)
 VALUES
   (1, '仪表盘', 'dashboard', 2, 0, '/', 'views/Index.vue', 'HomeFilled', 0, 1, 1, NOW(), NOW()),
-  (2, '系统管理', 'system', 1, 0, '/system', NULL, 'Setting', 100, 1, 1, NOW(), NOW()),
-  (3, '用户管理', 'user', 2, 2, '/system/user', 'views/system/User.vue', 'User', 1, 1, 1, NOW(), NOW()),
-  (4, '角色管理', 'role', 2, 2, '/system/role', 'views/system/Role.vue', 'UserFilled', 2, 1, 1, NOW(), NOW()),
-  (5, '部门管理', 'department', 2, 2, '/system/department', 'views/system/Department.vue', 'OfficeBuilding', 3, 1, 1, NOW(), NOW()),
-  (6, '菜单管理', 'menu', 2, 2, '/system/menu', 'views/system/Menu.vue', 'Menu', 4, 1, 1, NOW(), NOW()),
-  (7, '权限管理', 'permission', 1, 0, '/permission', NULL, 'Lock', 101, 1, 1, NOW(), NOW()),
-  (8, '角色权限', 'role_permission', 2, 7, '/permission/role', 'views/permission/RolePermission.vue', 'Lock', 1, 1, 1, NOW(), NOW()),
-  (9, '资产管理', 'asset', 1, 0, '/asset', NULL, 'Connection', 102, 1, 1, NOW(), NOW()),
-  (10, '资产列表', 'asset_list', 2, 9, '/asset/list', 'views/asset/AssetList.vue', 'Connection', 1, 1, 1, NOW(), NOW()),
-  (11, '审计日志', 'audit', 1, 0, '/audit', NULL, 'Document', 103, 1, 1, NOW(), NOW()),
-  (12, '操作日志', 'operation_log', 2, 11, '/audit/operation', 'views/audit/OperationLog.vue', 'Document', 1, 1, 1, NOW(), NOW()),
-  (13, '登录日志', 'login_log', 2, 11, '/audit/login', 'views/audit/LoginLog.vue', 'Document', 2, 1, 1, NOW(), NOW());
+  (2, '容器管理', 'kubernetes', 1, 0, '/kubernetes', NULL, 'Platform', 1, 1, 1, NOW(), NOW()),
+  (3, '监控中心', 'monitor', 1, 0, '/monitor', NULL, 'Monitor', 2, 1, 1, NOW(), NOW()),
+  (4, '任务中心', 'task', 1, 0, '/task', NULL, 'Tools', 3, 1, 1, NOW(), NOW()),
+  (5, '系统管理', 'system', 1, 0, '/system', NULL, 'Setting', 100, 1, 1, NOW(), NOW()),
+  (6, '用户管理', 'user', 2, 5, '/system/user', 'views/system/User.vue', 'User', 1, 1, 1, NOW(), NOW()),
+  (7, '角色管理', 'role', 2, 5, '/system/role', 'views/system/Role.vue', 'UserFilled', 2, 1, 1, NOW(), NOW()),
+  (8, '部门管理', 'department', 2, 5, '/system/department', 'views/system/Department.vue', 'OfficeBuilding', 3, 1, 1, NOW(), NOW()),
+  (9, '菜单管理', 'menu', 2, 5, '/system/menu', 'views/system/Menu.vue', 'Menu', 4, 1, 1, NOW(), NOW()),
+  (10, '权限管理', 'permission', 1, 0, '/permission', NULL, 'Lock', 101, 1, 1, NOW(), NOW()),
+  (11, '角色权限', 'role_permission', 2, 10, '/permission/role', 'views/permission/RolePermission.vue', 'Lock', 1, 1, 1, NOW(), NOW()),
+  (12, '资产管理', 'asset', 1, 0, '/asset', NULL, 'Connection', 102, 1, 1, NOW(), NOW()),
+  (13, '资产列表', 'asset_list', 2, 12, '/asset/list', 'views/asset/AssetList.vue', 'Connection', 1, 1, 1, NOW(), NOW()),
+  (14, '审计日志', 'audit', 1, 0, '/audit', NULL, 'Document', 103, 1, 1, NOW(), NOW()),
+  (15, '操作日志', 'operation_log', 2, 14, '/audit/operation', 'views/audit/OperationLog.vue', 'Document', 1, 1, 1, NOW(), NOW()),
+  (16, '登录日志', 'login_log', 2, 14, '/audit/login', 'views/audit/LoginLog.vue', 'Document', 2, 1, 1, NOW(), NOW());
 
 -- 为管理员角色分配所有菜单权限
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
 VALUES
-  (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13);
+  (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16);
 
 -- 为普通用户角色分配基础菜单权限
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
-VALUES (2, 1), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13);
+VALUES (2, 1), (2, 2), (2, 3), (2, 4), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16);
 
 SET FOREIGN_KEY_CHECKS = 1;
 

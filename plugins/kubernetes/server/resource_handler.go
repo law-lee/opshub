@@ -303,6 +303,18 @@ type InvolvedObjectInfo struct {
 }
 
 // ListNodes 获取节点列表
+// @Summary 获取节点列表
+// @Description 获取 Kubernetes 集群的节点列表及其状态信息
+// @Tags Kubernetes/节点管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} map[string]interface{} "节点列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/nodes [get]
 func (h *ResourceHandler) ListNodes(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -514,6 +526,18 @@ func (h *ResourceHandler) ListNodes(c *gin.Context) {
 }
 
 // GetNodeMetrics 获取节点指标
+// @Summary 获取节点指标
+// @Description 获取指定节点的 CPU、内存等资源使用指标
+// @Tags Kubernetes/节点管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param nodeName path string true "节点名称"
+// @Success 200 {object} map[string]interface{} "节点指标数据"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/nodes/{nodeName}/metrics [get]
 func (h *ResourceHandler) GetNodeMetrics(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	nodeName := c.Param("nodeName")
@@ -589,6 +613,17 @@ func (h *ResourceHandler) GetNodeMetrics(c *gin.Context) {
 }
 
 // ListNamespaces 获取命名空间列表
+// @Summary 获取命名空间列表
+// @Description 获取 Kubernetes 集群的命名空间列表
+// @Tags Kubernetes/命名空间
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} map[string]interface{} "命名空间列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/namespaces [get]
 func (h *ResourceHandler) ListNamespaces(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -651,6 +686,18 @@ func (h *ResourceHandler) ListNamespaces(c *gin.Context) {
 }
 
 // ListPods 获取Pod列表
+// @Summary 获取Pod列表
+// @Description 获取指定命名空间的 Pod 列表
+// @Tags Kubernetes/工作负载
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "Pod列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/pods [get]
 func (h *ResourceHandler) ListPods(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -743,6 +790,18 @@ func (h *ResourceHandler) ListPods(c *gin.Context) {
 }
 
 // ListDeployments 获取Deployment列表
+// @Summary 获取Deployment列表
+// @Description 获取指定命名空间的 Deployment 列表
+// @Tags Kubernetes/工作负载
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "Deployment列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/deployments [get]
 func (h *ResourceHandler) ListDeployments(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -813,6 +872,17 @@ func (h *ResourceHandler) ListDeployments(c *gin.Context) {
 }
 
 // GetClusterStats 获取集群统计信息
+// @Summary 获取集群统计信息
+// @Description 获取 Kubernetes 集群的资源统计信息（节点数、Pod数等）
+// @Tags Kubernetes/集群
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} map[string]interface{} "集群统计信息"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/stats [get]
 func (h *ResourceHandler) GetClusterStats(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -1747,6 +1817,18 @@ func (h *ResourceHandler) GetResourcesByAPIGroup(c *gin.Context) {
 }
 
 // GetNodeYAML 获取节点YAML
+// @Summary 获取节点YAML
+// @Description 获取指定节点的 YAML 配置
+// @Tags Kubernetes/节点管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param nodeName path string true "节点名称"
+// @Success 200 {object} map[string]interface{} "节点YAML"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/nodes/{nodeName}/yaml [get]
 func (h *ResourceHandler) GetNodeYAML(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	fmt.Printf("🔍 DEBUG [GetNodeYAML]: clusterIDStr=%s\n", clusterIDStr)
@@ -2003,6 +2085,18 @@ type DrainNodeRequest struct {
 }
 
 // DrainNode 排空节点
+// @Summary 排空节点
+// @Description 排空指定节点上的所有 Pod
+// @Tags Kubernetes/节点管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param nodeName path string true "节点名称"
+// @Success 200 {object} map[string]interface{} "操作成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/nodes/{nodeName}/drain [post]
 func (h *ResourceHandler) DrainNode(c *gin.Context) {
 	nodeName := c.Param("nodeName")
 	if nodeName == "" {
@@ -2113,6 +2207,18 @@ type CordonNodeRequest struct {
 }
 
 // CordonNode 设为不可调度
+// @Summary 设置节点为不可调度
+// @Description 将指定节点设置为不可调度状态
+// @Tags Kubernetes/节点管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param nodeName path string true "节点名称"
+// @Success 200 {object} map[string]interface{} "操作成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/nodes/{nodeName}/cordon [post]
 func (h *ResourceHandler) CordonNode(c *gin.Context) {
 	nodeName := c.Param("nodeName")
 	if nodeName == "" {
@@ -3814,6 +3920,19 @@ type ResourceInfo struct {
 }
 
 // GetWorkloads 获取工作负载列表
+// @Summary 获取工作负载列表
+// @Description 获取所有类型的工作负载（Deployment、StatefulSet、DaemonSet、Job、CronJob、Pod）
+// @Tags Kubernetes/工作负载
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Param kind query string false "工作负载类型"
+// @Success 200 {object} map[string]interface{} "工作负载列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/workloads [get]
 func (h *ResourceHandler) GetWorkloads(c *gin.Context) {
 	// 获取参数
 	clusterIDStr := c.Query("clusterId")
@@ -5489,6 +5608,18 @@ type ServicePortInfo struct {
 }
 
 // ListServices 获取服务列表
+// @Summary 获取Service列表
+// @Description 获取指定命名空间的 Service 列表
+// @Tags Kubernetes/网络
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "Service列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/services [get]
 func (h *ResourceHandler) ListServices(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -6068,6 +6199,18 @@ type IngressTLSInfo struct {
 }
 
 // ListIngresses 获取 Ingress 列表
+// @Summary 获取Ingress列表
+// @Description 获取指定命名空间的 Ingress 列表
+// @Tags Kubernetes/网络
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "Ingress列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/ingresses [get]
 func (h *ResourceHandler) ListIngresses(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -7706,6 +7849,18 @@ type UpdateNamespaceYAMLRequest struct {
 }
 
 // CreateNamespace 创建命名空间
+// @Summary 创建命名空间
+// @Description 创建新的 Kubernetes 命名空间
+// @Tags Kubernetes/命名空间
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param body body object true "命名空间配置"
+// @Success 200 {object} map[string]interface{} "创建成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/namespaces [post]
 func (h *ResourceHandler) CreateNamespace(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.Atoi(clusterIDStr)
@@ -7978,6 +8133,18 @@ type ConfigMapInfo struct {
 }
 
 // ListConfigMaps 获取 ConfigMap 列表
+// @Summary 获取ConfigMap列表
+// @Description 获取指定命名空间的 ConfigMap 列表
+// @Tags Kubernetes/配置
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "ConfigMap列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/configmaps [get]
 func (h *ResourceHandler) ListConfigMaps(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -8265,6 +8432,18 @@ type SecretInfo struct {
 }
 
 // ListSecrets 获取 Secret 列表
+// @Summary 获取Secret列表
+// @Description 获取指定命名空间的 Secret 列表
+// @Tags Kubernetes/配置
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "Secret列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/secrets [get]
 func (h *ResourceHandler) ListSecrets(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -8540,6 +8719,22 @@ func (h *ResourceHandler) DeleteSecret(c *gin.Context) {
 }
 
 // GetPodLogs 获取Pod日志
+// @Summary 获取Pod日志
+// @Description 获取指定 Pod 容器的日志
+// @Tags Kubernetes/工作负载
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string true "命名空间"
+// @Param name query string true "Pod名称"
+// @Param container query string false "容器名称"
+// @Param tailLines query int false "返回日志行数"
+// @Param previous query bool false "是否获取上一个容器的日志"
+// @Success 200 {object} map[string]interface{} "Pod日志"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/pods/logs [get]
 func (h *ResourceHandler) GetPodLogs(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	namespace := c.Query("namespace")
@@ -8745,6 +8940,19 @@ func formatMemoryMetrics(bytes int64) string {
 }
 
 // PodShellWebSocket Pod容器Shell WebSocket连接
+// @Summary Pod终端WebSocket
+// @Description 通过 WebSocket 连接到 Pod 容器的终端
+// @Tags Kubernetes/终端
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string true "命名空间"
+// @Param pod query string true "Pod名称"
+// @Param container query string false "容器名称"
+// @Success 101 {string} string "WebSocket连接升级成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Router /plugins/kubernetes/shell/pods [get]
 func (h *ResourceHandler) PodShellWebSocket(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	namespace := c.Query("namespace")
@@ -10203,6 +10411,18 @@ type StorageClassInfo struct {
 }
 
 // ListPersistentVolumeClaims 获取 PVC 列表
+// @Summary 获取PVC列表
+// @Description 获取指定命名空间的持久卷声明列表
+// @Tags Kubernetes/存储
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Param namespace query string false "命名空间"
+// @Success 200 {object} map[string]interface{} "PVC列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/persistentvolumeclaims [get]
 func (h *ResourceHandler) ListPersistentVolumeClaims(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -10531,6 +10751,17 @@ func (h *ResourceHandler) CreatePersistentVolumeClaimYAML(c *gin.Context) {
 }
 
 // ListPersistentVolumes 获取 PV 列表
+// @Summary 获取PV列表
+// @Description 获取集群的持久卷列表
+// @Tags Kubernetes/存储
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} map[string]interface{} "PV列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/persistentvolumes [get]
 func (h *ResourceHandler) ListPersistentVolumes(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)
@@ -10854,6 +11085,17 @@ func (h *ResourceHandler) CreatePersistentVolumeYAML(c *gin.Context) {
 }
 
 // ListStorageClasses 获取 StorageClass 列表
+// @Summary 获取StorageClass列表
+// @Description 获取集群的存储类列表
+// @Tags Kubernetes/存储
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param clusterId query int true "集群ID"
+// @Success 200 {object} map[string]interface{} "StorageClass列表"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/resources/storageclasses [get]
 func (h *ResourceHandler) ListStorageClasses(c *gin.Context) {
 	clusterIDStr := c.Query("clusterId")
 	clusterID, err := strconv.ParseUint(clusterIDStr, 10, 32)

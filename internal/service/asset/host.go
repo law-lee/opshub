@@ -40,7 +40,7 @@ func NewHostService(hostUseCase *asset.HostUseCase, credentialUseCase *asset.Cre
 // @Security Bearer
 // @Param body body asset.HostRequest true "主机信息"
 // @Success 200 {object} response.Response{} "创建成功"
-// @Router /asset-hosts [post]
+// @Router /api/v1/hosts [post]
 func (s *HostService) CreateHost(c *gin.Context) {
 	var req asset.HostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -67,7 +67,7 @@ func (s *HostService) CreateHost(c *gin.Context) {
 // @Param id path int true "主机ID"
 // @Param body body asset.HostRequest true "主机信息"
 // @Success 200 {object} response.Response "更新成功"
-// @Router /asset-hosts/{id} [put]
+// @Router /api/v1/hosts/{id} [put]
 func (s *HostService) UpdateHost(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -100,7 +100,7 @@ func (s *HostService) UpdateHost(c *gin.Context) {
 // @Security Bearer
 // @Param id path int true "主机ID"
 // @Success 200 {object} response.Response "删除成功"
-// @Router /asset-hosts/{id} [delete]
+// @Router /api/v1/hosts/{id} [delete]
 func (s *HostService) DeleteHost(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -126,7 +126,7 @@ func (s *HostService) DeleteHost(c *gin.Context) {
 // @Security Bearer
 // @Param id path int true "主机ID"
 // @Success 200 {object} response.Response{} "获取成功"
-// @Router /asset-hosts/{id} [get]
+// @Router /api/v1/hosts/{id} [get]
 func (s *HostService) GetHost(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -156,7 +156,7 @@ func (s *HostService) GetHost(c *gin.Context) {
 // @Param keyword query string false "搜索关键字"
 // @Param groupId query int false "分组ID"
 // @Success 200 {object} response.Response{} "获取成功"
-// @Router /asset-hosts [get]
+// @Router /api/v1/hosts [get]
 func (s *HostService) ListHosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -209,7 +209,7 @@ func (s *HostService) ListHosts(c *gin.Context) {
 // @Security Bearer
 // @Param body body asset.CredentialRequest true "凭证信息"
 // @Success 200 {object} response.Response{} "创建成功"
-// @Router /credentials [post]
+// @Router /api/v1/credentials [post]
 func (s *HostService) CreateCredential(c *gin.Context) {
 	var req asset.CredentialRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -236,7 +236,7 @@ func (s *HostService) CreateCredential(c *gin.Context) {
 // @Param id path int true "凭证ID"
 // @Param body body asset.CredentialRequest true "凭证信息"
 // @Success 200 {object} response.Response "更新成功"
-// @Router /credentials/{id} [put]
+// @Router /api/v1/credentials/{id} [put]
 func (s *HostService) UpdateCredential(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -269,7 +269,7 @@ func (s *HostService) UpdateCredential(c *gin.Context) {
 // @Security Bearer
 // @Param id path int true "凭证ID"
 // @Success 200 {object} response.Response "删除成功"
-// @Router /credentials/{id} [delete]
+// @Router /api/v1/credentials/{id} [delete]
 func (s *HostService) DeleteCredential(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -295,7 +295,7 @@ func (s *HostService) DeleteCredential(c *gin.Context) {
 // @Security Bearer
 // @Param id path int true "凭证ID"
 // @Success 200 {object} response.Response{} "获取成功"
-// @Router /credentials/{id} [get]
+// @Router /api/v1/credentials/{id} [get]
 func (s *HostService) GetCredential(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -325,7 +325,7 @@ func (s *HostService) GetCredential(c *gin.Context) {
 // @Param pageSize query int false "每页数量" default(10)
 // @Param keyword query string false "搜索关键字"
 // @Success 200 {object} response.Response{} "获取成功"
-// @Router /credentials [get]
+// @Router /api/v1/credentials [get]
 func (s *HostService) ListCredentials(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -353,7 +353,7 @@ func (s *HostService) ListCredentials(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Success 200 {object} response.Response "获取成功"
-// @Router /credentials/all [get]
+// @Router /api/v1/credentials/all [get]
 func (s *HostService) GetAllCredentials(c *gin.Context) {
 	credentials, err := s.credentialUseCase.GetAll(c.Request.Context())
 	if err != nil {
@@ -374,7 +374,7 @@ func (s *HostService) GetAllCredentials(c *gin.Context) {
 // @Param body body asset.CloudAccountRequest true "云账号信息"
 // @Success 200 {object} response.Response "创建成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /cloud-accounts [post]
+// @Router /api/v1/cloud-accounts [post]
 func (s *HostService) CreateCloudAccount(c *gin.Context) {
 	var req asset.CloudAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -402,7 +402,7 @@ func (s *HostService) CreateCloudAccount(c *gin.Context) {
 // @Param body body asset.CloudAccountRequest true "云账号信息"
 // @Success 200 {object} response.Response "更新成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /cloud-accounts/{id} [put]
+// @Router /api/v1/cloud-accounts/{id} [put]
 func (s *HostService) UpdateCloudAccount(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -436,7 +436,7 @@ func (s *HostService) UpdateCloudAccount(c *gin.Context) {
 // @Param id path int true "云账号ID"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /cloud-accounts/{id} [delete]
+// @Router /api/v1/cloud-accounts/{id} [delete]
 func (s *HostService) DeleteCloudAccount(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -463,7 +463,7 @@ func (s *HostService) DeleteCloudAccount(c *gin.Context) {
 // @Param id path int true "云账号ID"
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 404 {object} response.Response "账号不存在"
-// @Router /cloud-accounts/{id} [get]
+// @Router /api/v1/cloud-accounts/{id} [get]
 func (s *HostService) GetCloudAccount(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -491,7 +491,7 @@ func (s *HostService) GetCloudAccount(c *gin.Context) {
 // @Param page query int false "页码" default(1)
 // @Param pageSize query int false "每页数量" default(10)
 // @Success 200 {object} response.Response "获取成功"
-// @Router /cloud-accounts [get]
+// @Router /api/v1/cloud-accounts [get]
 func (s *HostService) ListCloudAccounts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -518,7 +518,7 @@ func (s *HostService) ListCloudAccounts(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Success 200 {object} response.Response "获取成功"
-// @Router /cloud-accounts/all [get]
+// @Router /api/v1/cloud-accounts/all [get]
 func (s *HostService) GetAllCloudAccounts(c *gin.Context) {
 	accounts, err := s.cloudUseCase.GetAll(c.Request.Context())
 	if err != nil {
@@ -540,7 +540,7 @@ func (s *HostService) GetAllCloudAccounts(c *gin.Context) {
 // @Param region query string true "区域"
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /cloud-accounts/{id}/instances [get]
+// @Router /api/v1/cloud-accounts/{id}/instances [get]
 func (s *HostService) GetCloudInstances(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -575,7 +575,7 @@ func (s *HostService) GetCloudInstances(c *gin.Context) {
 // @Param id path int true "云账号ID"
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /cloud-accounts/{id}/regions [get]
+// @Router /api/v1/cloud-accounts/{id}/regions [get]
 func (s *HostService) GetCloudRegions(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -603,7 +603,7 @@ func (s *HostService) GetCloudRegions(c *gin.Context) {
 // @Param body body asset.CloudImportRequest true "导入配置"
 // @Success 200 {object} response.Response "导入成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /cloud-accounts/import [post]
+// @Router /api/v1/cloud-accounts/import [post]
 func (s *HostService) ImportFromCloud(c *gin.Context) {
 	var req asset.CloudImportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -629,7 +629,7 @@ func (s *HostService) ImportFromCloud(c *gin.Context) {
 // @Param id path int true "主机ID"
 // @Success 200 {object} response.Response "采集成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/{id}/collect [post]
+// @Router /api/v1/hosts/{id}/collect [post]
 func (s *HostService) CollectHostInfo(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -656,7 +656,7 @@ func (s *HostService) CollectHostInfo(c *gin.Context) {
 // @Param id path int true "主机ID"
 // @Success 200 {object} response.Response "连接成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/{id}/test [post]
+// @Router /api/v1/hosts/{id}/test [post]
 func (s *HostService) TestHostConnection(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -683,7 +683,7 @@ func (s *HostService) TestHostConnection(c *gin.Context) {
 // @Param body body object true "主机ID列表 {hostIds: []uint}"
 // @Success 200 {object} response.Response "采集完成"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/batch-collect [post]
+// @Router /api/v1/hosts/batch-collect [post]
 func (s *HostService) BatchCollectHostInfo(c *gin.Context) {
 	var req struct {
 		HostIDs []uint `json:"hostIds" binding:"required"`
@@ -711,7 +711,7 @@ func (s *HostService) BatchCollectHostInfo(c *gin.Context) {
 // @Param body body object true "主机ID列表 {hostIds: []uint}"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/batch-delete [post]
+// @Router /api/v1/hosts/batch-delete [post]
 func (s *HostService) BatchDeleteHosts(c *gin.Context) {
 	var req struct {
 		HostIDs []uint `json:"hostIds" binding:"required"`
@@ -737,7 +737,7 @@ func (s *HostService) BatchDeleteHosts(c *gin.Context) {
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 // @Security Bearer
 // @Success 200 {file} file "Excel模板文件"
-// @Router /hosts/template/download [get]
+// @Router /api/v1/hosts/template/download [get]
 func (s *HostService) DownloadExcelTemplate(c *gin.Context) {
 	f := excelize.NewFile()
 	// 获取默认sheet名称 (默认是 "Sheet1")
@@ -821,7 +821,7 @@ func (s *HostService) DownloadExcelTemplate(c *gin.Context) {
 // @Param groupId formData int false "分组ID"
 // @Success 200 {object} response.Response "导入结果"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/import [post]
+// @Router /api/v1/hosts/import [post]
 func (s *HostService) ImportFromExcel(c *gin.Context) {
 	// 获取上传的文件
 	file, err := c.FormFile("file")
@@ -887,7 +887,7 @@ func (s *HostService) ImportFromExcel(c *gin.Context) {
 // @Param path query string false "目录路径" default(~)
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/{id}/files [get]
+// @Router /api/v1/hosts/{id}/files [get]
 func (s *HostService) ListHostFiles(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -920,7 +920,7 @@ func (s *HostService) ListHostFiles(c *gin.Context) {
 // @Param path formData string false "远程目录路径" default(~/)
 // @Success 200 {object} response.Response "上传成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/{id}/files/upload [post]
+// @Router /api/v1/hosts/{id}/files/upload [post]
 func (s *HostService) UploadHostFile(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -970,7 +970,7 @@ func (s *HostService) UploadHostFile(c *gin.Context) {
 // @Param path query string true "文件路径"
 // @Success 200 {file} file "文件内容"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/{id}/files/download [get]
+// @Router /api/v1/hosts/{id}/files/download [get]
 func (s *HostService) DownloadHostFile(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -1015,7 +1015,7 @@ func (s *HostService) DownloadHostFile(c *gin.Context) {
 // @Param body body object true "文件路径 {path: string}"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /hosts/{id}/files [delete]
+// @Router /api/v1/hosts/{id}/files [delete]
 func (s *HostService) DeleteHostFile(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)

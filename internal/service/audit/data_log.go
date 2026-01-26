@@ -67,7 +67,7 @@ func toDataLogListResponse(log *audit.SysDataLog) DataLogListResponse {
 // @Param startTime query string false "开始时间"
 // @Param endTime query string false "结束时间"
 // @Success 200 {object} response.Response "获取成功"
-// @Router /audit/data-logs [get]
+// @Router /api/v1/audit/data-logs [get]
 func (s *DataLogService) ListDataLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -106,7 +106,7 @@ func (s *DataLogService) ListDataLogs(c *gin.Context) {
 // @Param id path int true "数据日志ID"
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 404 {object} response.Response "日志不存在"
-// @Router /audit/data-logs/{id} [get]
+// @Router /api/v1/audit/data-logs/{id} [get]
 func (s *DataLogService) GetDataLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -134,7 +134,7 @@ func (s *DataLogService) GetDataLog(c *gin.Context) {
 // @Param id path int true "数据日志ID"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /audit/data-logs/{id} [delete]
+// @Router /api/v1/audit/data-logs/{id} [delete]
 func (s *DataLogService) DeleteDataLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -161,7 +161,7 @@ func (s *DataLogService) DeleteDataLog(c *gin.Context) {
 // @Param body body object true "日志ID列表" example({"ids": [1, 2, 3]})
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /audit/data-logs/batch [delete]
+// @Router /api/v1/audit/data-logs/batch [delete]
 func (s *DataLogService) DeleteDataLogsBatch(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`

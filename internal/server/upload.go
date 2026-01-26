@@ -39,6 +39,17 @@ func NewUploadServer(db *gorm.DB, uploadDir, uploadURL string) *UploadServer {
 }
 
 // UploadAvatar 上传头像
+// @Summary 上传用户头像
+// @Description 上传用户头像图片，支持常见图片格式，最大2MB
+// @Tags 文件上传
+// @Accept multipart/form-data
+// @Produce json
+// @Security Bearer
+// @Param file formData file true "头像图片文件"
+// @Success 200 {object} map[string]interface{} "上传成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 401 {object} map[string]interface{} "未登录"
+// @Router /api/v1/upload/avatar [post]
 func (s *UploadServer) UploadAvatar(c *gin.Context) {
 	// 获取上传的文件
 	file, header, err := c.Request.FormFile("file")
@@ -126,6 +137,17 @@ func (s *UploadServer) UploadAvatar(c *gin.Context) {
 }
 
 // UpdateUserAvatar 更新用户头像
+// @Summary 更新用户头像地址
+// @Description 更新当前用户的头像地址
+// @Tags 文件上传
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param body body object true "头像地址" example({"avatar": "/uploads/avatar_1_1234567890.png"})
+// @Success 200 {object} map[string]interface{} "更新成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 401 {object} map[string]interface{} "未登录"
+// @Router /api/v1/profile/avatar [put]
 func (s *UploadServer) UpdateUserAvatar(c *gin.Context) {
 	var req struct {
 		Avatar string `json:"avatar" binding:"required"`
@@ -174,6 +196,16 @@ func (s *UploadServer) UpdateUserAvatar(c *gin.Context) {
 }
 
 // UploadPlugin 上传并安装插件
+// @Summary 上传插件包
+// @Description 上传并安装插件包，只支持 .zip 格式，最大50MB
+// @Tags 插件管理
+// @Accept multipart/form-data
+// @Produce json
+// @Security Bearer
+// @Param file formData file true "插件zip包"
+// @Success 200 {object} map[string]interface{} "安装成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Router /api/v1/plugins/upload [post]
 func (s *UploadServer) UploadPlugin(c *gin.Context) {
 	// 获取上传的文件
 	file, header, err := c.Request.FormFile("file")
@@ -797,6 +829,16 @@ func (s *UploadServer) removePluginImportFromBackend(currentDir, pluginName stri
 }
 
 // UninstallPlugin 卸载插件
+// @Summary 卸载插件
+// @Description 卸载指定的插件，删除相关文件和配置
+// @Tags 插件管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param name path string true "插件名称"
+// @Success 200 {object} map[string]interface{} "卸载成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Router /api/v1/plugins/{name}/uninstall [delete]
 func (s *UploadServer) UninstallPlugin(c *gin.Context) {
 	pluginName := c.Param("name")
 	if pluginName == "" {

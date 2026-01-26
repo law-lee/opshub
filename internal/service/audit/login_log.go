@@ -70,7 +70,7 @@ func toLoginLogListResponse(log *audit.SysLoginLog) LoginLogListResponse {
 // @Param startTime query string false "开始时间"
 // @Param endTime query string false "结束时间"
 // @Success 200 {object} response.Response "获取成功"
-// @Router /audit/login-logs [get]
+// @Router /api/v1/audit/login-logs [get]
 func (s *LoginLogService) ListLoginLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -109,7 +109,7 @@ func (s *LoginLogService) ListLoginLogs(c *gin.Context) {
 // @Param id path int true "登录日志ID"
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 404 {object} response.Response "日志不存在"
-// @Router /audit/login-logs/{id} [get]
+// @Router /api/v1/audit/login-logs/{id} [get]
 func (s *LoginLogService) GetLoginLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -137,7 +137,7 @@ func (s *LoginLogService) GetLoginLog(c *gin.Context) {
 // @Param id path int true "登录日志ID"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /audit/login-logs/{id} [delete]
+// @Router /api/v1/audit/login-logs/{id} [delete]
 func (s *LoginLogService) DeleteLoginLog(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -164,7 +164,7 @@ func (s *LoginLogService) DeleteLoginLog(c *gin.Context) {
 // @Param body body object true "日志ID列表" example({"ids": [1, 2, 3]})
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /audit/login-logs/batch [delete]
+// @Router /api/v1/audit/login-logs/batch [delete]
 func (s *LoginLogService) DeleteLoginLogsBatch(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids" binding:"required"`

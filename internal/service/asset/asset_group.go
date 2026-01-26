@@ -29,7 +29,7 @@ func NewAssetGroupService(groupUseCase *asset.AssetGroupUseCase) *AssetGroupServ
 // @Param body body asset.AssetGroupRequest true "分组信息"
 // @Success 200 {object} response.Response "创建成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /asset-groups [post]
+// @Router /api/v1/asset-groups [post]
 func (s *AssetGroupService) CreateGroup(c *gin.Context) {
 	var req asset.AssetGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -57,7 +57,7 @@ func (s *AssetGroupService) CreateGroup(c *gin.Context) {
 // @Param body body asset.AssetGroupRequest true "分组信息"
 // @Success 200 {object} response.Response "更新成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /asset-groups/{id} [put]
+// @Router /api/v1/asset-groups/{id} [put]
 func (s *AssetGroupService) UpdateGroup(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -92,7 +92,7 @@ func (s *AssetGroupService) UpdateGroup(c *gin.Context) {
 // @Param id path int true "分组ID"
 // @Success 200 {object} response.Response "删除成功"
 // @Failure 400 {object} response.Response "参数错误"
-// @Router /asset-groups/{id} [delete]
+// @Router /api/v1/asset-groups/{id} [delete]
 func (s *AssetGroupService) DeleteGroup(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -119,7 +119,7 @@ func (s *AssetGroupService) DeleteGroup(c *gin.Context) {
 // @Param id path int true "分组ID"
 // @Success 200 {object} response.Response "获取成功"
 // @Failure 404 {object} response.Response "分组不存在"
-// @Router /asset-groups/{id} [get]
+// @Router /api/v1/asset-groups/{id} [get]
 func (s *AssetGroupService) GetGroup(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -145,7 +145,7 @@ func (s *AssetGroupService) GetGroup(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Success 200 {object} response.Response "获取成功"
-// @Router /asset-groups/tree [get]
+// @Router /api/v1/asset-groups/tree [get]
 func (s *AssetGroupService) GetGroupTree(c *gin.Context) {
 	tree, err := s.groupUseCase.GetTree(c.Request.Context())
 	if err != nil {
@@ -170,7 +170,7 @@ func (s *AssetGroupService) GetGroupTree(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Success 200 {object} response.Response "获取成功"
-// @Router /asset-groups/parent-options [get]
+// @Router /api/v1/asset-groups/parent-options [get]
 func (s *AssetGroupService) GetParentOptions(c *gin.Context) {
 	options, err := s.groupUseCase.GetParentOptions(c.Request.Context())
 	if err != nil {

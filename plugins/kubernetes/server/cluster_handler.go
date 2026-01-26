@@ -31,11 +31,16 @@ func NewClusterHandler(db *gorm.DB) *ClusterHandler {
 // CreateCluster 创建集群
 // @Summary 创建集群
 // @Description 创建新的 Kubernetes 集群
-// @Tags Kubernetes/Cluster
+// @Tags Kubernetes/集群管理
 // @Accept json
 // @Produce json
-// @Success 200 {object} Response
-// @Router /api/v1/kubernetes/clusters [post]
+// @Security Bearer
+// @Param body body service.CreateClusterRequest true "集群信息"
+// @Success 200 {object} map[string]interface{} "创建成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/clusters [post]
 func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 	// 检查是否为管理员
 	if !RequireAdmin(c, h.db) {
@@ -81,12 +86,16 @@ func (h *ClusterHandler) CreateCluster(c *gin.Context) {
 // UpdateCluster 更新集群
 // @Summary 更新集群
 // @Description 更新 Kubernetes 集群信息
-// @Tags Kubernetes/Cluster
+// @Tags Kubernetes/集群管理
 // @Accept json
 // @Produce json
+// @Security Bearer
 // @Param id path int true "集群ID"
-// @Success 200 {object} Response
-// @Router /api/v1/kubernetes/clusters/{id} [put]
+// @Param body body service.UpdateClusterRequest true "集群信息"
+// @Success 200 {object} map[string]interface{} "更新成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/clusters/{id} [put]
 func (h *ClusterHandler) UpdateCluster(c *gin.Context) {
 	// 检查是否为管理员
 	if !RequireAdmin(c, h.db) {
@@ -131,12 +140,15 @@ func (h *ClusterHandler) UpdateCluster(c *gin.Context) {
 // DeleteCluster 删除集群
 // @Summary 删除集群
 // @Description 删除 Kubernetes 集群
-// @Tags Kubernetes/Cluster
+// @Tags Kubernetes/集群管理
 // @Accept json
 // @Produce json
+// @Security Bearer
 // @Param id path int true "集群ID"
-// @Success 200 {object} Response
-// @Router /api/v1/kubernetes/clusters/{id} [delete]
+// @Success 200 {object} map[string]interface{} "删除成功"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /plugins/kubernetes/clusters/{id} [delete]
 func (h *ClusterHandler) DeleteCluster(c *gin.Context) {
 	// 检查是否为管理员
 	if !RequireAdmin(c, h.db) {
