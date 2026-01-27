@@ -18,6 +18,20 @@ export interface DomainMonitor {
   updatedAt?: string
 }
 
+export interface DomainCheckHistory {
+  id: number
+  domainId: number
+  domain: string
+  status: string
+  responseTime: number
+  sslValid: boolean
+  sslExpiry?: string
+  statusCode: number
+  errorMessage?: string
+  checkedAt: string
+  createdAt: string
+}
+
 // 获取域名监控列表
 export const getDomainMonitors = () => {
   return request.get('/api/v1/plugins/monitor/domains')
@@ -51,4 +65,11 @@ export const checkDomain = (id: number) => {
 // 获取域名统计数据
 export const getDomainStats = () => {
   return request.get('/api/v1/plugins/monitor/domains/stats')
+}
+
+// 获取域名检查历史
+export const getDomainCheckHistory = (id: number, page: number = 1, pageSize: number = 20) => {
+  return request.get(`/api/v1/plugins/monitor/domains/${id}/history`, {
+    params: { page, pageSize }
+  })
 }

@@ -349,7 +349,8 @@ import {
   updateDomainMonitor,
   deleteDomainMonitor,
   checkDomain,
-  getDomainStats
+  getDomainStats,
+  getDomainCheckHistory
 } from '@/api/domain-monitor'
 
 const loading = ref(false)
@@ -495,10 +496,23 @@ const handleEdit = (row: any) => {
 const handleView = async (row: any) => {
   try {
     loading.value = true
-    const detail = await getDomainMonitor(row.id)
+    const [detail, historyData] = await Promise.all([
+      getDomainMonitor(row.id),
+      getDomainCheckHistory(row.id, 1, 20)
+    ])
     currentDomain.value = detail
-    // TODO: 加载检查历史
-    checkHistory.value = []
+    // 转换检查历史数据格式
+    if (historyData && historyData.list) {
+      checkHistory.value = historyData.list.map((item: any) => ({
+        id: item.id,
+        time: formatDateTime(item.checkedAt),
+        status: item.status === 'normal' ? 'success' : 'error',
+        responseTime: item.responseTime,
+        message: item.errorMessage || ''
+      }))
+    } else {
+      checkHistory.value = []
+    }
     detailDialogVisible.value = true
   } catch (error: any) {
     ElMessage.error('获取详情失败')
