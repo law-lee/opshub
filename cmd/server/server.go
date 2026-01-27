@@ -36,6 +36,7 @@ import (
 	"github.com/ydcloud-dy/opshub/internal/server"
 	"github.com/ydcloud-dy/opshub/internal/service"
 	rbacmodel "github.com/ydcloud-dy/opshub/internal/biz/rbac"
+	rbacservice "github.com/ydcloud-dy/opshub/internal/service/rbac"
 	auditmodel "github.com/ydcloud-dy/opshub/internal/biz/audit"
 	"github.com/ydcloud-dy/opshub/plugins/kubernetes/data/models"
 	k8smodel "github.com/ydcloud-dy/opshub/plugins/kubernetes/model"
@@ -132,6 +133,9 @@ func runServer() (*conf.Config, error) {
 		return nil, fmt.Errorf("初始化Redis失败: %w", err)
 	}
 	globalRedis = redis // 保存到全局变量
+
+	// 初始化验证码存储（使用 Redis）
+	rbacservice.InitCaptchaStore(redis.Get())
 
 	// 初始化业务层
 	biz := biz.NewBiz(data, redis)

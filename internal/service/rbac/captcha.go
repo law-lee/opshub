@@ -20,12 +20,31 @@
 package rbac
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/mojocn/base64Captcha"
+	"github.com/redis/go-redis/v9"
 	"github.com/ydcloud-dy/opshub/pkg/response"
 )
 
-var store = base64Captcha.DefaultMemStore
+// 全局验证码存储（支持 Redis）
+var captchaStore base64Captcha.Store
+
+// InitCaptchaStore 初始化验证码存储（使用 Redis）
+func InitCaptchaStore(redisClient *redis.Client) {
+	if redisClient != nil {
+		captchaStore = NewRedisCaptchaStore(redisClient, 5*time.Minute)
+	} else {
+		// 如果没有 Redis，回退到内存存储
+		captchaStore = base64Captcha.DefaultMemStore
+	}
+}
+
+func init() {
+	// 默认使用内存存储，后续会被 InitCaptchaStore 覆盖
+	captchaStore = base64Captcha.DefaultMemStore
+}
 
 // CaptchaService 验证码服务
 type CaptchaService struct{}
@@ -62,7 +81,7 @@ func (s *CaptchaService) GetCaptcha(c *gin.Context) {
 	)
 
 	// 生成验证码
-	cp := base64Captcha.NewCaptcha(driver, store)
+	cp := base64Captcha.NewCaptcha(driver, captchaStore)
 	id, b64s, _, err := cp.Generate()
 	if err != nil {
 		response.ErrorCode(c, 500, "验证码生成失败")
@@ -79,8 +98,8 @@ func (s *CaptchaService) GetCaptcha(c *gin.Context) {
 
 // VerifyCaptchaRequest 验证码验证请求
 type VerifyCaptchaRequest struct {
-	CaptchaId  string `json:"captchaId"`
-	CaptchaId2 string `json:"captchaId2"` // 兼容前端可能的字段名
+	CaptchaId   string `json:"captchaId"`
+	CaptchaId2  string `json:"captchaId2"` // 兼容前端可能的字段名
 	CaptchaCode string `json:"captchaCode"`
 }
 
@@ -113,7 +132,7 @@ func (s *CaptchaService) VerifyCaptcha(c *gin.Context) {
 	}
 
 	// 验证验证码
-	if store.Verify(captchaId, req.CaptchaCode, true) {
+	if captchaStore.Verify(captchaId, req.CaptchaCode, true) {
 		response.Success(c, gin.H{"valid": true})
 	} else {
 		response.ErrorCode(c, 400, "验证码错误")
@@ -125,5 +144,5 @@ func (s *CaptchaService) VerifyCaptchaDirect(captchaId, captchaCode string) bool
 	if captchaId == "" || captchaCode == "" {
 		return false
 	}
-	return store.Verify(captchaId, captchaCode, true)
+	return captchaStore.Verify(captchaId, captchaCode, true)
 }
