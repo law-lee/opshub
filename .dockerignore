@@ -40,8 +40,9 @@ web/node_modules/
 web/dist/
 web/.vite/
 
-# Documentation
-docs/
+# Documentation (keep swagger docs)
+docs/*.md
+docs/plugins/
 *.md
 !README.md
 

@@ -17,7 +17,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:9876',
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:9876',
         changeOrigin: true,
         ws: true  // 启用 WebSocket 代理
       }

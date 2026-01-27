@@ -6,7 +6,7 @@ ENV GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct \
     CGO_ENABLED=0 \
     GOOS=linux
 # Install build dependencies
-RUN apk add --no-cache git make
+# RUN apk add --no-cache git make
 
 # Set working directory
 WORKDIR /build
