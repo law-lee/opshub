@@ -12,7 +12,7 @@ global:
   # busybox 镜像（用于 initContainer 等待依赖服务）
   busybox:
     repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/busybox
-    tag: "1.36"
+    tag: "1.37.0"
 
 # ==================== 后端配置 ====================
 backend:
@@ -20,10 +20,9 @@ backend:
   replicaCount: 2
 
   image:
-    # 华为云 SWR 示例: swr.cn-east-3.myhuaweicloud.com/你的组织名/opshub-backend
-    repository: swr.cn-east-3.myhuaweicloud.com/dycloud/opshub-backend
+    repository: docker.1ms.run/dyclouds/opshub-api
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   # 服务配置
   service:
@@ -69,10 +68,9 @@ frontend:
   replicaCount: 2
 
   image:
-    # 华为云 SWR 示例: swr.cn-east-3.myhuaweicloud.com/你的组织名/opshub-frontend
-    repository: swr.cn-east-3.myhuaweicloud.com/dycloud/opshub-frontend
+    repository: docker.1ms.run/dyclouds/opshub-web
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   # 服务配置
   service:
@@ -116,8 +114,8 @@ mysql:
   enabled: true
 
   image:
-    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/mysql
-    tag: "8.0"
+    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mysql
+    tag: "8.0.44"
     pullPolicy: IfNotPresent
 
   # 认证配置
@@ -154,7 +152,7 @@ redis:
   enabled: true
 
   image:
-    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/redis
+    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis
     tag: "7-alpine"
     pullPolicy: IfNotPresent
 
@@ -214,7 +212,7 @@ server:
 # ==================== Ingress 配置 ====================
 ingress:
   # 是否启用 Ingress
-  enabled: true
+  enabled: false
   # Ingress 类名
   className: nginx
   # 注解

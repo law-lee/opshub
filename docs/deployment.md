@@ -109,57 +109,269 @@ helm install opshub ./charts/opshub \
 
 ### 3. 自定义配置安装
 
-创建 `my-values.yaml` 文件：
+编辑 `values.yaml` 文件：
 
 ```yaml
-# 后端配置
+# OpsHub Helm Chart 配置文件
+# 详细配置说明请参考 README.md
+
+# ==================== 全局配置 ====================
+global:
+  # 存储类（留空使用默认）
+  storageClass: ""
+  # 镜像拉取策略
+  imagePullPolicy: IfNotPresent
+  # 镜像拉取密钥
+  imagePullSecrets: []
+  # busybox 镜像（用于 initContainer 等待依赖服务）
+  busybox:
+    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/busybox
+    tag: "1.37.0"
+
+# ==================== 后端配置 ====================
 backend:
-  replicaCount: 3
+  # 副本数
+  replicaCount: 2
+
+  image:
+    # 华为云 SWR 示例: swr.cn-east-3.myhuaweicloud.com/你的组织名/opshub-backend
+    repository: harbor.test.com/library/opshub-backend
+    tag: latest
+    pullPolicy: Always
+
+  # 服务配置
+  service:
+    type: ClusterIP
+    port: 9876
+
+  # 资源限制
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  # 健康检查
+  livenessProbe:
+    enabled: true
+    path: /health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+  readinessProbe:
+    enabled: true
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+
+  # 节点选择器
+  nodeSelector: {}
+
+  # 容忍度
+  tolerations: []
+
+  # 亲和性
+  affinity: {}
+
+# ==================== 前端配置 ====================
+frontend:
+  # 副本数
+  replicaCount: 2
+
+  image:
+    # 华为云 SWR 示例: swr.cn-east-3.myhuaweicloud.com/你的组织名/opshub-frontend
+    repository: harbor.test.com/library/opshub-frontend
+    tag: latest
+    pullPolicy: Always
+
+  # 服务配置
+  service:
+    type: ClusterIP
+    port: 80
+
+  # 资源限制
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+  # 健康检查
+  livenessProbe:
+    enabled: true
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    enabled: true
+    path: /
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  # 节点选择器
+  nodeSelector: {}
+
+  # 容忍度
+  tolerations: []
+
+  # 亲和性
+  affinity: {}
+
+# ==================== MySQL 配置 ====================
+mysql:
+  # 是否启用内置 MySQL（设为 false 使用外部数据库）
+  enabled: true
+
+  image:
+    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mysql
+    tag: "8.0.44"
+    pullPolicy: IfNotPresent
+
+  # 认证配置
+  auth:
+    rootPassword: "OpsHub@2026"
+    database: opshub
+
+  # 持久化存储
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: "cbs"
+    accessModes:
+      - ReadWriteOnce
+
+  # 资源限制
   resources:
     requests:
       memory: "512Mi"
-      cpu: "200m"
+      cpu: "250m"
     limits:
       memory: "1Gi"
       cpu: "1000m"
 
-# 前端配置
-frontend:
-  replicaCount: 3
+  # 节点选择器
+  nodeSelector: {}
 
-# MySQL 配置
-mysql:
-  auth:
-    rootPassword: "YourSecurePassword123"
-  persistence:
-    size: 50Gi
-    storageClass: "your-storage-class"
+  # 容忍度
+  tolerations: []
 
-# Redis 配置
+# ==================== Redis 配置 ====================
 redis:
-  auth:
-    password: "YourRedisPassword"
+  # 是否启用内置 Redis（设为 false 使用外部 Redis）
+  enabled: true
 
-# 服务器配置
+  image:
+    repository: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+
+  # 认证配置
+  auth:
+    password: "OpsHub@Redis"
+
+  # 持久化存储
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: "cbs"
+
+  # 资源限制
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+  # 节点选择器
+  nodeSelector: {}
+
+  # 容忍度
+  tolerations: []
+
+# ==================== 外部数据库配置 ====================
+# 当 mysql.enabled=false 时使用
+externalDatabase:
+  host: ""
+  port: 3306
+  database: opshub
+  username: root
+  password: ""
+
+# ==================== 外部 Redis 配置 ====================
+# 当 redis.enabled=false 时使用
+externalRedis:
+  host: ""
+  port: 6379
+  password: ""
+  db: 0
+
+# ==================== 服务器配置 ====================
 server:
+  # 运行模式: debug / release
   mode: release
-  jwtSecret: "your-very-long-random-secret-key-at-least-32-chars"
+  # HTTP 端口
+  httpPort: 9876
+  # JWT 密钥（生产环境请修改为随机字符串）
+  jwtSecret: "opshub-jwt-secret-key-please-change-in-production"
+  # JWT 过期时间
   jwtExpire: "24h"
 
-# Ingress 配置
+# ==================== Ingress 配置 ====================
 ingress:
-  enabled: true
+  # 是否启用 Ingress
+  enabled: false
+  # Ingress 类名
   className: nginx
+  # 注解
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # WebSocket 支持
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+  # 主机配置
   hosts:
-    - host: opshub.yourcompany.com
+    - host: opshub.example.com
       paths:
         - path: /
           pathType: Prefix
-  # 启用 HTTPS
-  tls:
-    - secretName: opshub-tls
-      hosts:
-        - opshub.yourcompany.com
+  # TLS 配置
+  tls: []
+  # - secretName: opshub-tls
+  #   hosts:
+  #     - opshub.example.com
+
+# ==================== ServiceMonitor 配置 ====================
+# Prometheus Operator 监控
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  namespace: ""
+
+# ==================== Pod 中断预算 ====================
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# ==================== 水平自动扩缩 ====================
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
 ```
 
 安装：
