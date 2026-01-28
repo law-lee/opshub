@@ -288,78 +288,55 @@ func initDefaultData(db *gorm.DB) error {
 		return fmt.Errorf("分配管理员角色失败: %w", err)
 	}
 
-	// 创建默认菜单
-	menus := []*rbacmodel.SysMenu{
-		{Name: "首页", Code: "dashboard", Type: 2, ParentID: 0, Path: "/dashboard", Component: "Dashboard", Icon: "HomeFilled", Sort: 0, Visible: 1, Status: 1},
-		{Name: "系统管理", Code: "system", Type: 1, ParentID: 0, Path: "/system", Icon: "Setting", Sort: 100, Visible: 1, Status: 1},
-		{Name: "用户管理", Code: "users", Type: 2, ParentID: 0, Path: "/users", Component: "system/Users", Icon: "User", Sort: 1, Visible: 1, Status: 1},
-		{Name: "角色管理", Code: "roles", Type: 2, ParentID: 0, Path: "/roles", Component: "system/Roles", Icon: "UserFilled", Sort: 2, Visible: 1, Status: 1},
-		{Name: "部门管理", Code: "departments", Type: 2, ParentID: 0, Path: "/departments", Component: "system/Departments", Icon: "OfficeBuilding", Sort: 3, Visible: 1, Status: 1},
-		{Name: "菜单管理", Code: "menus", Type: 2, ParentID: 0, Path: "/menus", Component: "system/Menus", Icon: "Menu", Sort: 4, Visible: 1, Status: 1},
+	// 创建默认菜单 - 先创建顶级菜单
+	dashboardMenu := &rbacmodel.SysMenu{Name: "仪表盘", Code: "dashboard", Type: 2, ParentID: 0, Path: "/dashboard", Component: "Dashboard", Icon: "HomeFilled", Sort: 0, Visible: 1, Status: 1}
+	if err := db.Create(dashboardMenu).Error; err != nil {
+		return fmt.Errorf("创建首页菜单失败: %w", err)
+	}
+	db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, dashboardMenu.ID)
+
+	// 创建系统管理顶级菜单
+	systemMenu := &rbacmodel.SysMenu{Name: "系统管理", Code: "system", Type: 1, ParentID: 0, Path: "/system", Icon: "Setting", Sort: 100, Visible: 1, Status: 1}
+	if err := db.Create(systemMenu).Error; err != nil {
+		return fmt.Errorf("创建系统管理菜单失败: %w", err)
+	}
+	db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, systemMenu.ID)
+
+	// 创建系统管理子菜单（使用 systemMenu.ID 作为父级）
+	systemSubMenus := []*rbacmodel.SysMenu{
+		{Name: "用户管理", Code: "users", Type: 2, ParentID: systemMenu.ID, Path: "/system/users", Component: "system/Users", Icon: "User", Sort: 1, Visible: 1, Status: 1},
+		{Name: "角色管理", Code: "roles", Type: 2, ParentID: systemMenu.ID, Path: "/system/roles", Component: "system/Roles", Icon: "UserFilled", Sort: 2, Visible: 1, Status: 1},
+		{Name: "菜单管理", Code: "menus", Type: 2, ParentID: systemMenu.ID, Path: "/system/menus", Component: "system/Menus", Icon: "Menu", Sort: 3, Visible: 1, Status: 1},
+		{Name: "部门信息", Code: "departments", Type: 2, ParentID: systemMenu.ID, Path: "/system/departments", Component: "system/Departments", Icon: "OfficeBuilding", Sort: 4, Visible: 1, Status: 1},
+		{Name: "岗位信息", Code: "positions", Type: 2, ParentID: systemMenu.ID, Path: "/system/positions", Component: "system/Positions", Icon: "Avatar", Sort: 5, Visible: 1, Status: 1},
+		{Name: "系统配置", Code: "settings", Type: 2, ParentID: systemMenu.ID, Path: "/system/settings", Component: "system/Settings", Icon: "Tools", Sort: 6, Visible: 1, Status: 1},
 	}
 
-	// 存储菜单ID映射，用于设置父子关系
-	menuIDMap := make(map[string]uint)
-
-	for _, menu := range menus {
+	for _, menu := range systemSubMenus {
 		if err := db.Create(menu).Error; err != nil {
-			return fmt.Errorf("创建默认菜单失败: %w", err)
+			return fmt.Errorf("创建系统管理子菜单失败: %w", err)
 		}
-		// 为管理员角色分配所有菜单权限
 		db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, menu.ID)
-		menuIDMap[menu.Code] = menu.ID
 	}
 
-	// 创建操作审计菜单（如果系统管理菜单已存在，使用其ID作为父菜单）
-	var systemMenuID uint
-	db.Model(&rbacmodel.SysMenu{}).Where("code = ? AND name = ?", "system", "系统管理").Pluck("id", &systemMenuID)
+	// 创建操作审计顶级菜单
+	auditMenu := &rbacmodel.SysMenu{Name: "操作审计", Code: "audit", Type: 1, ParentID: 0, Path: "/audit", Icon: "Document", Sort: 50, Visible: 1, Status: 1}
+	if err := db.Create(auditMenu).Error; err != nil {
+		return fmt.Errorf("创建操作审计菜单失败: %w", err)
+	}
+	db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, auditMenu.ID)
 
-	if systemMenuID == 0 {
-		// 如果系统管理菜单不存在，创建操作审计为顶级菜单
-		systemMenuID = 0
+	// 创建操作审计子菜单（不包含数据日志）
+	auditSubMenus := []*rbacmodel.SysMenu{
+		{Name: "操作日志", Code: "operation-logs", Type: 2, ParentID: auditMenu.ID, Path: "/audit/operation-logs", Component: "audit/OperationLogs", Icon: "Document", Sort: 1, Visible: 1, Status: 1},
+		{Name: "登录日志", Code: "login-logs", Type: 2, ParentID: auditMenu.ID, Path: "/audit/login-logs", Component: "audit/LoginLogs", Icon: "CircleCheck", Sort: 2, Visible: 1, Status: 1},
 	}
 
-	auditMenus := []*rbacmodel.SysMenu{
-		{Name: "岗位信息", Code: "position-info", Type: 2, ParentID: systemMenuID, Path: "/position-info", Component: "system/PositionInfo", Icon: "Avatar", Sort: 5, Visible: 1, Status: 1},
-		{Name: "操作审计", Code: "audit", Type: 1, ParentID: 0, Path: "/audit", Icon: "Document", Sort: 50, Visible: 1, Status: 1},
-	}
-
-	for _, menu := range auditMenus {
-		var existingCount int64
-		db.Model(&rbacmodel.SysMenu{}).Where("code = ?", menu.Code).Count(&existingCount)
-		if existingCount == 0 {
-			if err := db.Create(menu).Error; err != nil {
-				return fmt.Errorf("创建审计菜单失败: %w", err)
-			}
-			// 为管理员角色分配菜单权限
-			db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, menu.ID)
-			menuIDMap[menu.Code] = menu.ID
+	for _, menu := range auditSubMenus {
+		if err := db.Create(menu).Error; err != nil {
+			return fmt.Errorf("创建操作审计子菜单失败: %w", err)
 		}
-	}
-
-	// 获取操作审计菜单ID
-	var auditMenuID uint
-	db.Model(&rbacmodel.SysMenu{}).Where("code = ?", "audit").Pluck("id", &auditMenuID)
-
-	if auditMenuID > 0 {
-		// 创建操作审计子菜单
-		auditSubMenus := []*rbacmodel.SysMenu{
-			{Name: "操作日志", Code: "operation-logs", Type: 2, ParentID: auditMenuID, Path: "/audit/operation-logs", Component: "audit/OperationLogs", Icon: "Document", Sort: 1, Visible: 1, Status: 1},
-			{Name: "登录日志", Code: "login-logs", Type: 2, ParentID: auditMenuID, Path: "/audit/login-logs", Component: "audit/LoginLogs", Icon: "CircleCheck", Sort: 2, Visible: 1, Status: 1},
-			{Name: "数据日志", Code: "data-logs", Type: 2, ParentID: auditMenuID, Path: "/audit/data-logs", Component: "audit/DataLogs", Icon: "DataLine", Sort: 3, Visible: 1, Status: 1},
-		}
-
-		for _, menu := range auditSubMenus {
-			var existingCount int64
-			db.Model(&rbacmodel.SysMenu{}).Where("code = ?", menu.Code).Count(&existingCount)
-			if existingCount == 0 {
-				if err := db.Create(menu).Error; err != nil {
-					return fmt.Errorf("创建审计子菜单失败: %w", err)
-				}
-				// 为管理员角色分配菜单权限
-				db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, menu.ID)
-			}
-		}
+		db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, menu.ID)
 	}
 
 	appLogger.Info("默认数据初始化完成")
