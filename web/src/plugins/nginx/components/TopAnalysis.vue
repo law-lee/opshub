@@ -30,7 +30,7 @@
           value-format="YYYY-MM-DD"
           style="width: 280px"
         />
-        <el-button class="black-button" @click="loadData">
+        <el-button class="black-button" @click="refreshData" :loading="refreshing">
           <el-icon style="margin-right: 6px;"><Refresh /></el-icon>
           刷新
         </el-button>
@@ -86,12 +86,12 @@
                   <span class="rank-badge" :class="getRankClass($index)">{{ $index + 1 }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="IP 地址" prop="ip" width="160">
+              <el-table-column label="IP 地址" prop="ip" width="180">
                 <template #default="{ row }">
                   <span class="ip-text">{{ row.ip }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="国家/地区" width="110" align="center">
+              <el-table-column label="国家/地区" width="120" align="center">
                 <template #default="{ row }">
                   <el-tag v-if="row.country && row.country !== '-'" size="small" effect="plain" type="info">
                     {{ row.country }}
@@ -99,24 +99,24 @@
                   <span v-else class="no-data">-</span>
                 </template>
               </el-table-column>
-              <el-table-column label="省份" width="100" align="center">
+              <el-table-column label="省份" width="120" align="center">
                 <template #default="{ row }">
                   <span v-if="row.province && row.province !== '-'" class="geo-text">{{ row.province }}</span>
                   <span v-else class="no-data">-</span>
                 </template>
               </el-table-column>
-              <el-table-column label="城市" width="100" align="center">
+              <el-table-column label="城市" width="120" align="center">
                 <template #default="{ row }">
                   <span v-if="row.city && row.city !== '-'" class="geo-text">{{ row.city }}</span>
                   <span v-else class="no-data">-</span>
                 </template>
               </el-table-column>
-              <el-table-column label="访问次数" prop="count" width="120" align="right">
+              <el-table-column label="访问次数" prop="count" width="140" align="right">
                 <template #default="{ row }">
                   <span class="count-cell">{{ formatNumber(row.count) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="占比" width="200">
+              <el-table-column label="占比" min-width="220">
                 <template #default="{ row }">
                   <div class="progress-wrapper">
                     <div class="progress-bar-container">
@@ -234,21 +234,94 @@ import {
   getNginxTopIPsWithGeo,
   getNginxBrowserDistribution,
   getNginxDeviceDistribution,
+  collectNginxLogs,
   type NginxSource,
   type BrowserStats,
   type DeviceStats,
   type TopIPWithGeo,
 } from '@/api/nginx'
 
+// sessionStorage key
+const STORAGE_KEY = 'nginx-top-analysis-state'
+const STORAGE_DATA_KEY = 'nginx-top-analysis-data'
+
+// 从 sessionStorage 恢复状态
+const restoreState = () => {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('恢复状态失败:', e)
+  }
+  return null
+}
+
+// 保存状态到 sessionStorage
+const saveState = (state: any) => {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch (e) {
+    console.error('保存状态失败:', e)
+  }
+}
+
+// 从 sessionStorage 恢复缓存数据
+const restoreCachedData = () => {
+  try {
+    if (!selectedSourceId.value) return null
+    const key = `${STORAGE_DATA_KEY}-${selectedSourceId.value}`
+    const saved = sessionStorage.getItem(key)
+    if (saved) {
+      const data = JSON.parse(saved)
+      // 检查缓存时间戳，如果数据是当前会话的，则使用
+      if (data.timestamp && Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+        return data
+      }
+    }
+  } catch (e) {
+    console.error('恢复缓存数据失败:', e)
+  }
+  return null
+}
+
+// 保存数据到 sessionStorage
+const saveCachedData = () => {
+  try {
+    if (!selectedSourceId.value) return
+    const key = `${STORAGE_DATA_KEY}-${selectedSourceId.value}`
+    const data = {
+      timestamp: Date.now(),
+      selectedSourceId: selectedSourceId.value,
+      dateRange: dateRange.value,
+      activeTab: activeTab.value,
+      topUrls: topUrls.value,
+      topIps: topIps.value,
+      browserStats: browserStats.value,
+      deviceStats: deviceStats.value,
+    }
+    sessionStorage.setItem(key, JSON.stringify(data))
+  } catch (e) {
+    console.error('保存缓存数据失败:', e)
+  }
+}
+
 const selectedSourceId = ref<number | undefined>(undefined)
 const sources = ref<NginxSource[]>([])
 const dateRange = ref<[string, string] | null>(null)
 const activeTab = ref('urls')
 
+// 标记是否是初始化加载（用于阻止 watch 触发自动加载）
+const isInitialLoad = ref(true)
+// 标记是否已经从缓存加载了数据
+const hasLoadedFromCache = ref(false)
+
 const loadingUrls = ref(false)
 const loadingIps = ref(false)
 const loadingBrowsers = ref(false)
 const loadingDevices = ref(false)
+const refreshing = ref(false)
 
 const topUrls = ref<Array<{ uri: string; count: number }>>([])
 const topIps = ref<TopIPWithGeo[]>([])
@@ -274,11 +347,49 @@ const loadSources = async () => {
   try {
     const res = await getNginxSources({ pageSize: 100, status: 1 })
     sources.value = res.list || res || []
-    if (sources.value.length > 0 && !selectedSourceId.value) {
+
+    // 恢复之前保存的状态
+    const savedState = restoreState()
+    if (savedState) {
+      // 恢复日期范围
+      if (savedState.dateRange) {
+        dateRange.value = savedState.dateRange
+      }
+      // 恢复激活的 tab
+      if (savedState.activeTab) {
+        activeTab.value = savedState.activeTab
+      }
+      // 恢复选中的数据源（如果还在列表中）
+      if (savedState.selectedSourceId && sources.value.some((s: NginxSource) => s.id === savedState.selectedSourceId)) {
+        selectedSourceId.value = savedState.selectedSourceId
+      } else if (sources.value.length > 0) {
+        selectedSourceId.value = sources.value[0].id
+      }
+    } else if (sources.value.length > 0) {
       selectedSourceId.value = sources.value[0].id
     }
+
+    // 尝试从缓存恢复数据（缓存键包含数据源ID）
+    const cachedData = restoreCachedData()
+    if (cachedData) {
+      // 使用缓存数据
+      topUrls.value = cachedData.topUrls || []
+      topIps.value = cachedData.topIps || []
+      browserStats.value = cachedData.browserStats || []
+      deviceStats.value = cachedData.deviceStats || []
+      if (cachedData.activeTab) {
+        activeTab.value = cachedData.activeTab
+      }
+      hasLoadedFromCache.value = true
+      ElMessage.success('已加载缓存数据')
+    }
+    // 没有缓存时不自动加载，等用户手动点击刷新
+
+    // 初始化完成，允许后续的 watch 触发加载
+    isInitialLoad.value = false
   } catch (error) {
     console.error('获取数据源列表失败:', error)
+    isInitialLoad.value = false
   }
 }
 
@@ -302,6 +413,13 @@ const loadData = () => {
     return
   }
 
+  // 保存状态
+  saveState({
+    selectedSourceId: selectedSourceId.value,
+    dateRange: dateRange.value,
+    activeTab: activeTab.value,
+  })
+
   switch (activeTab.value) {
     case 'urls':
       loadTopUrls()
@@ -318,9 +436,70 @@ const loadData = () => {
   }
 }
 
+// 刷新数据（先采集日志再加载所有数据）
+const refreshData = async () => {
+  if (!selectedSourceId.value) {
+    ElMessage.warning('请选择数据源')
+    return
+  }
+
+  refreshing.value = true
+  try {
+    // 先触发日志采集
+    ElMessage.info('正在采集日志...')
+    await collectNginxLogs(selectedSourceId.value)
+    ElMessage.success('日志采集完成，正在加载数据...')
+
+    // 采集完成后并发加载所有数据
+    await Promise.all([
+      loadTopUrls(),
+      loadTopIps(),
+      loadBrowsers(),
+      loadDevices(),
+    ])
+
+    // 保存状态和缓存
+    saveState({
+      selectedSourceId: selectedSourceId.value,
+      dateRange: dateRange.value,
+      activeTab: activeTab.value,
+    })
+    saveCachedData()
+
+    ElMessage.success('数据刷新完成')
+  } catch (error) {
+    console.error('刷新失败:', error)
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshing.value = false
+  }
+}
+
 // Tab 切换
 const handleTabChange = () => {
-  loadData()
+  // 保存当前tab状态
+  saveState({
+    selectedSourceId: selectedSourceId.value,
+    dateRange: dateRange.value,
+    activeTab: activeTab.value,
+  })
+
+  // 检查当前 Tab 是否有数据，如果有就不重新加载
+  switch (activeTab.value) {
+    case 'urls':
+      if (topUrls.value.length > 0) return
+      break
+    case 'ips':
+      if (topIps.value.length > 0) return
+      break
+    case 'browsers':
+      if (browserStats.value.length > 0) return
+      break
+    case 'devices':
+      if (deviceStats.value.length > 0) return
+      break
+  }
+  // 没有数据时不自动加载，等用户手动点击刷新
 }
 
 // 加载 Top URLs
@@ -465,9 +644,66 @@ const getDeviceIcon = (type: string) => {
   return Monitor
 }
 
-// 监听筛选条件变化
-watch([selectedSourceId, dateRange], () => {
-  loadData()
+// 监听数据源变化
+watch(selectedSourceId, (newVal, oldVal) => {
+  // 初始化期间不触发加载
+  if (isInitialLoad.value) return
+
+  // 保存状态
+  saveState({
+    selectedSourceId: selectedSourceId.value,
+    dateRange: dateRange.value,
+    activeTab: activeTab.value,
+  })
+
+  // 切换数据源时，先尝试从缓存加载
+  const cachedData = restoreCachedData()
+  if (cachedData) {
+    topUrls.value = cachedData.topUrls || []
+    topIps.value = cachedData.topIps || []
+    browserStats.value = cachedData.browserStats || []
+    deviceStats.value = cachedData.deviceStats || []
+    if (cachedData.activeTab) {
+      activeTab.value = cachedData.activeTab
+    }
+    hasLoadedFromCache.value = true
+    ElMessage.success('已加载缓存数据')
+  } else {
+    // 没有缓存，清空数据，等待用户点击刷新
+    topUrls.value = []
+    topIps.value = []
+    browserStats.value = []
+    deviceStats.value = []
+    hasLoadedFromCache.value = false
+    ElMessage.info('请点击刷新按钮加载数据')
+  }
+})
+
+// 监听日期范围变化（用户手动修改日期时才加载）
+watch(dateRange, (newVal, oldVal) => {
+  // 初始化期间不触发加载
+  if (isInitialLoad.value) return
+
+  // 保存状态
+  saveState({
+    selectedSourceId: selectedSourceId.value,
+    dateRange: dateRange.value,
+    activeTab: activeTab.value,
+  })
+
+  // 日期变化时不自动加载，等用户点击刷新
+  // 如果需要自动加载，取消下面的注释
+  // loadData()
+})
+
+// 监听 tab 变化
+watch(activeTab, () => {
+  // 保存状态
+  saveState({
+    selectedSourceId: selectedSourceId.value,
+    dateRange: dateRange.value,
+    activeTab: activeTab.value,
+  })
 })
 
 onMounted(() => {

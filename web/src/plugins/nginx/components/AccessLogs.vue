@@ -11,18 +11,12 @@
           <p class="page-subtitle">查看 Nginx 访问日志详细记录</p>
         </div>
       </div>
-      <div class="header-actions">
-        <el-button @click="loadData">
-          <el-icon style="margin-right: 6px;"><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
     </div>
 
     <!-- 筛选条件 -->
     <div class="search-bar">
       <div class="search-inputs">
-        <el-select v-model="filterForm.sourceId" placeholder="选择数据源" class="search-input" @change="loadData">
+        <el-select v-model="filterForm.sourceId" placeholder="选择数据源" class="search-input">
           <el-option
             v-for="source in sources"
             :key="source.id"
@@ -78,7 +72,6 @@
       <div class="top-card">
         <div class="top-header">
           <h4 class="top-title">Top 10 URI</h4>
-          <el-button link type="primary" size="small" @click="loadTopURIs">刷新</el-button>
         </div>
         <div class="top-list">
           <div v-for="(item, index) in topURIs" :key="index" class="top-item">
@@ -92,7 +85,6 @@
       <div class="top-card">
         <div class="top-header">
           <h4 class="top-title">Top 10 IP</h4>
-          <el-button link type="primary" size="small" @click="loadTopIPs">刷新</el-button>
         </div>
         <div class="top-list">
           <div v-for="(item, index) in topIPs" :key="index" class="top-item">
@@ -107,38 +99,54 @@
 
     <!-- 表格 -->
     <div class="table-wrapper">
-      <el-table :data="tableData" v-loading="loading" class="modern-table" stripe>
-        <el-table-column label="时间" prop="timestamp" width="180">
+      <el-table :data="tableData" v-loading="loading" class="access-log-table" stripe>
+        <el-table-column label="时间" prop="timestamp" width="165" fixed>
           <template #default="{ row }">
-            {{ formatTime(row.timestamp) }}
+            <span class="time-cell">{{ formatTime(row.timestamp) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="客户端IP" prop="remoteAddr" width="140" />
-        <el-table-column label="方法" prop="method" width="80" align="center">
+        <el-table-column label="客户端IP" prop="remoteAddr" width="145" fixed>
           <template #default="{ row }">
-            <el-tag :type="getMethodTagType(row.method)" size="small">{{ row.method }}</el-tag>
+            <span class="ip-cell">{{ row.remoteAddr }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="URI" prop="uri" min-width="250" show-overflow-tooltip />
-        <el-table-column label="状态码" prop="status" width="90" align="center">
+        <el-table-column label="方法" prop="method" width="75" align="center">
           <template #default="{ row }">
-            <el-tag :type="getStatusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+            <el-tag :type="getMethodTagType(row.method)" size="small" class="method-tag">{{ row.method }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="响应大小" prop="bodyBytesSent" width="100" align="right">
+        <el-table-column label="URI" prop="uri" min-width="280" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ formatBytes(row.bodyBytesSent) }}
+            <span class="uri-cell">{{ row.uri }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="响应时间" prop="requestTime" width="100" align="right">
+        <el-table-column label="状态码" prop="status" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.status)" size="small" effect="light">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="响应大小" prop="bodyBytesSent" width="95" align="right">
+          <template #default="{ row }">
+            <span class="size-cell">{{ formatBytes(row.bodyBytesSent) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="耗时" prop="requestTime" width="80" align="right">
           <template #default="{ row }">
             <span :class="getResponseTimeClass(row.requestTime)">
               {{ row.requestTime.toFixed(3) }}s
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="Host" prop="host" width="150" show-overflow-tooltip />
-        <el-table-column label="User-Agent" prop="httpUserAgent" min-width="200" show-overflow-tooltip />
+        <el-table-column label="Host" prop="host" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="host-cell">{{ row.host }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="User-Agent" prop="httpUserAgent" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="ua-cell">{{ row.httpUserAgent }}</span>
+          </template>
+        </el-table-column>
       </el-table>
 
       <!-- 分页 -->
@@ -149,8 +157,6 @@
           :total="pagination.total"
           :page-sizes="[20, 50, 100, 200]"
           layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadData"
-          @current-change="loadData"
         />
       </div>
     </div>
@@ -163,9 +169,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { List, Refresh } from '@element-plus/icons-vue'
+import { List } from '@element-plus/icons-vue'
 import {
   getNginxAccessLogs,
   getNginxSources,
@@ -175,11 +181,87 @@ import {
   type NginxSource,
 } from '@/api/nginx'
 
+// sessionStorage key
+const STORAGE_KEY = 'nginx-access-logs-state'
+const STORAGE_DATA_KEY = 'nginx-access-logs-data'
+
+// 从 sessionStorage 恢复状态
+const restoreState = () => {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('恢复状态失败:', e)
+  }
+  return null
+}
+
+// 保存状态到 sessionStorage
+const saveState = () => {
+  try {
+    const state = {
+      sourceId: filterForm.value.sourceId,
+      timeRange: filterForm.value.timeRange,
+      remoteAddr: filterForm.value.remoteAddr,
+      uri: filterForm.value.uri,
+      status: filterForm.value.status,
+      method: filterForm.value.method,
+      page: pagination.value.page,
+      pageSize: pagination.value.pageSize,
+    }
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch (e) {
+    console.error('保存状态失败:', e)
+  }
+}
+
+// 从 sessionStorage 恢复缓存数据
+const restoreCachedData = () => {
+  try {
+    if (!filterForm.value.sourceId) return null
+    const key = `${STORAGE_DATA_KEY}-${filterForm.value.sourceId}`
+    const saved = sessionStorage.getItem(key)
+    if (saved) {
+      const data = JSON.parse(saved)
+      // 检查缓存时间戳，24小时内有效
+      if (data.timestamp && Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+        return data
+      }
+    }
+  } catch (e) {
+    console.error('恢复缓存数据失败:', e)
+  }
+  return null
+}
+
+// 保存数据到 sessionStorage
+const saveCachedData = () => {
+  try {
+    if (!filterForm.value.sourceId) return
+    const key = `${STORAGE_DATA_KEY}-${filterForm.value.sourceId}`
+    const data = {
+      timestamp: Date.now(),
+      tableData: tableData.value,
+      topURIs: topURIs.value,
+      topIPs: topIPs.value,
+      total: pagination.value.total,
+    }
+    sessionStorage.setItem(key, JSON.stringify(data))
+  } catch (e) {
+    console.error('保存缓存数据失败:', e)
+  }
+}
+
 const loading = ref(false)
 const sources = ref<NginxSource[]>([])
 const tableData = ref<NginxAccessLog[]>([])
 const topURIs = ref<{ uri: string; count: number }[]>([])
 const topIPs = ref<{ ip: string; count: number }[]>([])
+
+// 标记是否是初始化加载
+const isInitialLoad = ref(true)
 
 const filterForm = ref({
   sourceId: undefined as number | undefined,
@@ -256,19 +338,67 @@ const getResponseTimeClass = (time: number) => {
 const loadSources = async () => {
   try {
     const res = await getNginxSources({ status: 1 })
-    // request.ts 拦截器已解包响应
     sources.value = res.list || res || []
-    if (sources.value.length > 0 && !filterForm.value.sourceId) {
+
+    // 恢复之前保存的状态
+    const savedState = restoreState()
+    if (savedState) {
+      // 恢复筛选条件
+      if (savedState.sourceId && sources.value.some((s: NginxSource) => s.id === savedState.sourceId)) {
+        filterForm.value.sourceId = savedState.sourceId
+      } else if (sources.value.length > 0) {
+        filterForm.value.sourceId = sources.value[0].id
+      }
+      if (savedState.timeRange) {
+        filterForm.value.timeRange = savedState.timeRange
+      }
+      if (savedState.remoteAddr) {
+        filterForm.value.remoteAddr = savedState.remoteAddr
+      }
+      if (savedState.uri) {
+        filterForm.value.uri = savedState.uri
+      }
+      if (savedState.status) {
+        filterForm.value.status = savedState.status
+      }
+      if (savedState.method) {
+        filterForm.value.method = savedState.method
+      }
+      if (savedState.page) {
+        pagination.value.page = savedState.page
+      }
+      if (savedState.pageSize) {
+        pagination.value.pageSize = savedState.pageSize
+      }
+    } else if (sources.value.length > 0) {
       filterForm.value.sourceId = sources.value[0].id
     }
+
+    // 尝试从缓存恢复数据
+    const cachedData = restoreCachedData()
+    if (cachedData) {
+      tableData.value = cachedData.tableData || []
+      topURIs.value = cachedData.topURIs || []
+      topIPs.value = cachedData.topIPs || []
+      pagination.value.total = cachedData.total || 0
+      ElMessage.success('已加载缓存数据')
+    }
+    // 没有缓存时不自动加载，等用户点击查询
+
+    // 初始化完成
+    isInitialLoad.value = false
   } catch (error) {
     console.error('获取数据源列表失败:', error)
+    isInitialLoad.value = false
   }
 }
 
 // 加载数据
 const loadData = async () => {
   if (!filterForm.value.sourceId) return
+
+  // 保存状态
+  saveState()
 
   loading.value = true
   try {
@@ -297,18 +427,19 @@ const loadData = async () => {
     }
 
     const res = await getNginxAccessLogs(params)
-    // request.ts 拦截器已解包响应
     tableData.value = res.list || []
     pagination.value.total = res.total || 0
+
+    // 同时加载 Top 统计
+    await Promise.all([loadTopURIs(), loadTopIPs()])
+
+    // 保存缓存数据
+    saveCachedData()
   } catch (error) {
     console.error('获取访问日志失败:', error)
   } finally {
     loading.value = false
   }
-
-  // 同时加载 Top 统计
-  loadTopURIs()
-  loadTopIPs()
 }
 
 // 加载 Top URI
@@ -363,9 +494,47 @@ const handleReset = () => {
   loadData()
 }
 
+// 监听数据源变化
+watch(() => filterForm.value.sourceId, (newVal, oldVal) => {
+  // 初始化期间不触发
+  if (isInitialLoad.value) return
+  if (!newVal) return
+
+  // 保存状态
+  saveState()
+
+  // 切换数据源时，尝试从缓存加载
+  const cachedData = restoreCachedData()
+  if (cachedData) {
+    tableData.value = cachedData.tableData || []
+    topURIs.value = cachedData.topURIs || []
+    topIPs.value = cachedData.topIPs || []
+    pagination.value.total = cachedData.total || 0
+    ElMessage.success('已加载缓存数据')
+  } else {
+    // 没有缓存，清空数据
+    tableData.value = []
+    topURIs.value = []
+    topIPs.value = []
+    pagination.value.total = 0
+    ElMessage.info('请点击查询按钮加载数据')
+  }
+})
+
+// 监听分页变化
+watch([() => pagination.value.page, () => pagination.value.pageSize], ([newPage, newSize], [oldPage, oldSize]) => {
+  // 初始化期间不触发
+  if (isInitialLoad.value) return
+  // 如果是 pageSize 变化，重置页码
+  if (newSize !== oldSize) {
+    pagination.value.page = 1
+  }
+  loadData()
+})
+
 onMounted(async () => {
   await loadSources()
-  loadData()
+  // 不自动加载数据，等用户点击查询（loadSources 中会从缓存恢复数据）
 })
 </script>
 
@@ -420,12 +589,6 @@ onMounted(async () => {
   font-size: 13px;
   color: #909399;
   line-height: 1.4;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
 }
 
 /* 搜索栏 */
@@ -609,6 +772,74 @@ onMounted(async () => {
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* 访问日志表格样式 */
+.access-log-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.access-log-table :deep(.el-table__header th) {
+  background-color: #fafafa;
+  font-weight: 600;
+  font-size: 13px;
+  color: #606266;
+  padding: 12px 0;
+}
+
+.access-log-table :deep(.el-table__row) {
+  transition: background-color 0.15s;
+}
+
+.access-log-table :deep(.el-table__row td) {
+  padding: 10px 0;
+}
+
+.access-log-table :deep(.el-table__row:hover td) {
+  background-color: #f5f7fa !important;
+}
+
+/* 表格单元格样式 */
+.time-cell {
+  font-size: 13px;
+  color: #606266;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: nowrap;
+}
+
+.ip-cell {
+  font-size: 13px;
+  color: #303133;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.method-tag {
+  font-weight: 600;
+}
+
+.uri-cell {
+  font-size: 13px;
+  color: #606266;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.size-cell {
+  font-size: 13px;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.host-cell {
+  font-size: 13px;
+  color: #606266;
+}
+
+.ua-cell {
+  font-size: 12px;
+  color: #909399;
 }
 
 .pagination-wrapper {

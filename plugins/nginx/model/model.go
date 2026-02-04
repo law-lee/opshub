@@ -76,6 +76,11 @@ type NginxSource struct {
 	LastCollectLogs int64      `gorm:"type:bigint;default:0" json:"lastCollectLogs"`
 	LastError       string     `gorm:"type:varchar(500)" json:"lastError"`
 
+	// 文件偏移量追踪（用于增量采集大文件）
+	LastFileSize   int64  `gorm:"type:bigint;default:0" json:"lastFileSize"`   // 上次采集时文件大小
+	LastFileOffset int64  `gorm:"type:bigint;default:0" json:"lastFileOffset"` // 上次读取的字节偏移量
+	LastFileInode  uint64 `gorm:"type:bigint;default:0" json:"lastFileInode"`  // 文件inode（检测日志轮转）
+
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`
 	DeletedAt *time.Time `gorm:"index" json:"deletedAt,omitempty"`
@@ -472,6 +477,60 @@ type AccessLogView struct {
 	OS            string    `json:"os"`
 	DeviceType    string    `json:"deviceType"`
 	IsBot         bool      `json:"isBot"`
+}
+
+// ============== Overview DTO Models ==============
+
+// CoreMetrics 核心指标（今日/昨日/预计今日/昨日此时）
+type CoreMetrics struct {
+	Today        MetricSet `json:"today"`
+	Yesterday    MetricSet `json:"yesterday"`
+	PredictToday MetricSet `json:"predictToday"`
+	YesterdayNow MetricSet `json:"yesterdayNow"`
+}
+
+// MetricSet 指标集合
+type MetricSet struct {
+	StatusHits  int64   `json:"statusHits"`
+	PV          int64   `json:"pv"`
+	UV          int64   `json:"uv"`
+	RealtimeOps float64 `json:"realtimeOps"`
+	PeakOps     float64 `json:"peakOps"`
+	Status2xx   int64   `json:"status2xx"`
+	Status3xx   int64   `json:"status3xx"`
+	Status4xx   int64   `json:"status4xx"`
+	Status5xx   int64   `json:"status5xx"`
+}
+
+// VisitorComparison 新老访客对比
+type VisitorComparison struct {
+	TodayNew       int64   `json:"todayNew"`
+	TodayReturning int64   `json:"todayReturning"`
+	TodayNewPct    float64 `json:"todayNewPct"`
+	TodayRetPct    float64 `json:"todayRetPct"`
+	YestNew        int64   `json:"yesterdayNew"`
+	YestReturning  int64   `json:"yesterdayReturning"`
+	YestNewPct     float64 `json:"yesterdayNewPct"`
+	YestRetPct     float64 `json:"yesterdayRetPct"`
+}
+
+// OverviewTrendPoint 概况趋势数据点（含UV和PV）
+type OverviewTrendPoint struct {
+	Time string `json:"time"`
+	PV   int64  `json:"pv"`
+	UV   int64  `json:"uv"`
+}
+
+// RefererItem 来路项
+type RefererItem struct {
+	Domain   string `json:"domain"`
+	Visitors int64  `json:"visitors"`
+}
+
+// PageItem 页面项
+type PageItem struct {
+	Path  string `json:"path"`
+	Count int64  `json:"count"`
 }
 
 // ParsedLogEntry 解析后的日志条目

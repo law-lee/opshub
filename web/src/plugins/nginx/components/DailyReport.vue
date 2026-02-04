@@ -12,7 +12,11 @@
         </div>
       </div>
       <div class="header-actions">
-        <el-button @click="loadData" :loading="loading">
+        <el-button @click="exportToPDF" :loading="exporting" type="primary">
+          <el-icon style="margin-right: 6px;"><Download /></el-icon>
+          导出PDF
+        </el-button>
+        <el-button @click="refreshData" :loading="refreshing">
           <el-icon style="margin-right: 6px;"><Refresh /></el-icon>
           刷新
         </el-button>
@@ -46,55 +50,60 @@
       </div>
     </div>
 
-    <!-- 表格 -->
-    <div class="table-wrapper">
-      <el-table :data="tableData" v-loading="loading" class="modern-table">
-        <el-table-column label="日期" prop="date" width="120">
+    <!-- 导出内容区域（PDF只导出这部分） -->
+    <div ref="reportContainerRef" class="export-content">
+      <!-- 表格 -->
+      <div class="table-wrapper">
+      <el-table :data="tableData" v-loading="loading" class="modern-table" :header-cell-style="{ fontWeight: '600', color: '#303133', backgroundColor: '#f8f9fa' }">
+        <template #empty>
+          <el-empty description="暂无数据，请选择日期范围后点击查询或刷新" />
+        </template>
+        <el-table-column label="日期" prop="date" width="120" align="center">
           <template #default="{ row }">
-            {{ formatDate(row.date) }}
+            <span class="date-cell">{{ formatDate(row.date) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="总请求数" prop="totalRequests" width="120" align="right">
+        <el-table-column label="总请求数" prop="totalRequests" min-width="150" align="right">
           <template #default="{ row }">
-            {{ formatNumber(row.totalRequests) }}
+            <span class="number-cell">{{ formatNumber(row.totalRequests) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="独立访客" prop="uniqueVisitors" width="120" align="right">
+        <el-table-column label="独立访客" prop="uniqueVisitors" min-width="150" align="right">
           <template #default="{ row }">
-            {{ formatNumber(row.uniqueVisitors) }}
+            <span class="number-cell">{{ formatNumber(row.uniqueVisitors) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="总带宽" prop="totalBandwidth" width="120" align="right">
+        <el-table-column label="总带宽" prop="totalBandwidth" min-width="150" align="right">
           <template #default="{ row }">
-            {{ formatBytes(row.totalBandwidth) }}
+            <span class="number-cell">{{ formatBytes(row.totalBandwidth) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="平均响应时间" prop="avgResponseTime" width="140" align="right">
+        <el-table-column label="平均响应时间" prop="avgResponseTime" min-width="140" align="right">
           <template #default="{ row }">
-            {{ (row.avgResponseTime || 0).toFixed(3) }}s
+            <span class="number-cell">{{ (row.avgResponseTime || 0).toFixed(2) }}s</span>
           </template>
         </el-table-column>
-        <el-table-column label="2xx" prop="status2xx" width="100" align="right">
+        <el-table-column label="2xx" prop="status2xx" min-width="120" align="center">
           <template #default="{ row }">
-            <el-tag type="success" size="small" effect="dark">{{ formatNumber(row.status2xx) }}</el-tag>
+            <span class="status-cell status-2xx">{{ formatNumber(row.status2xx) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="3xx" prop="status3xx" width="100" align="right">
+        <el-table-column label="3xx" prop="status3xx" min-width="120" align="center">
           <template #default="{ row }">
-            <el-tag type="info" size="small" effect="dark">{{ formatNumber(row.status3xx) }}</el-tag>
+            <span class="status-cell status-3xx">{{ formatNumber(row.status3xx) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="4xx" prop="status4xx" width="100" align="right">
+        <el-table-column label="4xx" prop="status4xx" min-width="120" align="center">
           <template #default="{ row }">
-            <el-tag type="warning" size="small" effect="dark">{{ formatNumber(row.status4xx) }}</el-tag>
+            <span class="status-cell status-4xx">{{ formatNumber(row.status4xx) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="5xx" prop="status5xx" width="100" align="right">
+        <el-table-column label="5xx" prop="status5xx" min-width="120" align="center">
           <template #default="{ row }">
-            <el-tag type="danger" size="small" effect="dark">{{ formatNumber(row.status5xx) }}</el-tag>
+            <span class="status-cell status-5xx">{{ formatNumber(row.status5xx) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="错误率" width="100" align="right">
+        <el-table-column label="错误率" min-width="120" align="right">
           <template #default="{ row }">
             <span :class="getErrorRateClass(row)">{{ calculateErrorRate(row) }}%</span>
           </template>
@@ -102,12 +111,13 @@
       </el-table>
     </div>
 
-    <!-- 图表区域 -->
-    <div class="chart-card">
-      <div class="chart-header">
-        <h3 class="chart-title">请求趋势</h3>
+      <!-- 图表区域 -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3 class="chart-title">请求趋势</h3>
+        </div>
+        <div class="chart-content" ref="trendChartRef"></div>
       </div>
-      <div class="chart-content" ref="trendChartRef"></div>
     </div>
   </div>
 </template>
@@ -115,11 +125,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Calendar, Refresh } from '@element-plus/icons-vue'
+import { Calendar, Refresh, Download } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { getNginxDailyReport, getNginxSources, type NginxDailyStats, type NginxSource } from '@/api/nginx'
+import { getNginxDailyReport, getNginxSources, collectNginxLogs, type NginxDailyStats, type NginxSource } from '@/api/nginx'
 
 const loading = ref(false)
+const exporting = ref(false)
+const refreshing = ref(false)
 const sources = ref<NginxSource[]>([])
 const tableData = ref<NginxDailyStats[]>([])
 const filterForm = ref({
@@ -128,7 +140,70 @@ const filterForm = ref({
 })
 
 const trendChartRef = ref<HTMLElement | null>(null)
+const reportContainerRef = ref<HTMLElement | null>(null)
 let trendChart: echarts.ECharts | null = null
+
+// sessionStorage key
+const STORAGE_KEY = 'nginx-daily-report-state'
+const STORAGE_DATA_KEY = 'nginx-daily-report-data'
+
+// 从 sessionStorage 恢复状态
+const restoreState = () => {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('恢复状态失败:', e)
+  }
+  return null
+}
+
+// 保存状态到 sessionStorage
+const saveState = (state: any) => {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch (e) {
+    console.error('保存状态失败:', e)
+  }
+}
+
+// 从 sessionStorage 恢复缓存数据
+const restoreCachedData = () => {
+  try {
+    if (!filterForm.value.sourceId) return null
+    const key = `${STORAGE_DATA_KEY}-${filterForm.value.sourceId}`
+    const saved = sessionStorage.getItem(key)
+    if (saved) {
+      const data = JSON.parse(saved)
+      // 检查缓存时间戳，如果数据是当前会话的，则使用
+      if (data.timestamp && Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+        return data
+      }
+    }
+  } catch (e) {
+    console.error('恢复缓存数据失败:', e)
+  }
+  return null
+}
+
+// 保存数据到 sessionStorage
+const saveCachedData = () => {
+  try {
+    if (!filterForm.value.sourceId) return
+    const key = `${STORAGE_DATA_KEY}-${filterForm.value.sourceId}`
+    const data = {
+      timestamp: Date.now(),
+      sourceId: filterForm.value.sourceId,
+      dateRange: filterForm.value.dateRange,
+      tableData: tableData.value,
+    }
+    sessionStorage.setItem(key, JSON.stringify(data))
+  } catch (e) {
+    console.error('保存缓存数据失败:', e)
+  }
+}
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
@@ -179,6 +254,36 @@ const loadSources = async () => {
     const res = await getNginxSources({ status: 1 })
     // request.ts 拦截器已解包响应
     sources.value = res.list || res || []
+
+    // 恢复之前保存的状态
+    const savedState = restoreState()
+    if (savedState) {
+      // 恢复日期范围
+      if (savedState.dateRange && savedState.dateRange.length === 2) {
+        filterForm.value.dateRange = savedState.dateRange
+      }
+      // 恢复数据源（如果还在列表中）
+      if (savedState.sourceId && sources.value.some((s: NginxSource) => s.id === savedState.sourceId)) {
+        filterForm.value.sourceId = savedState.sourceId
+      } else if (sources.value.length > 0) {
+        // 没有保存的状态或数据源不存在，选择第一个数据源
+        filterForm.value.sourceId = sources.value[0].id
+      }
+    } else if (sources.value.length > 0 && !filterForm.value.sourceId) {
+      // 首次进入，自动选择第一个数据源
+      filterForm.value.sourceId = sources.value[0].id
+    }
+
+    // 尝试从缓存恢复数据（缓存键包含数据源ID）
+    const cachedData = restoreCachedData()
+    if (cachedData) {
+      // 使用缓存数据
+      tableData.value = cachedData.tableData || []
+      await nextTick()
+      initTrendChart()
+      ElMessage.success('已加载缓存数据')
+    }
+    // 没有缓存时不自动加载，等用户手动点击刷新
   } catch (error) {
     console.error('获取数据源列表失败:', error)
   }
@@ -192,9 +297,14 @@ const loadData = async () => {
     if (filterForm.value.sourceId) {
       params.sourceId = filterForm.value.sourceId
     }
+    // 如果没有选择日期范围，默认查询今天
     if (filterForm.value.dateRange?.length === 2) {
       params.startDate = filterForm.value.dateRange[0]
       params.endDate = filterForm.value.dateRange[1]
+    } else {
+      const today = new Date().toISOString().split('T')[0]
+      params.startDate = today
+      params.endDate = today
     }
 
     const res = await getNginxDailyReport(params)
@@ -202,6 +312,21 @@ const loadData = async () => {
     tableData.value = res || []
     await nextTick()
     initTrendChart()
+
+    // 保存状态（保存用户实际选择的日期范围，不是默认值）
+    saveState({
+      sourceId: filterForm.value.sourceId,
+      dateRange: filterForm.value.dateRange,
+    })
+
+    // 保存数据到缓存
+    saveCachedData()
+
+    if (tableData.value.length === 0) {
+      ElMessage.warning('该日期范围内暂无数据')
+    } else {
+      ElMessage.success('数据加载成功')
+    }
   } catch (error) {
     console.error('获取日报数据失败:', error)
     ElMessage.error('获取日报数据失败')
@@ -210,12 +335,41 @@ const loadData = async () => {
   }
 }
 
+// 刷新数据（先采集日志再加载数据）
+const refreshData = async () => {
+  if (!filterForm.value.sourceId) {
+    ElMessage.warning('请选择数据源')
+    return
+  }
+
+  refreshing.value = true
+  try {
+    // 先触发日志采集
+    ElMessage.info('正在采集日志...')
+    await collectNginxLogs(filterForm.value.sourceId)
+    ElMessage.success('日志采集完成，正在加载数据...')
+
+    // 采集完成后加载数据
+    await loadData()
+  } catch (error) {
+    console.error('采集日志失败:', error)
+    ElMessage.error('采集日志失败')
+  } finally {
+    refreshing.value = false
+  }
+}
+
 // 重置筛选
 const handleReset = () => {
   filterForm.value = {
-    sourceId: undefined,
+    sourceId: sources.value.length > 0 ? sources.value[0].id : undefined,
     dateRange: [],
   }
+  // 清除保存的状态
+  saveState({
+    sourceId: filterForm.value.sourceId,
+    dateRange: filterForm.value.dateRange,
+  })
   loadData()
 }
 
@@ -296,9 +450,106 @@ const handleResize = () => {
   trendChart?.resize()
 }
 
+// 导出PDF
+const exportToPDF = async () => {
+  if (tableData.value.length === 0) {
+    ElMessage.warning('暂无数据可导出')
+    return
+  }
+
+  if (!reportContainerRef.value) {
+    ElMessage.error('页面元素未找到')
+    return
+  }
+
+  exporting.value = true
+
+  try {
+    // 动态导入
+    const { jsPDF } = await import('jspdf')
+    const html2canvas = (await import('html2canvas')).default
+
+    // 获取数据源名称
+    const currentSource = sources.value.find(s => s.id === filterForm.value.sourceId)
+    const sourceName = currentSource?.name || '全部数据源'
+
+    // 使用 html2canvas 截图
+    const canvas = await html2canvas(reportContainerRef.value, {
+      scale: 2, // 提高清晰度
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#f5f7fa',
+      logging: false,
+    })
+
+    // 创建PDF文档 (A4横向)
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    })
+
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+
+    // 计算图片在PDF中的尺寸（保持宽高比）
+    const imgWidth = pageWidth - 20 // 左右各留10mm边距
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+    // 将截图添加到PDF
+    const imgData = canvas.toDataURL('image/png')
+
+    // 如果图片高度超过一页，需要分页
+    let yPosition = 10
+    let remainingHeight = imgHeight
+
+    while (remainingHeight > 0) {
+      const currentPageHeight = Math.min(remainingHeight, pageHeight - 20)
+
+      // 计算裁剪区域
+      const sourceY = (imgHeight - remainingHeight) * (canvas.height / imgHeight)
+      const sourceHeight = currentPageHeight * (canvas.height / imgHeight)
+
+      // 创建临时canvas用于裁剪
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = canvas.width
+      tempCanvas.height = sourceHeight
+      const tempCtx = tempCanvas.getContext('2d')
+
+      if (tempCtx) {
+        tempCtx.drawImage(
+          canvas,
+          0, sourceY, canvas.width, sourceHeight,
+          0, 0, canvas.width, sourceHeight
+        )
+
+        const pageImgData = tempCanvas.toDataURL('image/png')
+        doc.addImage(pageImgData, 'PNG', 10, yPosition, imgWidth, currentPageHeight)
+      }
+
+      remainingHeight -= currentPageHeight
+
+      if (remainingHeight > 0) {
+        doc.addPage()
+        yPosition = 10
+      }
+    }
+
+    // 保存PDF
+    const fileName = `nginx日报_${sourceName}_${new Date().toISOString().slice(0, 10)}.pdf`
+    doc.save(fileName)
+
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('导出PDF失败:', error)
+    ElMessage.error('导出PDF失败，请稍后重试')
+  } finally {
+    exporting.value = false
+  }
+}
+
 onMounted(() => {
   loadSources()
-  loadData()
   window.addEventListener('resize', handleResize)
 })
 
@@ -439,6 +690,13 @@ onUnmounted(() => {
   box-shadow: 0 2px 12px rgba(212, 175, 55, 0.25);
 }
 
+/* 导出内容区域 */
+.export-content {
+  background: #f5f7fa;
+  padding: 16px;
+  border-radius: 8px;
+}
+
 /* 表格 */
 .table-wrapper {
   background: #fff;
@@ -446,6 +704,62 @@ onUnmounted(() => {
   padding: 20px;
   margin-bottom: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+.modern-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.modern-table :deep(.el-table__header) {
+  th {
+    white-space: nowrap;
+  }
+}
+
+.modern-table :deep(.el-table__row) {
+  td {
+    white-space: nowrap;
+  }
+}
+
+.modern-table :deep(.el-table__row:hover) {
+  background-color: #f5f7fa !important;
+}
+
+.date-cell {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  color: #606266;
+}
+
+.number-cell {
+  font-weight: 500;
+  color: #303133;
+  font-size: 13px;
+}
+
+.status-cell {
+  font-weight: 500;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.status-2xx {
+  color: #67c23a;
+}
+
+.status-3xx {
+  color: #409eff;
+}
+
+.status-4xx {
+  color: #e6a23c;
+}
+
+.status-5xx {
+  color: #f56c6c;
 }
 
 /* 图表 */

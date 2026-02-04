@@ -42,7 +42,6 @@ import (
 	monitorplugin "github.com/ydcloud-dy/opshub/plugins/monitor"
 	nginxplugin "github.com/ydcloud-dy/opshub/plugins/nginx"
 	taskplugin "github.com/ydcloud-dy/opshub/plugins/task"
-	testplugin "github.com/ydcloud-dy/opshub/plugins/test"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -97,11 +96,6 @@ func NewHTTPServer(conf *conf.Config, svc *service.Service, db *gorm.DB) *HTTPSe
 	// 注册 Nginx 插件
 	if err := pluginMgr.Register(nginxplugin.New()); err != nil {
 		appLogger.Error("注册Nginx插件失败", zap.Error(err))
-	}
-
-	// 注册 test 插件
-	if err := pluginMgr.Register(testplugin.New()); err != nil {
-		appLogger.Error("注册test插件失败", zap.Error(err))
 	}
 
 	// 注册路由

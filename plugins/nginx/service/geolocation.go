@@ -26,9 +26,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/phuslu/iploc"
-	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // GeoInfo 地理位置信息
@@ -41,16 +41,17 @@ type GeoInfo struct {
 
 // GeolocationService 地理位置服务
 type GeolocationService struct {
-	cache    *lru.Cache[string, *GeoInfo]
-	cityDB   *geoip2.Reader // GeoLite2-City.mmdb
-	asnDB    *geoip2.Reader // GeoLite2-ASN.mmdb (可选，用于 ISP)
-	hasMMDB  bool
+	cache   *lru.Cache[string, *GeoInfo]
+	cityDB  *geoip2.Reader // GeoLite2-City.mmdb
+	asnDB   *geoip2.Reader // GeoLite2-ASN.mmdb (可选，用于 ISP)
+	hasMMDB bool
 }
 
 // mmdb 文件搜索路径
 var mmdbSearchPaths = []string{
 	"plugins/nginx/data",
 	"data",
+	"./data",
 	"/usr/share/GeoIP",
 	"/var/lib/GeoIP",
 }
@@ -77,14 +78,19 @@ func (s *GeolocationService) loadMMDB() {
 	for _, searchPath := range mmdbSearchPaths {
 		for _, filename := range cityFiles {
 			path := filepath.Join(searchPath, filename)
-			if _, err := os.Stat(path); err == nil {
-				db, err := geoip2.Open(path)
-				if err == nil {
-					s.cityDB = db
-					s.hasMMDB = true
-					fmt.Printf("Loaded GeoIP City database: %s\n", path)
-					break
-				}
+			// 检查文件是否存在
+			if _, err := os.Stat(path); err != nil {
+				continue // 文件不存在，继续查找
+			}
+			// 尝试打开数据库
+			db, err := geoip2.Open(path)
+			if err == nil {
+				s.cityDB = db
+				s.hasMMDB = true
+				fmt.Printf("[Nginx] Loaded GeoIP City database: %s\n", path)
+				break
+			} else {
+				fmt.Printf("[Nginx] Failed to open GeoIP City database %s: %v\n", path, err)
 			}
 		}
 		if s.cityDB != nil {
@@ -97,13 +103,14 @@ func (s *GeolocationService) loadMMDB() {
 	for _, searchPath := range mmdbSearchPaths {
 		for _, filename := range asnFiles {
 			path := filepath.Join(searchPath, filename)
-			if _, err := os.Stat(path); err == nil {
-				db, err := geoip2.Open(path)
-				if err == nil {
-					s.asnDB = db
-					fmt.Printf("Loaded GeoIP ASN database: %s\n", path)
-					break
-				}
+			if _, err := os.Stat(path); err != nil {
+				continue
+			}
+			db, err := geoip2.Open(path)
+			if err == nil {
+				s.asnDB = db
+				fmt.Printf("[Nginx] Loaded GeoIP ASN database: %s\n", path)
+				break
 			}
 		}
 		if s.asnDB != nil {
@@ -112,7 +119,9 @@ func (s *GeolocationService) loadMMDB() {
 	}
 
 	if !s.hasMMDB {
-		fmt.Println("Warning: No mmdb database found, using phuslu/iploc as fallback")
+		fmt.Println("[Nginx] Warning: No mmdb database found, geolocation will be limited (country only)")
+		fmt.Println("[Nginx] Searched paths:", strings.Join(mmdbSearchPaths, ", "))
+		fmt.Println("[Nginx] Please download GeoLite2-City.mmdb from https://dev.maxmind.com/geoip/geolite2-free-geolocation-data")
 	}
 }
 
@@ -243,20 +252,20 @@ func (s *GeolocationService) lookupIploc(ip string) *GeoInfo {
 func simplifyISP(org string) string {
 	// 常见 ISP 简化
 	ispMap := map[string]string{
-		"China Telecom":           "中国电信",
-		"China Unicom":            "中国联通",
-		"China Mobile":            "中国移动",
-		"CHINA TELECOM":           "中国电信",
-		"CHINA UNICOM":            "中国联通",
-		"CHINA MOBILE":            "中国移动",
-		"Alibaba":                 "阿里云",
-		"Tencent":                 "腾讯云",
-		"TENCENT":                 "腾讯云",
-		"Huawei":                  "华为云",
-		"Amazon":                  "AWS",
-		"Google":                  "Google Cloud",
-		"Microsoft":               "Azure",
-		"Cloudflare":              "Cloudflare",
+		"China Telecom": "中国电信",
+		"China Unicom":  "中国联通",
+		"China Mobile":  "中国移动",
+		"CHINA TELECOM": "中国电信",
+		"CHINA UNICOM":  "中国联通",
+		"CHINA MOBILE":  "中国移动",
+		"Alibaba":       "阿里云",
+		"Tencent":       "腾讯云",
+		"TENCENT":       "腾讯云",
+		"Huawei":        "华为云",
+		"Amazon":        "AWS",
+		"Google":        "Google Cloud",
+		"Microsoft":     "Azure",
+		"Cloudflare":    "Cloudflare",
 	}
 
 	for key, value := range ispMap {

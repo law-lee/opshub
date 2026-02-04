@@ -46,11 +46,22 @@ func RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 		nginxGroup.GET("/overview", handler.GetOverview)            // 获取概况
 		nginxGroup.GET("/overview/trend", handler.GetRequestsTrend) // 获取请求趋势
 
+		// 概况页面新增接口
+		overview := nginxGroup.Group("/overview")
+		{
+			overview.GET("/active-visitors", handler.GetActiveVisitors)  // 活跃访客
+			overview.GET("/core-metrics", handler.GetCoreMetrics)        // 核心指标
+			overview.GET("/overview-trend", handler.GetOverviewTrend)    // UV+PV趋势
+			overview.GET("/new-vs-returning", handler.GetNewVsReturning) // 新老访客
+			overview.GET("/top-referers", handler.GetTopReferers)        // 来路排行
+			overview.GET("/top-pages", handler.GetTopPages)              // 受访页面
+			overview.GET("/top-entry-pages", handler.GetTopEntryPages)   // 入口页面
+			overview.GET("/geo", handler.GetOverviewGeo)                 // 地域分布
+			overview.GET("/devices", handler.GetOverviewDevices)         // 终端设备
+		}
+
 		// 数据日报
 		nginxGroup.GET("/daily-report", handler.GetDailyReport) // 获取日报数据
-
-		// 实时统计
-		nginxGroup.GET("/realtime", handler.GetRealTimeStats) // 获取实时数据
 
 		// 日志采集
 		nginxGroup.POST("/collect", handler.CollectLogs) // 手动触发日志采集

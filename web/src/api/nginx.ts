@@ -201,18 +201,105 @@ export const getNginxRequestsTrend = (params?: { sourceId?: number; hours?: numb
   return request.get('/api/v1/plugins/nginx/overview/trend', { params })
 }
 
+// ==================== 概况页面新增接口 ====================
+
+// 核心指标类型
+export interface CoreMetrics {
+  today: MetricSet
+  yesterday: MetricSet
+  predictToday: MetricSet
+  yesterdayNow: MetricSet
+}
+
+export interface MetricSet {
+  statusHits: number
+  pv: number
+  uv: number
+  realtimeOps: number
+  peakOps: number
+  status2xx: number
+  status3xx: number
+  status4xx: number
+  status5xx: number
+}
+
+export interface VisitorComparison {
+  todayNew: number
+  todayReturning: number
+  todayNewPct: number
+  todayRetPct: number
+  yesterdayNew: number
+  yesterdayReturning: number
+  yesterdayNewPct: number
+  yesterdayRetPct: number
+}
+
+export interface OverviewTrendPoint {
+  time: string
+  pv: number
+  uv: number
+}
+
+export interface RefererItem {
+  domain: string
+  visitors: number
+}
+
+export interface PageItem {
+  path: string
+  count: number
+}
+
+// 获取活跃访客
+export const getActiveVisitors = (sourceId: number) => {
+  return request.get('/api/v1/plugins/nginx/overview/active-visitors', { params: { sourceId } })
+}
+
+// 获取核心指标
+export const getCoreMetrics = (sourceId: number) => {
+  return request.get('/api/v1/plugins/nginx/overview/core-metrics', { params: { sourceId } })
+}
+
+// 获取概况趋势（UV+PV）
+export const getOverviewTrend = (params: { sourceId: number; mode?: 'hour' | 'day'; date?: string }) => {
+  return request.get('/api/v1/plugins/nginx/overview/overview-trend', { params })
+}
+
+// 获取新老访客对比
+export const getNewVsReturning = (sourceId: number) => {
+  return request.get('/api/v1/plugins/nginx/overview/new-vs-returning', { params: { sourceId } })
+}
+
+// 获取来路排行
+export const getTopReferers = (params: { sourceId: number; limit?: number }) => {
+  return request.get('/api/v1/plugins/nginx/overview/top-referers', { params })
+}
+
+// 获取受访页面排行
+export const getTopPages = (params: { sourceId: number; limit?: number }) => {
+  return request.get('/api/v1/plugins/nginx/overview/top-pages', { params })
+}
+
+// 获取入口页面排行
+export const getTopEntryPages = (params: { sourceId: number; limit?: number }) => {
+  return request.get('/api/v1/plugins/nginx/overview/top-entry-pages', { params })
+}
+
+// 获取概况地域分布
+export const getOverviewGeo = (params: { sourceId: number; scope?: string }) => {
+  return request.get('/api/v1/plugins/nginx/overview/geo', { params })
+}
+
+// 获取概况终端设备分布
+export const getOverviewDevices = (sourceId: number) => {
+  return request.get('/api/v1/plugins/nginx/overview/devices', { params: { sourceId } })
+}
+
 // ==================== 数据日报 ====================
 
 // 获取日报数据
 export const getNginxDailyReport = (params: { sourceId?: number; startDate?: string; endDate?: string }) => {
   return request.get('/api/v1/plugins/nginx/daily-report', { params })
-}
-
-// ==================== 实时统计 ====================
-
-// 获取实时统计
-export const getNginxRealTimeStats = (params: { sourceId: number; hours?: number }) => {
-  return request.get('/api/v1/plugins/nginx/realtime', { params })
 }
 
 // ==================== 访问明细 ====================

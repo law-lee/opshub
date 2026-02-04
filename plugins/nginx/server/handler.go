@@ -40,18 +40,18 @@ import (
 )
 
 type Handler struct {
-	db        *gorm.DB
-	repo      *repository.NginxRepository
-	geoSvc    *service.GeolocationService
-	uaParser  *service.UAParser
+	db       *gorm.DB
+	repo     *repository.NginxRepository
+	geoSvc   *service.GeolocationService
+	uaParser *service.UAParser
 }
 
 func NewHandler(db *gorm.DB) *Handler {
 	return &Handler{
-		db:        db,
-		repo:      repository.NewNginxRepository(db),
-		geoSvc:    service.NewGeolocationService(),
-		uaParser:  service.NewUAParser(),
+		db:       db,
+		repo:     repository.NewNginxRepository(db),
+		geoSvc:   service.NewGeolocationService(),
+		uaParser: service.NewUAParser(),
 	}
 }
 
@@ -252,9 +252,9 @@ func (h *Handler) GetRequestsTrend(c *gin.Context) {
 
 // ==================== 数据日报 ====================
 
-// GetDailyReport 获取日报数据（实时从主机获取）
+// GetDailyReport 获取日报数据（从数据库读取已聚合的统计数据）
 // @Summary 获取日报数据
-// @Description 实时从主机获取指定日期范围的Nginx统计日报
+// @Description 从数据库获取指定日期范围的Nginx统计日报
 // @Tags Nginx统计-数据日报
 // @Accept json
 // @Produce json
@@ -276,7 +276,7 @@ func (h *Handler) GetDailyReport(c *gin.Context) {
 	}
 
 	sourceID, _ := strconv.ParseUint(sourceIDStr, 10, 32)
-	source, err := h.repo.GetSourceByID(uint(sourceID))
+	_, err := h.repo.GetSourceByID(uint(sourceID))
 	if err != nil {
 		response.ErrorCode(c, http.StatusNotFound, "数据源不存在")
 		return
@@ -294,59 +294,34 @@ func (h *Handler) GetDailyReport(c *gin.Context) {
 
 	if endDateStr != "" {
 		endDate, _ = time.ParseInLocation("2006-01-02", endDateStr, time.Local)
-		// 结束日期加1天，包含当天
-		endDate = endDate.Add(24 * time.Hour)
 	} else {
-		endDate = now.Add(24 * time.Hour)
+		endDate = now
 	}
 
-	// 只支持主机类型
-	if source.Type != model.SourceTypeHost {
-		response.ErrorCode(c, http.StatusBadRequest, "暂不支持该数据源类型")
-		return
-	}
-
-	// 实时从主机获取数据
-	stats, err := h.fetchNginxStatsFromHost(source, startDate, endDate)
+	// 从数据库查询已聚合的统计数据
+	stats, err := h.repo.ListDailyStats(uint(sourceID), startDate, endDate)
 	if err != nil {
 		response.ErrorCode(c, http.StatusInternalServerError, "获取数据失败: "+err.Error())
 		return
 	}
 
-	response.Success(c, stats)
-}
-
-// ==================== 实时统计 ====================
-
-// GetRealTimeStats 获取实时统计
-// @Summary 获取实时统计
-// @Description 获取最近N小时的小时级统计数据
-// @Tags Nginx统计-实时
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param sourceId query int true "数据源ID"
-// @Param hours query int false "小时数" default(6)
-// @Success 200 {object} response.Response "获取成功"
-// @Router /nginx/realtime [get]
-func (h *Handler) GetRealTimeStats(c *gin.Context) {
-	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
-	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "6"))
-
-	if sourceID == 0 {
-		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
-		return
+	// 转换为前端期望的格式
+	result := make([]map[string]interface{}, 0, len(stats))
+	for _, s := range stats {
+		result = append(result, map[string]interface{}{
+			"date":            s.Date.Format("2006-01-02"),
+			"totalRequests":   s.TotalRequests,
+			"uniqueVisitors":  s.UniqueVisitors,
+			"totalBandwidth":  s.TotalBandwidth,
+			"avgResponseTime": s.AvgResponseTime,
+			"status2xx":       s.Status2xx,
+			"status3xx":       s.Status3xx,
+			"status4xx":       s.Status4xx,
+			"status5xx":       s.Status5xx,
+		})
 	}
 
-	endHour := time.Now().Truncate(time.Hour)
-	startHour := endHour.Add(-time.Duration(hours) * time.Hour)
-
-	stats, err := h.repo.ListHourlyStats(uint(sourceID), startHour, endHour)
-	if err != nil {
-		response.ErrorCode(c, http.StatusInternalServerError, "获取实时数据失败")
-		return
-	}
-	response.Success(c, stats)
+	response.Success(c, result)
 }
 
 // ==================== 访问明细 ====================
@@ -632,10 +607,9 @@ func (h *Handler) fetchNginxStatsFromHost(source *model.NginxSource, startDate, 
 		stats.TotalResponseTime += entry.RequestTime
 	}
 
-	// 如果没有匹配的数据，返回详细错误
+	// 如果没有匹配的数据，返回空数组（不再返回错误）
 	if matchedCount == 0 {
-		return nil, fmt.Errorf("没有匹配的日志数据 (总行数: %d, 解析成功: %d, 日期范围: %s 至 %s)",
-			lineCount, parsedCount, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+		return make([]map[string]interface{}, 0), nil
 	}
 
 	// 转换为返回格式 - 使用 make 确保返回空数组而不是 null
@@ -696,9 +670,11 @@ func parseLogLine(line string) (*LogEntry, error) {
 
 	// 解析时间
 	timeStr := matches[3]
+	// 先尝试带时区的格式
 	t, err := time.Parse("02/Jan/2006:15:04:05 -0700", timeStr)
 	if err != nil {
-		t, err = time.Parse("02/Jan/2006:15:04:05", timeStr)
+		// 不带时区，使用本地时区解析（Nginx日志通常是服务器本地时间）
+		t, err = time.ParseInLocation("02/Jan/2006:15:04:05", timeStr, time.Local)
 		if err != nil {
 			return nil, fmt.Errorf("解析时间失败")
 		}
@@ -721,16 +697,27 @@ func parseLogLine(line string) (*LogEntry, error) {
 
 // NginxJSONLog JSON格式的Nginx日志结构
 type NginxJSONLog struct {
-	TimeLocal    string `json:"time_local"`
-	RemoteAddr   string `json:"remote_addr"`
-	Request      string `json:"request"`
-	Status       int    `json:"status"`
-	Bytes        int64  `json:"bytes"`
-	BodyBytes    int64  `json:"body_bytes_sent"` // 兼容另一种字段名
-	RequestTime  string `json:"request_time"`
-	UpstreamTime string `json:"upstream_time"`
-	UserAgent    string `json:"user_agent"`
-	Referer      string `json:"referer"`
+	TimeLocal     string `json:"time_local"`
+	Time          string `json:"time"`       // 备用时间字段
+	Timestamp     string `json:"@timestamp"` // 备用时间字段
+	RemoteAddr    string `json:"remote_addr"`
+	ClientIP      string `json:"client_ip"` // 备用 IP 字段
+	Request       string `json:"request"`
+	Status        int    `json:"status"`
+	StatusStr     string `json:"status_code"` // 备用状态码字段（字符串）
+	Bytes         int64  `json:"bytes"`
+	BodyBytes     int64  `json:"body_bytes_sent"` // 兼容另一种字段名
+	BytesSent     int64  `json:"bytes_sent"`      // 备用字节字段
+	RequestTime   string `json:"request_time"`
+	UpstreamTime  string `json:"upstream_time"`
+	UserAgent     string `json:"user_agent"`
+	HTTPUserAgent string `json:"http_user_agent"` // 备用 UA 字段
+	Referer       string `json:"referer"`
+	HTTPReferer   string `json:"http_referer"` // 备用 referer 字段
+	Host          string `json:"host"`
+	ServerName    string `json:"server_name"` // 备用 host 字段
+	XForwarded    string `json:"x_forwarded"`
+	XForwardedFor string `json:"x_forwarded_for"`
 }
 
 // parseJSONLogLine 解析JSON格式的Nginx日志
@@ -745,21 +732,93 @@ func parseJSONLogLine(line string) (*LogEntry, error) {
 		Status:     jsonLog.Status,
 	}
 
+	// 备用 IP 字段
+	if entry.RemoteAddr == "" {
+		entry.RemoteAddr = jsonLog.ClientIP
+	}
+	// 处理 X-Forwarded-For
+	if entry.RemoteAddr == "" || strings.HasPrefix(entry.RemoteAddr, "10.") || strings.HasPrefix(entry.RemoteAddr, "192.168.") || strings.HasPrefix(entry.RemoteAddr, "172.") {
+		xff := jsonLog.XForwarded
+		if xff == "" {
+			xff = jsonLog.XForwardedFor
+		}
+		if xff != "" && xff != "-" {
+			parts := strings.Split(xff, ",")
+			if len(parts) > 0 {
+				realIP := strings.TrimSpace(parts[0])
+				if realIP != "" && realIP != "-" {
+					entry.RemoteAddr = realIP
+				}
+			}
+		}
+	}
+
+	// 备用状态码
+	if entry.Status == 0 && jsonLog.StatusStr != "" {
+		entry.Status, _ = strconv.Atoi(jsonLog.StatusStr)
+	}
+
 	// 响应体大小
 	if jsonLog.Bytes > 0 {
 		entry.BodyBytesSent = jsonLog.Bytes
-	} else {
+	} else if jsonLog.BodyBytes > 0 {
 		entry.BodyBytesSent = jsonLog.BodyBytes
+	} else {
+		entry.BodyBytesSent = jsonLog.BytesSent
 	}
 
-	// 解析时间 - 格式: "30/Jan/2026:08:40:26 +0800"
-	t, err := time.Parse("02/Jan/2006:15:04:05 -0700", jsonLog.TimeLocal)
-	if err != nil {
-		// 尝试不带时区
-		t, err = time.Parse("02/Jan/2006:15:04:05", jsonLog.TimeLocal)
-		if err != nil {
-			return nil, fmt.Errorf("解析时间失败: %s", jsonLog.TimeLocal)
+	// 解析时间 - 支持多种字段和格式
+	timeStr := jsonLog.TimeLocal
+	if timeStr == "" {
+		timeStr = jsonLog.Time
+	}
+	if timeStr == "" {
+		timeStr = jsonLog.Timestamp
+	}
+
+	if timeStr == "" {
+		return nil, fmt.Errorf("缺少时间字段")
+	}
+
+	// 尝试多种时间格式
+	var t time.Time
+	var parseErr error
+	parsed := false
+
+	// 先尝试带时区的格式
+	formatsWithTZ := []string{
+		"02/Jan/2006:15:04:05 -0700",
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05+08:00",
+		"2006-01-02T15:04:05-07:00",
+	}
+	for _, f := range formatsWithTZ {
+		t, parseErr = time.Parse(f, timeStr)
+		if parseErr == nil {
+			parsed = true
+			break
 		}
+	}
+
+	// 不带时区的格式，使用本地时区解析（Nginx日志通常是服务器本地时间）
+	if !parsed {
+		formatsWithoutTZ := []string{
+			"02/Jan/2006:15:04:05",
+			"2006-01-02T15:04:05.000Z",
+			"2006-01-02T15:04:05",
+			"2006-01-02 15:04:05",
+		}
+		for _, f := range formatsWithoutTZ {
+			t, parseErr = time.ParseInLocation(f, timeStr, time.Local)
+			if parseErr == nil {
+				parsed = true
+				break
+			}
+		}
+	}
+
+	if !parsed {
+		return nil, fmt.Errorf("解析时间失败: %s", timeStr)
 	}
 	entry.Timestamp = t
 
@@ -1204,4 +1263,265 @@ func (h *Handler) BackfillGeoData(c *gin.Context) {
 		"message":      "回填完成",
 		"totalUpdated": totalUpdated,
 	})
+}
+
+// ==================== 概况页面接口 ====================
+
+// GetActiveVisitors 获取活跃访客数
+// @Summary 获取活跃访客数
+// @Description 获取指定站点最近15分钟的活跃访客数
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/active-visitors [get]
+func (h *Handler) GetActiveVisitors(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	count, err := h.repo.GetActiveVisitors(uint(sourceID), 15)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取活跃访客失败")
+		return
+	}
+	response.Success(c, gin.H{"count": count})
+}
+
+// GetCoreMetrics 获取核心指标
+// @Summary 获取核心指标
+// @Description 获取今日/昨日/预计今日/昨日此时的核心指标
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/core-metrics [get]
+func (h *Handler) GetCoreMetrics(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	metrics, err := h.repo.GetCoreMetrics(uint(sourceID))
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取核心指标失败")
+		return
+	}
+	response.Success(c, metrics)
+}
+
+// GetOverviewTrend 获取概况趋势（UV+PV）
+// @Summary 获取概况趋势
+// @Description 获取按时/按天的UV和PV趋势数据
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Param mode query string false "模式: hour 或 day" default(hour)
+// @Param date query string false "日期(hour模式下指定)" default(今天)
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/overview-trend [get]
+func (h *Handler) GetOverviewTrend(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	mode := c.DefaultQuery("mode", "hour")
+	date := c.DefaultQuery("date", time.Now().Local().Format("2006-01-02"))
+
+	points, err := h.repo.GetOverviewTrend(uint(sourceID), mode, date)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取趋势数据失败")
+		return
+	}
+	response.Success(c, points)
+}
+
+// GetNewVsReturning 获取新老访客对比
+// @Summary 获取新老访客对比
+// @Description 获取今日和昨日的新老访客对比数据
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/new-vs-returning [get]
+func (h *Handler) GetNewVsReturning(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	vc, err := h.repo.GetNewVsReturningVisitors(uint(sourceID))
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取新老访客数据失败")
+		return
+	}
+	response.Success(c, vc)
+}
+
+// GetTopReferers 获取来路排行
+// @Summary 获取来路排行
+// @Description 获取访客来路域名排行
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Param limit query int false "数量限制" default(10)
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/top-referers [get]
+func (h *Handler) GetTopReferers(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	// 默认今日
+	now := time.Now().Local()
+	start, _ := time.ParseInLocation("2006-01-02", now.Format("2006-01-02"), time.Local)
+	end := start.Add(24 * time.Hour)
+
+	items, err := h.repo.GetTopReferersByVisitors(uint(sourceID), start, end, limit)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取来路排行失败")
+		return
+	}
+	response.Success(c, items)
+}
+
+// GetTopPages 获取受访页面排行
+// @Summary 获取受访页面排行
+// @Description 获取访问量最高的页面排行
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Param limit query int false "数量限制" default(10)
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/top-pages [get]
+func (h *Handler) GetTopPages(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	now := time.Now().Local()
+	start, _ := time.ParseInLocation("2006-01-02", now.Format("2006-01-02"), time.Local)
+	end := start.Add(24 * time.Hour)
+
+	items, err := h.repo.GetTopVisitedPages(uint(sourceID), start, end, limit)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取受访页面排行失败")
+		return
+	}
+	response.Success(c, items)
+}
+
+// GetTopEntryPages 获取入口页面排行
+// @Summary 获取入口页面排行
+// @Description 获取用户首次访问的入口页面排行
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Param limit query int false "数量限制" default(10)
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/top-entry-pages [get]
+func (h *Handler) GetTopEntryPages(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	now := time.Now().Local()
+	start, _ := time.ParseInLocation("2006-01-02", now.Format("2006-01-02"), time.Local)
+	end := start.Add(24 * time.Hour)
+
+	items, err := h.repo.GetTopEntryPages(uint(sourceID), start, end, limit)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取入口页面排行失败")
+		return
+	}
+	response.Success(c, items)
+}
+
+// GetOverviewGeo 获取概况页地域分布
+// @Summary 获取概况页地域分布
+// @Description 获取指定站点的地域分布数据
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Param scope query string false "范围: domestic 或 global" default(domestic)
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/geo [get]
+func (h *Handler) GetOverviewGeo(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	scope := c.DefaultQuery("scope", "domestic")
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	now := time.Now().Local()
+	start, _ := time.ParseInLocation("2006-01-02", now.Format("2006-01-02"), time.Local)
+	end := start.Add(24 * time.Hour)
+
+	stats, err := h.repo.GetOverviewGeo(uint(sourceID), start, end, scope)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取地域分布失败")
+		return
+	}
+	response.Success(c, stats)
+}
+
+// GetOverviewDevices 获取概况页终端设备分布
+// @Summary 获取概况页终端设备分布
+// @Description 获取指定站点的终端设备类型分布
+// @Tags Nginx统计-概况
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param sourceId query int true "数据源ID"
+// @Success 200 {object} response.Response "获取成功"
+// @Router /nginx/overview/devices [get]
+func (h *Handler) GetOverviewDevices(c *gin.Context) {
+	sourceID, _ := strconv.ParseUint(c.Query("sourceId"), 10, 32)
+	if sourceID == 0 {
+		response.ErrorCode(c, http.StatusBadRequest, "请指定数据源ID")
+		return
+	}
+
+	now := time.Now().Local()
+	start, _ := time.ParseInLocation("2006-01-02", now.Format("2006-01-02"), time.Local)
+	end := start.Add(24 * time.Hour)
+
+	stats, err := h.repo.GetOverviewDevices(uint(sourceID), start, end)
+	if err != nil {
+		response.ErrorCode(c, http.StatusInternalServerError, "获取终端设备分布失败")
+		return
+	}
+	response.Success(c, stats)
 }

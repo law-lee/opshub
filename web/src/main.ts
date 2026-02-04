@@ -13,7 +13,6 @@ import '@/plugins/kubernetes'
 import '@/plugins/monitor'
 import '@/plugins/nginx'
 import '@/plugins/task'
-import '@/plugins/test'
 const app = createApp(App)
 const pinia = createPinia()
 

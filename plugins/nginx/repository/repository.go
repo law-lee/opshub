@@ -20,6 +20,10 @@
 package repository
 
 import (
+	"fmt"
+	"math"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +35,6 @@ import (
 // NginxRepository Nginx 数据仓库
 type NginxRepository struct {
 	db *gorm.DB
-
 	// 维度缓存
 	ipCache      sync.Map // map[string]uint64
 	urlCache     sync.Map // map[string]uint64
@@ -772,21 +775,29 @@ func (r *NginxRepository) ListHourlyStats(sourceID uint, startHour, endHour time
 	startHour = startHour.Local()
 	endHour = endHour.Local()
 
+	fmt.Printf("[DEBUG] ListHourlyStats: sourceID=%d, startHour=%s, endHour=%s\n",
+		sourceID, startHour.Format("2006-01-02 15:04:05"), endHour.Format("2006-01-02 15:04:05"))
+
 	// 首先尝试查询指定时间范围
 	if r.tableExists("nginx_hourly_stats") {
 		err := r.db.Where("source_id = ? AND hour >= ? AND hour <= ?", sourceID, startHour, endHour).
 			Order("hour DESC").Find(&stats).Error
+		fmt.Printf("[DEBUG] Query result: error=%v, count=%d\n", err, len(stats))
 		if err == nil && len(stats) > 0 {
 			return stats, nil
 		}
 
 		// 如果指定范围没数据，尝试查询最近7天的所有数据
 		sevenDaysAgo := time.Now().Local().AddDate(0, 0, -7)
+		fmt.Printf("[DEBUG] No data in range, trying fallback: 7 days ago = %s\n",
+			sevenDaysAgo.Format("2006-01-02 15:04:05"))
 		err = r.db.Where("source_id = ? AND hour >= ?", sourceID, sevenDaysAgo).
 			Order("hour DESC").Limit(24).Find(&stats).Error
+		fmt.Printf("[DEBUG] Fallback query result: error=%v, count=%d\n", err, len(stats))
 		return stats, err
 	}
 
+	fmt.Printf("[DEBUG] Table nginx_hourly_stats does not exist\n")
 	return stats, nil
 }
 
@@ -1091,14 +1102,19 @@ func (r *NginxRepository) GetTopIPsWithGeo(sourceID uint, startTime, endTime tim
 	}
 	var ipCounts []IPGeoCount
 
-	// 使用子查询获取每个IP的地理信息（取第一条记录的地理信息）
-	err := r.db.Model(&model.NginxAccessLog{}).
-		Select("remote_addr, MAX(country) as country, MAX(province) as province, MAX(city) as city, COUNT(*) as count").
-		Where("source_id = ? AND timestamp >= ? AND timestamp <= ?", sourceID, startTime, endTime).
-		Group("remote_addr").
-		Order("count DESC").
-		Limit(limit).
-		Find(&ipCounts).Error
+	// 使用子查询获取每个IP的地理信息（优先取有省份和城市的记录）
+	err := r.db.Raw(`
+		SELECT remote_addr,
+		       COALESCE(MAX(CASE WHEN country != '' THEN country END), '') as country,
+		       COALESCE(MAX(CASE WHEN province != '' THEN province END), '') as province,
+		       COALESCE(MAX(CASE WHEN city != '' THEN city END), '') as city,
+		       COUNT(*) as count
+		FROM nginx_access_logs
+		WHERE source_id = ? AND timestamp >= ? AND timestamp <= ?
+		GROUP BY remote_addr
+		ORDER BY count DESC
+		LIMIT ?
+	`, sourceID, startTime, endTime, limit).Scan(&ipCounts).Error
 
 	if err != nil {
 		return nil, err
@@ -1149,7 +1165,7 @@ func (r *NginxRepository) GetGeoDistribution(sourceID *uint, startTime, endTime 
 		}
 
 		query := r.db.Table("nginx_fact_access_logs f").
-			Select(selectField+", COUNT(*) as count").
+			Select(selectField+", COUNT(DISTINCT f.ip_id) as count").
 			Joins("LEFT JOIN nginx_dim_ip i ON f.ip_id = i.id").
 			Where("f.timestamp >= ? AND f.timestamp <= ?", startTime, endTime)
 
@@ -1206,7 +1222,7 @@ func (r *NginxRepository) GetGeoDistribution(sourceID *uint, startTime, endTime 
 		}
 
 		query := r.db.Model(&model.NginxAccessLog{}).
-			Select(selectField+", COUNT(*) as count").
+			Select(selectField+", COUNT(DISTINCT remote_addr) as count").
 			Where("timestamp >= ? AND timestamp <= ?", startTime, endTime).
 			Where("country != '' AND country IS NOT NULL")
 
@@ -1344,7 +1360,7 @@ func (r *NginxRepository) GetDeviceDistribution(sourceID *uint, startTime, endTi
 	// 优先使用新表
 	if r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_user_agent") {
 		query := r.db.Table("nginx_fact_access_logs f").
-			Select("ua.device_type, COUNT(*) as count").
+			Select("ua.device_type, COUNT(DISTINCT f.ip_id) as count").
 			Joins("LEFT JOIN nginx_dim_user_agent ua ON f.ua_id = ua.id").
 			Where("f.timestamp >= ? AND f.timestamp <= ?", startTime, endTime).
 			Where("ua.is_bot = ?", false)
@@ -1384,7 +1400,7 @@ func (r *NginxRepository) GetDeviceDistribution(sourceID *uint, startTime, endTi
 	// 回退到旧表 nginx_access_logs (现在有 device_type 字段)
 	if r.tableExists("nginx_access_logs") {
 		query := r.db.Model(&model.NginxAccessLog{}).
-			Select("device_type, COUNT(*) as count").
+			Select("device_type, COUNT(DISTINCT remote_addr) as count").
 			Where("timestamp >= ? AND timestamp <= ?", startTime, endTime).
 			Where("device_type != '' AND device_type IS NOT NULL")
 
@@ -1630,4 +1646,911 @@ func (r *NginxRepository) GetTimeSeries(sourceID *uint, startTime, endTime time.
 	}
 
 	return points, nil
+}
+
+// ============== 概况页面查询方法 ==============
+
+// GetActiveVisitors 获取活跃访客数（最近N分钟内的独立IP数）
+func (r *NginxRepository) GetActiveVisitors(sourceID uint, minutes int) (int64, error) {
+	since := time.Now().Add(-time.Duration(minutes) * time.Minute)
+	var count int64
+
+	fmt.Printf("[DEBUG] GetActiveVisitors: sourceID=%d, minutes=%d, since=%s\n", sourceID, minutes, since.Format("2006-01-02 15:04:05"))
+
+	// 优先使用新表，但如果结果为0则继续尝试旧表
+	if r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_ip") {
+		err := r.db.Table("nginx_fact_access_logs").
+			Where("source_id = ? AND timestamp >= ?", sourceID, since).
+			Distinct("ip_id").
+			Count(&count).Error
+		if err == nil && count > 0 {
+			fmt.Printf("[DEBUG] GetActiveVisitors: from new table, count=%d\n", count)
+			return count, nil
+		}
+		if err != nil {
+			fmt.Printf("[DEBUG] GetActiveVisitors: new table query error: %v\n", err)
+		} else {
+			fmt.Printf("[DEBUG] GetActiveVisitors: new table returned 0, trying old table\n")
+		}
+	}
+
+	// 回退到旧表
+	if r.tableExists("nginx_access_logs") {
+		err := r.db.Model(&model.NginxAccessLog{}).
+			Where("source_id = ? AND timestamp >= ?", sourceID, since).
+			Distinct("remote_addr").
+			Count(&count).Error
+		if err == nil {
+			fmt.Printf("[DEBUG] GetActiveVisitors: from old table, count=%d\n", count)
+			return count, nil
+		}
+		fmt.Printf("[DEBUG] GetActiveVisitors: old table query error: %v\n", err)
+	}
+
+	fmt.Printf("[DEBUG] GetActiveVisitors: no data found, returning 0\n")
+	return 0, nil
+}
+
+// GetCoreMetrics 获取核心指标（今日/昨日/预计今日/昨日此时）
+func (r *NginxRepository) GetCoreMetrics(sourceID uint) (*model.CoreMetrics, error) {
+	now := time.Now().Local()
+	todayStr := now.Format("2006-01-02")
+	yesterdayStr := now.AddDate(0, 0, -1).Format("2006-01-02")
+	currentHour := now.Hour()
+
+	metrics := &model.CoreMetrics{}
+
+	// 辅助函数：从日聚合表获取基础 MetricSet
+	getFromAggDaily := func(dateStr string) model.MetricSet {
+		var ms model.MetricSet
+		if r.tableExists("nginx_agg_daily") {
+			type DailyResult struct {
+				TotalRequests int64
+				PVCount       int64
+				UniqueIPs     int64
+				Status2xx     int64
+				Status3xx     int64
+				Status4xx     int64
+				Status5xx     int64
+			}
+			var dr DailyResult
+			err := r.db.Model(&model.NginxAggDaily{}).
+				Select("total_requests, pv_count, unique_ips, status_2xx, status_3xx, status_4xx, status_5xx").
+				Where("source_id = ? AND DATE(date) = ?", sourceID, dateStr).
+				First(&dr).Error
+			if err == nil {
+				ms.StatusHits = dr.TotalRequests
+				ms.PV = dr.PVCount
+				ms.UV = dr.UniqueIPs
+				ms.Status2xx = dr.Status2xx
+				ms.Status3xx = dr.Status3xx
+				ms.Status4xx = dr.Status4xx
+				ms.Status5xx = dr.Status5xx
+				return ms
+			}
+		}
+		// 回退到旧表
+		if r.tableExists("nginx_daily_stats") {
+			var ds model.NginxDailyStats
+			err := r.db.Where("source_id = ? AND DATE(date) = ?", sourceID, dateStr).First(&ds).Error
+			if err == nil {
+				ms.StatusHits = ds.TotalRequests
+				ms.PV = 0
+				ms.UV = ds.UniqueVisitors
+				ms.Status2xx = ds.Status2xx
+				ms.Status3xx = ds.Status3xx
+				ms.Status4xx = ds.Status4xx
+				ms.Status5xx = ds.Status5xx
+			}
+		}
+		return ms
+	}
+
+	// 今日、昨日基础数据
+	metrics.Today = getFromAggDaily(todayStr)
+	metrics.Yesterday = getFromAggDaily(yesterdayStr)
+
+	// 计算实时OPS（最近1分钟的请求率）
+	oneMinuteAgo := now.Add(-1 * time.Minute)
+	var recentCount int64
+
+	// 优先使用新表，但如果结果为0则继续尝试旧表
+	if r.tableExists("nginx_fact_access_logs") {
+		r.db.Table("nginx_fact_access_logs").
+			Where("source_id = ? AND timestamp >= ?", sourceID, oneMinuteAgo).
+			Count(&recentCount)
+	}
+	// 如果新表没有数据或不存在，尝试旧表
+	if recentCount == 0 && r.tableExists("nginx_access_logs") {
+		r.db.Model(&model.NginxAccessLog{}).
+			Where("source_id = ? AND timestamp >= ?", sourceID, oneMinuteAgo).
+			Count(&recentCount)
+	}
+	metrics.Today.RealtimeOps = float64(recentCount) / 60.0 // 每秒请求数
+
+	// 计算峰值OPS（从小时聚合数据中获取最大值）
+	if r.tableExists("nginx_agg_hourly") {
+		todayStart, _ := time.ParseInLocation("2006-01-02", todayStr, time.Local)
+		type HourlyMax struct {
+			MaxRequests int64
+		}
+		var hm HourlyMax
+		err := r.db.Model(&model.NginxAggHourly{}).
+			Select("MAX(total_requests) as max_requests").
+			Where("source_id = ? AND hour >= ?", sourceID, todayStart).
+			First(&hm).Error
+		if err == nil && hm.MaxRequests > 0 {
+			metrics.Today.PeakOps = float64(hm.MaxRequests) / 3600.0 // 小时请求率转为每秒
+		}
+	}
+
+	// 实时补充今日 PV 和 UV（从原始日志表精确计算）
+	todayStart, _ := time.ParseInLocation("2006-01-02", todayStr, time.Local)
+	tomorrowStart := todayStart.Add(24 * time.Hour)
+
+	// 优先从旧日志表计算（字段直接可用）
+	if r.tableExists("nginx_access_logs") {
+		// 计算今日 PV（总请求数）
+		var pvCount int64
+		r.db.Model(&model.NginxAccessLog{}).
+			Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, todayStart, tomorrowStart).
+			Count(&pvCount)
+		if pvCount > 0 {
+			metrics.Today.PV = pvCount
+		}
+
+		// 计算今日 UV（独立IP）
+		var uvCount int64
+		r.db.Model(&model.NginxAccessLog{}).
+			Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, todayStart, tomorrowStart).
+			Distinct("remote_addr").
+			Count(&uvCount)
+		if uvCount > 0 {
+			metrics.Today.UV = uvCount
+		}
+	} else if r.tableExists("nginx_fact_access_logs") {
+		// 回退到事实表
+		var pvCount int64
+		r.db.Table("nginx_fact_access_logs").
+			Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, todayStart, tomorrowStart).
+			Count(&pvCount)
+		if pvCount > 0 {
+			metrics.Today.PV = pvCount
+		}
+
+		if r.tableExists("nginx_dim_ip") {
+			var uvCount int64
+			r.db.Table("nginx_fact_access_logs").
+				Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, todayStart, tomorrowStart).
+				Distinct("ip_id").
+				Count(&uvCount)
+			if uvCount > 0 {
+				metrics.Today.UV = uvCount
+			}
+		}
+	}
+
+	// 计算昨日峰值OPS
+	if r.tableExists("nginx_agg_hourly") {
+		yesterdayStart, _ := time.ParseInLocation("2006-01-02", yesterdayStr, time.Local)
+		yesterdayEnd := yesterdayStart.Add(24 * time.Hour)
+		type HourlyMax struct {
+			MaxRequests int64
+		}
+		var hm HourlyMax
+		err := r.db.Model(&model.NginxAggHourly{}).
+			Select("MAX(total_requests) as max_requests").
+			Where("source_id = ? AND hour >= ? AND hour < ?", sourceID, yesterdayStart, yesterdayEnd).
+			First(&hm).Error
+		if err == nil && hm.MaxRequests > 0 {
+			metrics.Yesterday.PeakOps = float64(hm.MaxRequests) / 3600.0
+		}
+	}
+
+	// 昨日此时（昨日0点到昨日当前小时的累计）
+	// 注意: 聚合器用 time.Parse (UTC) 存储小时，此处也需匹配
+	if r.tableExists("nginx_agg_hourly") {
+		yesterdayStart, _ := time.Parse("2006-01-02", yesterdayStr)
+		yesterdayNowEnd := yesterdayStart.Add(time.Duration(currentHour) * time.Hour)
+
+		type HourlySum struct {
+			TotalRequests int64
+			PVCount       int64
+			UniqueIPs     int64
+			Status2xx     int64
+			Status3xx     int64
+			Status4xx     int64
+			Status5xx     int64
+		}
+		var hs HourlySum
+		err := r.db.Model(&model.NginxAggHourly{}).
+			Select("SUM(total_requests) as total_requests, SUM(pv_count) as pv_count, SUM(unique_ips) as unique_ips, SUM(status_2xx) as status_2xx, SUM(status_3xx) as status_3xx, SUM(status_4xx) as status_4xx, SUM(status_5xx) as status_5xx").
+			Where("source_id = ? AND hour >= ? AND hour < ?", sourceID, yesterdayStart, yesterdayNowEnd).
+			First(&hs).Error
+		if err == nil {
+			metrics.YesterdayNow.StatusHits = hs.TotalRequests
+			if hs.PVCount > 0 {
+				metrics.YesterdayNow.PV = hs.PVCount
+			} else {
+				metrics.YesterdayNow.PV = hs.TotalRequests
+			}
+			metrics.YesterdayNow.UV = hs.UniqueIPs
+			metrics.YesterdayNow.Status2xx = hs.Status2xx
+			metrics.YesterdayNow.Status3xx = hs.Status3xx
+			metrics.YesterdayNow.Status4xx = hs.Status4xx
+			metrics.YesterdayNow.Status5xx = hs.Status5xx
+		}
+	} else if r.tableExists("nginx_hourly_stats") {
+		yesterdayStart, _ := time.Parse("2006-01-02", yesterdayStr)
+		yesterdayNowEnd := yesterdayStart.Add(time.Duration(currentHour) * time.Hour)
+
+		type HourlySum struct {
+			TotalRequests  int64
+			UniqueVisitors int64
+			Status2xx      int64
+			Status3xx      int64
+			Status4xx      int64
+			Status5xx      int64
+		}
+		var hs HourlySum
+		err := r.db.Model(&model.NginxHourlyStats{}).
+			Select("SUM(total_requests) as total_requests, SUM(unique_visitors) as unique_visitors, SUM(status_2xx) as status_2xx, SUM(status_3xx) as status_3xx, SUM(status_4xx) as status_4xx, SUM(status_5xx) as status_5xx").
+			Where("source_id = ? AND hour >= ? AND hour < ?", sourceID, yesterdayStart, yesterdayNowEnd).
+			First(&hs).Error
+		if err == nil {
+			metrics.YesterdayNow.StatusHits = hs.TotalRequests
+			metrics.YesterdayNow.PV = hs.TotalRequests
+			metrics.YesterdayNow.UV = hs.UniqueVisitors
+			metrics.YesterdayNow.Status2xx = hs.Status2xx
+			metrics.YesterdayNow.Status3xx = hs.Status3xx
+			metrics.YesterdayNow.Status4xx = hs.Status4xx
+			metrics.YesterdayNow.Status5xx = hs.Status5xx
+		}
+	}
+
+	// 预计今日: 基于当前数据预测全天
+	hourFactor := float64(24) / math.Max(float64(currentHour), 1.0)
+	metrics.PredictToday = model.MetricSet{
+		StatusHits:  int64(float64(metrics.Today.StatusHits) * hourFactor),
+		PV:          int64(float64(metrics.Today.PV) * hourFactor),
+		UV:          int64(float64(metrics.Today.UV) * hourFactor),
+		RealtimeOps: metrics.Today.RealtimeOps,
+		PeakOps:     metrics.Today.PeakOps,
+		Status2xx:   int64(float64(metrics.Today.Status2xx) * hourFactor),
+		Status3xx:   int64(float64(metrics.Today.Status3xx) * hourFactor),
+		Status4xx:   int64(float64(metrics.Today.Status4xx) * hourFactor),
+		Status5xx:   int64(float64(metrics.Today.Status5xx) * hourFactor),
+	}
+
+	return metrics, nil
+}
+
+// GetOverviewTrend 获取概况趋势（UV+PV）
+func (r *NginxRepository) GetOverviewTrend(sourceID uint, mode string, date string) ([]model.OverviewTrendPoint, error) {
+	var points []model.OverviewTrendPoint
+
+	if mode == "hour" {
+		// 按时：查指定日期的小时聚合
+		// 注意: MySQL 连接使用 loc=Local，所以时间存储和查询都用本地时区
+		dateTime, err := time.ParseInLocation("2006-01-02", date, time.Local)
+		if err != nil {
+			dateTime, _ = time.ParseInLocation("2006-01-02", time.Now().Format("2006-01-02"), time.Local)
+		}
+		endTime := dateTime.Add(24 * time.Hour)
+
+		// 用 map 存储查询到的数据
+		dataMap := make(map[string]model.OverviewTrendPoint)
+
+		if r.tableExists("nginx_agg_hourly") {
+			type HourResult struct {
+				Hour          time.Time
+				TotalRequests int64
+				PVCount       int64
+				UniqueIPs     int64
+			}
+			var results []HourResult
+			err := r.db.Model(&model.NginxAggHourly{}).
+				Select("hour, total_requests, pv_count, unique_ips").
+				Where("source_id = ? AND hour >= ? AND hour < ?", sourceID, dateTime, endTime).
+				Order("hour ASC").
+				Find(&results).Error
+			if err == nil {
+				for _, r := range results {
+					timeKey := r.Hour.Format("15:00")
+					dataMap[timeKey] = model.OverviewTrendPoint{
+						Time: timeKey,
+						PV:   r.PVCount,
+						UV:   r.UniqueIPs,
+					}
+				}
+			}
+		}
+
+		// 回退到旧表
+		if len(dataMap) == 0 && r.tableExists("nginx_hourly_stats") {
+			type HourResult struct {
+				Hour           time.Time
+				TotalRequests  int64
+				UniqueVisitors int64
+			}
+			var results []HourResult
+			err := r.db.Model(&model.NginxHourlyStats{}).
+				Select("hour, total_requests, unique_visitors").
+				Where("source_id = ? AND hour >= ? AND hour < ?", sourceID, dateTime, endTime).
+				Order("hour ASC").
+				Find(&results).Error
+			if err == nil {
+				for _, r := range results {
+					timeKey := r.Hour.Format("15:00")
+					dataMap[timeKey] = model.OverviewTrendPoint{
+						Time: timeKey,
+						PV:   r.TotalRequests,
+						UV:   r.UniqueVisitors,
+					}
+				}
+			}
+		}
+
+		// 聚合表均无数据时，从原始日志生成小时趋势
+		if len(dataMap) == 0 {
+			type RawHourResult struct {
+				HourStr string
+				PV      int64
+				UV      int64
+			}
+			// 优先使用旧日志表（直接有 remote_addr 字段，UV 统计更准确）
+			if r.tableExists("nginx_access_logs") {
+				var results []RawHourResult
+				err := r.db.Raw(
+					"SELECT DATE_FORMAT(timestamp, '%H:00') as hour_str, COUNT(*) as pv, COUNT(DISTINCT remote_addr) as uv "+
+						"FROM nginx_access_logs WHERE source_id = ? AND timestamp >= ? AND timestamp < ? "+
+						"GROUP BY hour_str ORDER BY hour_str",
+					sourceID, dateTime, endTime,
+				).Scan(&results).Error
+				if err == nil {
+					for _, r := range results {
+						dataMap[r.HourStr] = model.OverviewTrendPoint{
+							Time: r.HourStr,
+							PV:   r.PV,
+							UV:   r.UV,
+						}
+					}
+				}
+			}
+			// 回退到事实表（需要 JOIN 维度表获取正确 UV）
+			if len(dataMap) == 0 && r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_ip") {
+				var results []RawHourResult
+				err := r.db.Raw(
+					"SELECT DATE_FORMAT(f.timestamp, '%H:00') as hour_str, COUNT(*) as pv, COUNT(DISTINCT d.ip) as uv "+
+						"FROM nginx_fact_access_logs f LEFT JOIN nginx_dim_ip d ON f.ip_id = d.id "+
+						"WHERE f.source_id = ? AND f.timestamp >= ? AND f.timestamp < ? "+
+						"GROUP BY hour_str ORDER BY hour_str",
+					sourceID, dateTime, endTime,
+				).Scan(&results).Error
+				if err == nil {
+					for _, r := range results {
+						dataMap[r.HourStr] = model.OverviewTrendPoint{
+							Time: r.HourStr,
+							PV:   r.PV,
+							UV:   r.UV,
+						}
+					}
+				}
+			}
+		}
+
+		// 生成从 00:00 到当前时间（如果是今天）或 23:00（如果是历史日期）的完整小时列表
+		now := time.Now().Local()
+		todayStr := now.Format("2006-01-02")
+		isToday := date == todayStr
+
+		var maxHour int
+		if isToday {
+			maxHour = now.Hour() // 今天只显示到当前小时
+		} else {
+			maxHour = 23 // 历史日期显示全天
+		}
+
+		for h := 0; h <= maxHour; h++ {
+			timeKey := fmt.Sprintf("%02d:00", h)
+			if point, exists := dataMap[timeKey]; exists {
+				points = append(points, point)
+			} else {
+				// 没有数据的小时补0
+				points = append(points, model.OverviewTrendPoint{
+					Time: timeKey,
+					PV:   0,
+					UV:   0,
+				})
+			}
+		}
+
+		return points, nil
+	} else {
+		// 按天：最近30天的日聚合
+		endDateStr := time.Now().Format("2006-01-02")
+		startDate := time.Now().AddDate(0, 0, -30)
+		startDateStr := startDate.Format("2006-01-02")
+
+		if r.tableExists("nginx_agg_daily") {
+			type DayResult struct {
+				Date          time.Time
+				TotalRequests int64
+				PVCount       int64
+				UniqueIPs     int64
+			}
+			var results []DayResult
+			err := r.db.Model(&model.NginxAggDaily{}).
+				Select("date, total_requests, pv_count, unique_ips").
+				Where("source_id = ? AND DATE(date) >= ? AND DATE(date) <= ?", sourceID, startDateStr, endDateStr).
+				Order("date ASC").
+				Find(&results).Error
+			if err == nil && len(results) > 0 {
+				for _, r := range results {
+					points = append(points, model.OverviewTrendPoint{
+						Time: r.Date.Format("01-02"),
+						PV:   r.PVCount, // PV 就是实际的页面访问数
+						UV:   r.UniqueIPs,
+					})
+				}
+				return points, nil
+			}
+		}
+
+		// 回退到旧表
+		if r.tableExists("nginx_daily_stats") {
+			type DayResult struct {
+				Date           time.Time
+				TotalRequests  int64
+				UniqueVisitors int64
+			}
+			var results []DayResult
+			err := r.db.Model(&model.NginxDailyStats{}).
+				Select("date, total_requests, unique_visitors").
+				Where("source_id = ? AND DATE(date) >= ? AND DATE(date) <= ?", sourceID, startDateStr, endDateStr).
+				Order("date ASC").
+				Find(&results).Error
+			if err == nil && len(results) > 0 {
+				for _, r := range results {
+					points = append(points, model.OverviewTrendPoint{
+						Time: r.Date.Format("01-02"),
+						PV:   r.TotalRequests,
+						UV:   r.UniqueVisitors,
+					})
+				}
+				return points, nil
+			}
+		}
+
+		// 聚合表均无数据时，从原始日志生成按天趋势
+		if len(points) == 0 {
+			startDate := time.Now().AddDate(0, 0, -30)
+			type RawDayResult struct {
+				DateStr string
+				PV      int64
+				UV      int64
+			}
+			// 优先使用旧日志表（直接有 remote_addr 字段，UV 统计更准确）
+			if r.tableExists("nginx_access_logs") {
+				var results []RawDayResult
+				err := r.db.Raw(
+					"SELECT DATE_FORMAT(timestamp, '%m-%d') as date_str, COUNT(*) as pv, COUNT(DISTINCT remote_addr) as uv "+
+						"FROM nginx_access_logs WHERE source_id = ? AND timestamp >= ? "+
+						"GROUP BY date_str ORDER BY date_str",
+					sourceID, startDate,
+				).Scan(&results).Error
+				if err == nil && len(results) > 0 {
+					for _, r := range results {
+						points = append(points, model.OverviewTrendPoint{
+							Time: r.DateStr,
+							PV:   r.PV,
+							UV:   r.UV,
+						})
+					}
+					return points, nil
+				}
+			}
+			// 回退到事实表（需要 JOIN 维度表获取正确 UV）
+			if r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_ip") {
+				var results []RawDayResult
+				err := r.db.Raw(
+					"SELECT DATE_FORMAT(f.timestamp, '%m-%d') as date_str, COUNT(*) as pv, COUNT(DISTINCT d.ip) as uv "+
+						"FROM nginx_fact_access_logs f LEFT JOIN nginx_dim_ip d ON f.ip_id = d.id "+
+						"WHERE f.source_id = ? AND f.timestamp >= ? "+
+						"GROUP BY date_str ORDER BY date_str",
+					sourceID, startDate,
+				).Scan(&results).Error
+				if err == nil && len(results) > 0 {
+					for _, r := range results {
+						points = append(points, model.OverviewTrendPoint{
+							Time: r.DateStr,
+							PV:   r.PV,
+							UV:   r.UV,
+						})
+					}
+					return points, nil
+				}
+			}
+		}
+	}
+
+	return points, nil
+}
+
+// GetNewVsReturningVisitors 获取新老访客对比
+func (r *NginxRepository) GetNewVsReturningVisitors(sourceID uint) (*model.VisitorComparison, error) {
+	now := time.Now().Local()
+	todayStart, _ := time.ParseInLocation("2006-01-02", now.Format("2006-01-02"), time.Local)
+	yesterdayStart := todayStart.AddDate(0, 0, -1)
+
+	fmt.Printf("[DEBUG] GetNewVsReturningVisitors: sourceID=%d, todayStart=%s, yesterdayStart=%s\n",
+		sourceID, todayStart.Format("2006-01-02 15:04:05"), yesterdayStart.Format("2006-01-02 15:04:05"))
+
+	vc := &model.VisitorComparison{}
+
+	calcForDate := func(dateStart, dateEnd time.Time) (newCount, retCount int64) {
+		fmt.Printf("[DEBUG] calcForDate: dateStart=%s, dateEnd=%s\n",
+			dateStart.Format("2006-01-02 15:04:05"), dateEnd.Format("2006-01-02 15:04:05"))
+
+		// 优先使用新表，但如果没有数据则回退到旧表
+		if r.tableExists("nginx_fact_access_logs") {
+			// 当日所有IP
+			type IPRow struct {
+				IPID uint64
+			}
+			var dayIPs []IPRow
+			r.db.Table("nginx_fact_access_logs").
+				Select("DISTINCT ip_id").
+				Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, dateStart, dateEnd).
+				Find(&dayIPs)
+
+			totalIPs := int64(len(dayIPs))
+			fmt.Printf("[DEBUG] nginx_fact_access_logs: found %d IPs\n", totalIPs)
+			if totalIPs > 0 {
+				// 统计新访客: 这些IP在当日之前没有出现过
+				ipIDs := make([]uint64, len(dayIPs))
+				for i, ip := range dayIPs {
+					ipIDs[i] = ip.IPID
+				}
+
+				var oldCount int64
+				r.db.Table("nginx_fact_access_logs").
+					Where("source_id = ? AND timestamp < ? AND ip_id IN ?", sourceID, dateStart, ipIDs).
+					Distinct("ip_id").
+					Count(&oldCount)
+
+				retCount = oldCount
+				newCount = totalIPs - oldCount
+				if newCount < 0 {
+					newCount = 0
+				}
+				return newCount, retCount
+			}
+			// totalIPs == 0, 继续尝试旧表
+		}
+
+		// 回退到旧表
+		if r.tableExists("nginx_access_logs") {
+			type IPRow struct {
+				RemoteAddr string
+			}
+			var dayIPs []IPRow
+			r.db.Model(&model.NginxAccessLog{}).
+				Select("DISTINCT remote_addr").
+				Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, dateStart, dateEnd).
+				Find(&dayIPs)
+
+			totalIPs := int64(len(dayIPs))
+			fmt.Printf("[DEBUG] nginx_access_logs: found %d IPs\n", totalIPs)
+			if totalIPs == 0 {
+				return 0, 0
+			}
+
+			addrs := make([]string, len(dayIPs))
+			for i, ip := range dayIPs {
+				addrs[i] = ip.RemoteAddr
+			}
+
+			var oldCount int64
+			r.db.Model(&model.NginxAccessLog{}).
+				Where("source_id = ? AND timestamp < ? AND remote_addr IN ?", sourceID, dateStart, addrs).
+				Distinct("remote_addr").
+				Count(&oldCount)
+
+			retCount = oldCount
+			newCount = totalIPs - oldCount
+			if newCount < 0 {
+				newCount = 0
+			}
+			fmt.Printf("[DEBUG] nginx_access_logs: newCount=%d, retCount=%d\n", newCount, retCount)
+			return newCount, retCount
+		}
+
+		fmt.Printf("[DEBUG] no tables available\n")
+		return 0, 0
+	}
+
+	// 今日
+	todayNew, todayRet := calcForDate(todayStart, todayStart.Add(24*time.Hour))
+	vc.TodayNew = todayNew
+	vc.TodayReturning = todayRet
+	todayTotal := todayNew + todayRet
+	if todayTotal > 0 {
+		vc.TodayNewPct = float64(todayNew) / float64(todayTotal) * 100
+		vc.TodayRetPct = float64(todayRet) / float64(todayTotal) * 100
+	}
+
+	// 昨日
+	yestNew, yestRet := calcForDate(yesterdayStart, todayStart)
+	vc.YestNew = yestNew
+	vc.YestReturning = yestRet
+	yestTotal := yestNew + yestRet
+	if yestTotal > 0 {
+		vc.YestNewPct = float64(yestNew) / float64(yestTotal) * 100
+		vc.YestRetPct = float64(yestRet) / float64(yestTotal) * 100
+	}
+
+	return vc, nil
+}
+
+// GetTopReferersByVisitors 获取来路域名排行
+func (r *NginxRepository) GetTopReferersByVisitors(sourceID uint, start, end time.Time, limit int) ([]model.RefererItem, error) {
+	var items []model.RefererItem
+
+	// 优先使用新表
+	if r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_referer") {
+		type RefResult struct {
+			RefererDomain string
+			Visitors      int64
+		}
+		var results []RefResult
+		err := r.db.Table("nginx_fact_access_logs f").
+			Select("ref.referer_domain, COUNT(DISTINCT f.ip_id) as visitors").
+			Joins("LEFT JOIN nginx_dim_referer ref ON f.referer_id = ref.id").
+			Where("f.source_id = ? AND f.timestamp >= ? AND f.timestamp < ?", sourceID, start, end).
+			Where("ref.referer_domain != '' AND ref.referer_domain IS NOT NULL AND ref.referer_domain != '-'").
+			Group("ref.referer_domain").
+			Order("visitors DESC").
+			Limit(limit).
+			Find(&results).Error
+		if err == nil && len(results) > 0 {
+			for _, r := range results {
+				items = append(items, model.RefererItem{
+					Domain:   r.RefererDomain,
+					Visitors: r.Visitors,
+				})
+			}
+			return items, nil
+		}
+	}
+
+	// 回退到旧表
+	if r.tableExists("nginx_access_logs") {
+		type RefResult struct {
+			HTTPReferer string
+			Visitors    int64
+		}
+		var results []RefResult
+		err := r.db.Model(&model.NginxAccessLog{}).
+			Select("http_referer, COUNT(DISTINCT remote_addr) as visitors").
+			Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, start, end).
+			Where("http_referer != '' AND http_referer != '-' AND http_referer IS NOT NULL").
+			Group("http_referer").
+			Order("visitors DESC").
+			Limit(limit * 3). // 获取更多，后续提取域名聚合
+			Find(&results).Error
+		if err == nil {
+			domainMap := make(map[string]int64)
+			for _, r := range results {
+				domain := extractDomain(r.HTTPReferer)
+				if domain != "" && domain != "-" {
+					domainMap[domain] += r.Visitors
+				}
+			}
+			// 排序
+			type kv struct {
+				Key   string
+				Value int64
+			}
+			var sorted []kv
+			for k, v := range domainMap {
+				sorted = append(sorted, kv{k, v})
+			}
+			for i := 0; i < len(sorted); i++ {
+				for j := i + 1; j < len(sorted); j++ {
+					if sorted[j].Value > sorted[i].Value {
+						sorted[i], sorted[j] = sorted[j], sorted[i]
+					}
+				}
+			}
+			count := limit
+			if count > len(sorted) {
+				count = len(sorted)
+			}
+			for i := 0; i < count; i++ {
+				items = append(items, model.RefererItem{
+					Domain:   sorted[i].Key,
+					Visitors: sorted[i].Value,
+				})
+			}
+		}
+	}
+
+	return items, nil
+}
+
+// GetTopVisitedPages 获取受访页面排行
+func (r *NginxRepository) GetTopVisitedPages(sourceID uint, start, end time.Time, limit int) ([]model.PageItem, error) {
+	var items []model.PageItem
+
+	// 优先使用新表
+	if r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_url") {
+		type PageResult struct {
+			URLNormalized string
+			Count         int64
+		}
+		var results []PageResult
+		err := r.db.Table("nginx_fact_access_logs f").
+			Select("u.url_normalized, COUNT(*) as count").
+			Joins("LEFT JOIN nginx_dim_url u ON f.url_id = u.id").
+			Where("f.source_id = ? AND f.timestamp >= ? AND f.timestamp < ? AND f.is_pv = ?", sourceID, start, end, true).
+			Group("u.url_normalized").
+			Order("count DESC").
+			Limit(limit).
+			Find(&results).Error
+		if err == nil && len(results) > 0 {
+			for _, r := range results {
+				items = append(items, model.PageItem{
+					Path:  r.URLNormalized,
+					Count: r.Count,
+				})
+			}
+			return items, nil
+		}
+	}
+
+	// 回退到旧表
+	if r.tableExists("nginx_access_logs") {
+		type PageResult struct {
+			URI   string
+			Count int64
+		}
+		var results []PageResult
+		err := r.db.Model(&model.NginxAccessLog{}).
+			Select("uri, COUNT(*) as count").
+			Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, start, end).
+			Group("uri").
+			Order("count DESC").
+			Limit(limit).
+			Find(&results).Error
+		if err == nil {
+			for _, r := range results {
+				items = append(items, model.PageItem{
+					Path:  r.URI,
+					Count: r.Count,
+				})
+			}
+		}
+	}
+
+	return items, nil
+}
+
+// GetTopEntryPages 获取入口页面排行
+func (r *NginxRepository) GetTopEntryPages(sourceID uint, start, end time.Time, limit int) ([]model.PageItem, error) {
+	var items []model.PageItem
+
+	// 优先使用新表: 每个IP第一次PV请求的url
+	if r.tableExists("nginx_fact_access_logs") && r.tableExists("nginx_dim_url") {
+		type EntryResult struct {
+			URLNormalized string
+			Count         int64
+		}
+		var results []EntryResult
+		// 子查询：每个ip_id最早的PV请求
+		err := r.db.Raw(`
+			SELECT u.url_normalized, COUNT(*) as count
+			FROM nginx_dim_url u
+			INNER JOIN (
+				SELECT f.url_id
+				FROM nginx_fact_access_logs f
+				INNER JOIN (
+					SELECT ip_id, MIN(timestamp) as min_ts
+					FROM nginx_fact_access_logs
+					WHERE source_id = ? AND timestamp >= ? AND timestamp < ? AND is_pv = 1
+					GROUP BY ip_id
+				) first_pv ON f.ip_id = first_pv.ip_id AND f.timestamp = first_pv.min_ts
+				WHERE f.source_id = ? AND f.is_pv = 1
+			) entries ON u.id = entries.url_id
+			GROUP BY u.url_normalized
+			ORDER BY count DESC
+			LIMIT ?
+		`, sourceID, start, end, sourceID, limit).Find(&results).Error
+		if err == nil && len(results) > 0 {
+			for _, r := range results {
+				items = append(items, model.PageItem{
+					Path:  r.URLNormalized,
+					Count: r.Count,
+				})
+			}
+			return items, nil
+		}
+	}
+
+	// 回退到旧表
+	if r.tableExists("nginx_access_logs") {
+		type EntryResult struct {
+			URI   string
+			Count int64
+		}
+		var results []EntryResult
+		err := r.db.Raw(`
+			SELECT sub.uri, COUNT(*) as count
+			FROM (
+				SELECT a.uri
+				FROM nginx_access_logs a
+				INNER JOIN (
+					SELECT remote_addr, MIN(timestamp) as min_ts
+					FROM nginx_access_logs
+					WHERE source_id = ? AND timestamp >= ? AND timestamp < ?
+					GROUP BY remote_addr
+				) first_req ON a.remote_addr = first_req.remote_addr AND a.timestamp = first_req.min_ts
+				WHERE a.source_id = ?
+			) sub
+			GROUP BY sub.uri
+			ORDER BY count DESC
+			LIMIT ?
+		`, sourceID, start, end, sourceID, limit).Find(&results).Error
+		if err == nil {
+			for _, r := range results {
+				items = append(items, model.PageItem{
+					Path:  r.URI,
+					Count: r.Count,
+				})
+			}
+		}
+	}
+
+	return items, nil
+}
+
+// GetOverviewGeo 获取概况页地域分布（复用现有逻辑，加sourceID和date过滤）
+func (r *NginxRepository) GetOverviewGeo(sourceID uint, start, end time.Time, scope string) ([]model.GeoStats, error) {
+	sid := sourceID
+	level := "province"
+	if scope == "global" {
+		level = "country"
+	}
+	return r.GetGeoDistribution(&sid, start, end, level)
+}
+
+// GetOverviewDevices 获取概况页终端设备分布
+func (r *NginxRepository) GetOverviewDevices(sourceID uint, start, end time.Time) ([]model.DeviceStats, error) {
+	sid := sourceID
+	return r.GetDeviceDistribution(&sid, start, end)
+}
+
+// extractDomain 从URL中提取域名
+func extractDomain(rawURL string) string {
+	if rawURL == "" || rawURL == "-" {
+		return ""
+	}
+	// 确保有协议前缀
+	if !strings.Contains(rawURL, "://") {
+		rawURL = "http://" + rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	host := u.Hostname()
+	if host == "" {
+		return ""
+	}
+	return host
+}
+
+// DeleteOldAggDaily 删除过期日聚合
+func (r *NginxRepository) DeleteOldAggDaily(sourceID uint, beforeTime time.Time) error {
+	return r.db.Where("source_id = ? AND date < ?", sourceID, beforeTime).Delete(&model.NginxAggDaily{}).Error
 }

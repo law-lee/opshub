@@ -57,12 +57,14 @@ func (s *AggregatorService) UpdateStatsFromLogs(sourceID uint, logs []model.Ngin
 	hourlyStats := make(map[string]*hourlyAggData)
 
 	for _, log := range logs {
-		dateKey := log.Timestamp.Format("2006-01-02")
-		hourKey := log.Timestamp.Format("2006-01-02 15:00:00")
+		// 转换为本地时区，因为 MySQL 连接配置使用 loc=Local
+		localTime := log.Timestamp.Local()
+		dateKey := localTime.Format("2006-01-02")
+		hourKey := localTime.Format("2006-01-02 15:00:00")
 
 		// 初始化日统计
 		if _, ok := dailyStats[dateKey]; !ok {
-			date, _ := time.Parse("2006-01-02", dateKey)
+			date, _ := time.ParseInLocation("2006-01-02", dateKey, time.Local)
 			dailyStats[dateKey] = &dailyAggData{
 				sourceID: sourceID,
 				date:     date,
@@ -73,7 +75,7 @@ func (s *AggregatorService) UpdateStatsFromLogs(sourceID uint, logs []model.Ngin
 
 		// 初始化小时统计
 		if _, ok := hourlyStats[hourKey]; !ok {
-			hour, _ := time.Parse("2006-01-02 15:04:05", hourKey+":00")
+			hour, _ := time.ParseInLocation("2006-01-02 15:04:05", hourKey, time.Local)
 			hourlyStats[hourKey] = &hourlyAggData{
 				sourceID: sourceID,
 				hour:     hour,

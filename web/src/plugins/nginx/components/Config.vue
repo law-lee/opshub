@@ -7,8 +7,8 @@
           <el-icon><Setting /></el-icon>
         </div>
         <div>
-          <h2 class="page-title">功能配置</h2>
-          <p class="page-subtitle">管理 Nginx 数据源配置</p>
+          <h2 class="page-title">数据源配置</h2>
+          <p class="page-subtitle">管理 Nginx 数据源</p>
         </div>
       </div>
       <div class="header-actions">
@@ -28,7 +28,7 @@
       <div class="search-inputs">
         <el-select v-model="filterForm.type" placeholder="数据源类型" clearable class="search-input">
           <el-option label="主机Nginx" value="host" />
-          <el-option label="K8s Ingress" value="k8s_ingress" />
+          <el-option label="K8s Ingress (暂不支持)" value="k8s_ingress" disabled />
         </el-select>
         <el-select v-model="filterForm.status" placeholder="状态" clearable class="search-input-xs">
           <el-option label="启用" :value="1" />
@@ -67,27 +67,32 @@
             {{ row.collectInterval }}秒
           </template>
         </el-table-column>
-        <el-table-column label="数据保留" prop="retentionDays" width="100" align="center">
-          <template #default="{ row }">
-            {{ row.retentionDays }}天
-          </template>
-        </el-table-column>
         <el-table-column label="创建时间" prop="createdAt" width="180">
           <template #default="{ row }">
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-popconfirm
-              title="确定要删除该数据源吗？"
-              @confirm="handleDelete(row)"
-            >
-              <template #reference>
-                <el-button link type="danger">删除</el-button>
-              </template>
-            </el-popconfirm>
+            <div class="action-btns">
+              <el-tooltip content="编辑" placement="top">
+                <el-button link type="primary" @click="handleEdit(row)" class="action-btn">
+                  <el-icon :size="18"><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-popconfirm
+                title="确定要删除该数据源吗？"
+                @confirm="handleDelete(row)"
+              >
+                <template #reference>
+                  <el-tooltip content="删除" placement="top">
+                    <el-button link type="danger" class="action-btn">
+                      <el-icon :size="18"><Delete /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -110,161 +115,214 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑数据源' : '新增数据源'"
-      width="600px"
+      width="50%"
       destroy-on-close
       class="config-dialog"
+      :close-on-click-modal="false"
     >
       <el-form
         ref="formRef"
         :model="formData"
         :rules="formRules"
-        label-width="100px"
+        label-width="90px"
+        label-position="left"
+        class="dialog-form"
       >
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="formData.name" placeholder="请输入数据源名称" />
-        </el-form-item>
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><InfoFilled /></el-icon>
+            <span>基本信息</span>
+          </div>
+          <div class="section-content">
+            <el-form-item label="名称" prop="name">
+              <el-input v-model="formData.name" placeholder="请输入数据源名称" />
+            </el-form-item>
 
-        <el-form-item label="类型" prop="type">
-          <el-select v-model="formData.type" placeholder="请选择数据源类型" style="width: 100%">
-            <el-option label="主机Nginx" value="host" />
-            <el-option label="K8s Ingress" value="k8s_ingress" />
-          </el-select>
-        </el-form-item>
+            <el-form-item label="类型" prop="type">
+              <el-select v-model="formData.type" placeholder="请选择数据源类型" style="width: 100%">
+                <el-option label="主机Nginx" value="host" />
+                <el-option label="K8s Ingress (暂不支持)" value="k8s_ingress" disabled />
+              </el-select>
+            </el-form-item>
 
-        <el-form-item label="描述" prop="description">
-          <el-input
-            v-model="formData.description"
-            type="textarea"
-            :rows="2"
-            placeholder="请输入描述"
-          />
-        </el-form-item>
-
-        <!-- 主机类型配置 -->
-        <template v-if="formData.type === 'host'">
-          <el-form-item label="关联主机" prop="hostId">
-            <el-select v-model="formData.hostId" placeholder="请选择主机" style="width: 100%" filterable>
-              <el-option
-                v-for="host in hosts"
-                :key="host.ID || host.id"
-                :label="`${host.name} (${host.ip})`"
-                :value="host.ID || host.id"
+            <el-form-item label="描述">
+              <el-input
+                v-model="formData.description"
+                type="textarea"
+                :rows="2"
+                placeholder="请输入描述（选填）"
+                resize="none"
               />
-            </el-select>
-          </el-form-item>
+            </el-form-item>
+          </div>
+        </div>
 
-          <el-form-item label="日志路径" prop="logPath">
-            <el-input v-model="formData.logPath" placeholder="/var/log/nginx/access.log" />
-          </el-form-item>
+        <!-- 主机配置 -->
+        <div class="form-section" v-if="formData.type === 'host'">
+          <div class="section-header">
+            <el-icon><Monitor /></el-icon>
+            <span>主机配置</span>
+          </div>
+          <div class="section-content">
+            <el-form-item label="关联主机" prop="hostId">
+              <el-select v-model="formData.hostId" placeholder="请选择主机" style="width: 100%" filterable>
+                <el-option
+                  v-for="host in hosts"
+                  :key="host.ID || host.id"
+                  :label="`${host.name} (${host.ip})`"
+                  :value="host.ID || host.id"
+                />
+              </el-select>
+            </el-form-item>
 
-          <el-form-item label="日志格式" prop="logFormat">
-            <el-select v-model="formData.logFormat" placeholder="请选择日志格式" style="width: 100%">
-              <el-option label="combined" value="combined" />
-              <el-option label="main" value="main" />
-              <el-option label="json" value="json" />
-            </el-select>
-          </el-form-item>
-        </template>
+            <el-form-item label="日志路径" prop="logPath">
+              <el-input v-model="formData.logPath" placeholder="/var/log/nginx/access.log" />
+            </el-form-item>
 
-        <!-- K8s Ingress 类型配置 -->
-        <template v-if="formData.type === 'k8s_ingress'">
-          <el-form-item label="关联集群" prop="clusterId">
-            <el-select v-model="formData.clusterId" placeholder="请选择集群" style="width: 100%" filterable>
-              <el-option
-                v-for="cluster in clusters"
-                :key="cluster.ID || cluster.id"
-                :label="cluster.name"
-                :value="cluster.ID || cluster.id"
+            <el-form-item label="日志格式" prop="logFormat">
+              <el-select v-model="formData.logFormat" placeholder="请选择日志格式" style="width: 100%">
+                <el-option label="combined" value="combined" />
+                <el-option label="main" value="main" />
+                <el-option label="json" value="json" />
+              </el-select>
+            </el-form-item>
+          </div>
+        </div>
+
+        <!-- K8s Ingress 配置 -->
+        <div class="form-section" v-if="formData.type === 'k8s_ingress'">
+          <div class="section-header">
+            <el-icon><Platform /></el-icon>
+            <span>K8s 配置</span>
+          </div>
+          <div class="section-content">
+            <el-form-item label="关联集群" prop="clusterId">
+              <el-select v-model="formData.clusterId" placeholder="请选择集群" style="width: 100%" filterable>
+                <el-option
+                  v-for="cluster in clusters"
+                  :key="cluster.ID || cluster.id"
+                  :label="cluster.name"
+                  :value="cluster.ID || cluster.id"
+                />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item label="命名空间" prop="namespace">
+              <el-input v-model="formData.namespace" placeholder="ingress-nginx" />
+            </el-form-item>
+
+            <el-form-item label="Ingress名称" prop="ingressName">
+              <el-input v-model="formData.ingressName" placeholder="nginx-ingress-controller (可选)" />
+            </el-form-item>
+
+            <el-form-item label="Pod选择器">
+              <el-input
+                v-model="formData.k8sPodSelector"
+                placeholder="app.kubernetes.io/name=ingress-nginx"
               />
-            </el-select>
-          </el-form-item>
+            </el-form-item>
 
-          <el-form-item label="命名空间" prop="namespace">
-            <el-input v-model="formData.namespace" placeholder="ingress-nginx" />
-          </el-form-item>
+            <el-form-item label="容器名称">
+              <el-input v-model="formData.k8sContainerName" placeholder="controller" />
+            </el-form-item>
 
-          <el-form-item label="Ingress名称" prop="ingressName">
-            <el-input v-model="formData.ingressName" placeholder="nginx-ingress-controller (可选)" />
-          </el-form-item>
+            <el-form-item label="日志格式" prop="logFormat">
+              <el-select v-model="formData.logFormat" placeholder="请选择日志格式" style="width: 100%">
+                <el-option label="combined" value="combined" />
+                <el-option label="json" value="json" />
+              </el-select>
+            </el-form-item>
+          </div>
+        </div>
 
-          <el-form-item label="Pod选择器">
-            <el-input
-              v-model="formData.k8sPodSelector"
-              placeholder="app.kubernetes.io/name=ingress-nginx,app.kubernetes.io/component=controller"
-            />
-            <div class="form-tip">用于选择 Ingress Controller Pod 的标签选择器</div>
-          </el-form-item>
+        <!-- 采集配置 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Timer /></el-icon>
+            <span>采集配置</span>
+          </div>
+          <div class="section-content">
+            <el-form-item label="采集间隔" prop="collectInterval">
+              <div class="number-input-wrapper">
+                <el-input-number
+                  v-model="formData.collectInterval"
+                  :min="10"
+                  :max="3600"
+                  :step="10"
+                  controls-position="right"
+                  size="default"
+                />
+                <span class="unit">秒</span>
+              </div>
+            </el-form-item>
 
-          <el-form-item label="容器名称">
-            <el-input v-model="formData.k8sContainerName" placeholder="controller" />
-            <div class="form-tip">Ingress Controller 容器的名称，默认为 controller</div>
-          </el-form-item>
+            <el-form-item label="启用状态" prop="status">
+              <el-switch
+                v-model="formData.status"
+                :active-value="1"
+                :inactive-value="0"
+                inline-prompt
+                active-text="启用"
+                inactive-text="禁用"
+                style="--el-switch-on-color: #000; --el-switch-off-color: #dcdfe6"
+              />
+            </el-form-item>
+          </div>
+        </div>
 
-          <el-form-item label="日志格式" prop="logFormat">
-            <el-select v-model="formData.logFormat" placeholder="请选择日志格式" style="width: 100%">
-              <el-option label="combined" value="combined" />
-              <el-option label="json" value="json" />
-            </el-select>
-          </el-form-item>
-        </template>
+        <!-- 高级功能 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Operation /></el-icon>
+            <span>高级功能</span>
+          </div>
+          <div class="section-content">
+            <div class="feature-item">
+              <div class="feature-info">
+                <div class="feature-title">
+                  <el-icon><Location /></el-icon>
+                  <span>地理位置解析</span>
+                </div>
+                <div class="feature-desc">启用后将自动解析访问者 IP 的地理位置信息</div>
+              </div>
+              <el-switch
+                v-model="formData.geoEnabled"
+                inline-prompt
+                active-text="开"
+                inactive-text="关"
+                style="--el-switch-on-color: #000; --el-switch-off-color: #dcdfe6"
+              />
+            </div>
 
-        <el-divider content-position="left">通用配置</el-divider>
-
-        <el-form-item label="采集间隔" prop="collectInterval">
-          <el-input-number
-            v-model="formData.collectInterval"
-            :min="10"
-            :max="3600"
-            :step="10"
-          />
-          <span style="margin-left: 8px; color: #909399">秒</span>
-        </el-form-item>
-
-        <el-form-item label="数据保留" prop="retentionDays">
-          <el-input-number
-            v-model="formData.retentionDays"
-            :min="1"
-            :max="365"
-          />
-          <span style="margin-left: 8px; color: #909399">天</span>
-        </el-form-item>
-
-        <el-form-item label="状态" prop="status">
-          <el-switch
-            v-model="formData.status"
-            :active-value="1"
-            :inactive-value="0"
-            active-text="启用"
-            inactive-text="禁用"
-          />
-        </el-form-item>
-
-        <el-divider content-position="left">高级选项</el-divider>
-
-        <el-form-item label="地理位置解析">
-          <el-switch
-            v-model="formData.geoEnabled"
-            active-text="启用"
-            inactive-text="禁用"
-          />
-          <div class="form-tip">启用后将解析访问者 IP 的地理位置信息</div>
-        </el-form-item>
-
-        <el-form-item label="会话跟踪">
-          <el-switch
-            v-model="formData.sessionEnabled"
-            active-text="启用"
-            inactive-text="禁用"
-          />
-          <div class="form-tip">启用后将跟踪用户会话，用于更精确的 UV 统计</div>
-        </el-form-item>
+            <div class="feature-item disabled-feature">
+              <div class="feature-info">
+                <div class="feature-title">
+                  <el-icon><User /></el-icon>
+                  <span>会话跟踪</span>
+                  <el-tag size="small" type="info" effect="plain">暂未开放</el-tag>
+                </div>
+                <div class="feature-desc">跟踪用户会话，用于更精确的 UV 统计</div>
+              </div>
+              <el-switch
+                v-model="formData.sessionEnabled"
+                disabled
+                inline-prompt
+                active-text="开"
+                inactive-text="关"
+              />
+            </div>
+          </div>
+        </div>
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button class="black-button" :loading="submitLoading" @click="handleSubmit">
-          确定
-        </el-button>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false" class="cancel-btn">取消</el-button>
+          <el-button class="black-button" :loading="submitLoading" @click="handleSubmit">
+            {{ isEdit ? '保存' : '创建' }}
+          </el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -274,7 +332,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { Setting, Plus, Refresh } from '@element-plus/icons-vue'
+import { Setting, Plus, Refresh, InfoFilled, Monitor, Platform, Timer, Operation, Location, User, Edit, Delete } from '@element-plus/icons-vue'
 import {
   getNginxSources,
   createNginxSource,
@@ -613,6 +671,27 @@ const loadClusters = async () => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 }
 
+/* 操作按钮 */
+.action-btns {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.action-btn {
+  padding: 4px 6px;
+}
+
+.action-btn .el-icon {
+  transition: transform 0.2s;
+}
+
+.action-btn:hover .el-icon {
+  transform: scale(1.1);
+}
+
 .pagination-wrapper {
   margin-top: 16px;
   display: flex;
@@ -620,58 +699,212 @@ const loadClusters = async () => {
 }
 
 /* 对话框样式 */
+.config-dialog :deep(.el-dialog) {
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 800px;
+}
+
 .config-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #f0f0f0;
-  padding: 16px 20px;
+  background: linear-gradient(135deg, #000 0%, #1a1a1a 100%);
+  padding: 16px 24px;
   margin-right: 0;
 }
 
 .config-dialog :deep(.el-dialog__title) {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: #fff;
+}
+
+.config-dialog :deep(.el-dialog__headerbtn .el-dialog__close) {
+  color: #fff;
+}
+
+.config-dialog :deep(.el-dialog__headerbtn:hover .el-dialog__close) {
+  color: #d4af37;
 }
 
 .config-dialog :deep(.el-dialog__body) {
-  padding: 20px;
+  padding: 0;
+  max-height: 65vh;
+  overflow-y: auto;
 }
 
 .config-dialog :deep(.el-dialog__footer) {
   border-top: 1px solid #f0f0f0;
-  padding: 12px 20px;
+  padding: 16px 24px;
+  background: #fafafa;
 }
 
-.config-dialog :deep(.el-form-item__label) {
+/* 表单样式 */
+.dialog-form {
+  padding: 0;
+}
+
+.dialog-form :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+.dialog-form :deep(.el-form-item__label) {
   font-weight: 500;
+  color: #606266;
+  font-size: 13px;
+}
+
+.dialog-form :deep(.el-input__wrapper),
+.dialog-form :deep(.el-textarea__inner) {
+  border-radius: 6px;
+}
+
+.dialog-form :deep(.el-input__wrapper:hover),
+.dialog-form :deep(.el-textarea__inner:hover) {
+  border-color: #909399;
+}
+
+.dialog-form :deep(.el-input__wrapper.is-focus),
+.dialog-form :deep(.el-textarea__inner:focus) {
+  border-color: #000;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.dialog-form :deep(.el-select .el-input__wrapper:hover) {
+  border-color: #909399;
+}
+
+.dialog-form :deep(.el-select .el-input.is-focus .el-input__wrapper) {
+  border-color: #000 !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 表单分区 */
+.form-section {
+  margin-bottom: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.section-header .el-icon {
+  font-size: 16px;
   color: #606266;
 }
 
-.config-dialog :deep(.el-input__wrapper:hover) {
-  border-color: #d4af37;
-  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.15);
+.section-content {
+  padding: 20px 24px 8px;
 }
 
-.config-dialog :deep(.el-input__wrapper.is-focus) {
-  border-color: #d4af37;
-  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.25);
+/* 内联表单项 */
+.inline-form-items {
+  display: flex;
+  gap: 24px;
 }
 
-.config-dialog :deep(.el-textarea__inner:hover) {
-  border-color: #d4af37;
+.inline-item {
+  flex: 1;
 }
 
-.config-dialog :deep(.el-textarea__inner:focus) {
-  border-color: #d4af37;
-  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.25);
+.number-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.config-dialog :deep(.el-select .el-input__wrapper:hover) {
-  border-color: #d4af37;
+.number-input-wrapper .el-input-number {
+  width: 120px;
 }
 
-.config-dialog :deep(.el-select .el-input.is-focus .el-input__wrapper) {
-  border-color: #d4af37 !important;
-  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.25) !important;
+.number-input-wrapper .unit {
+  color: #909399;
+  font-size: 13px;
+}
+
+/* 功能开关样式 */
+.feature-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border: 1px solid #ebeef5;
+  transition: all 0.2s;
+}
+
+.feature-item:hover {
+  border-color: #dcdfe6;
+  background: #f5f7fa;
+}
+
+.feature-item:last-child {
+  margin-bottom: 0;
+}
+
+.feature-info {
+  flex: 1;
+}
+
+.feature-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.feature-title .el-icon {
+  color: #606266;
+  font-size: 16px;
+}
+
+.feature-title .el-tag {
+  margin-left: 4px;
+}
+
+.feature-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+}
+
+.disabled-feature {
+  opacity: 0.6;
+}
+
+.disabled-feature:hover {
+  border-color: #ebeef5;
+  background: #fafafa;
+}
+
+/* 对话框底部 */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cancel-btn {
+  background: #fff;
+  border-color: #dcdfe6;
+  color: #606266;
+}
+
+.cancel-btn:hover {
+  background: #f5f7fa;
+  border-color: #c0c4cc;
+  color: #606266;
 }
 
 .form-tip {

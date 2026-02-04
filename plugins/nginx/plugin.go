@@ -21,6 +21,8 @@ package nginx
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -71,10 +73,26 @@ func (p *Plugin) Enable(db *gorm.DB) error {
 
 	// 自动迁移所有插件相关的表
 	models := []interface{}{
+		// 数据源
 		&model.NginxSource{},
+
+		// 旧版表（兼容）
 		&model.NginxAccessLog{},
 		&model.NginxDailyStats{},
 		&model.NginxHourlyStats{},
+
+		// 维度表
+		&model.NginxDimIP{},
+		&model.NginxDimURL{},
+		&model.NginxDimReferer{},
+		&model.NginxDimUserAgent{},
+
+		// 事实表
+		&model.NginxFactAccessLog{},
+
+		// 新版聚合表
+		&model.NginxAggHourly{},
+		&model.NginxAggDaily{},
 	}
 
 	for _, m := range models {
@@ -86,8 +104,8 @@ func (p *Plugin) Enable(db *gorm.DB) error {
 	// 启动上下文
 	p.ctx, p.cancelCtx = context.WithCancel(context.Background())
 
-	// TODO: 启动日志采集调度器
-	// go p.startLogCollectorScheduler()
+	// 启动日志采集调度器
+	go p.startLogCollectorScheduler()
 
 	return nil
 }
@@ -99,6 +117,55 @@ func (p *Plugin) Disable(db *gorm.DB) error {
 		p.cancelCtx()
 	}
 	return nil
+}
+
+// startLogCollectorScheduler 启动日志采集调度器
+func (p *Plugin) startLogCollectorScheduler() {
+	// 每小时执行一次
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	handler := server.NewHandler(p.db)
+
+	// 首次启动立即执行一次（可选）
+	// p.collectActiveSources(handler)
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			p.collectActiveSources(handler)
+		}
+	}
+}
+
+// collectActiveSources 采集所有活跃数据源的日志
+func (p *Plugin) collectActiveSources(handler *server.Handler) {
+	// 获取所有活跃的数据源
+	var sources []model.NginxSource
+	if err := p.db.Where("status = ?", 1).Find(&sources).Error; err != nil {
+		fmt.Printf("获取活跃数据源失败: %v\n", err)
+		return
+	}
+
+	if len(sources) == 0 {
+		return
+	}
+
+	fmt.Printf("[Nginx插件] 开始定时采集日志，共 %d 个数据源\n", len(sources))
+
+	// 并发采集各个数据源的日志
+	for _, source := range sources {
+		// 在后台执行采集，避免阻塞
+		go func(s model.NginxSource) {
+			if err := handler.CollectSourceLogs(&s); err != nil {
+				fmt.Printf("[Nginx插件] 采集数据源 %s (ID:%d) 失败: %v\n", s.Name, s.ID, err)
+			} else {
+				fmt.Printf("[Nginx插件] 采集数据源 %s (ID:%d) 成功\n", s.Name, s.ID)
+			}
+		}(source)
+	}
 }
 
 // RegisterRoutes 注册路由

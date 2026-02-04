@@ -24,6 +24,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -32,10 +33,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/ssh"
 	assetbiz "github.com/ydcloud-dy/opshub/internal/biz/asset"
 	"github.com/ydcloud-dy/opshub/pkg/response"
 	"github.com/ydcloud-dy/opshub/plugins/nginx/model"
+	"golang.org/x/crypto/ssh"
 )
 
 // 加密密钥（与凭证仓库相同）
@@ -135,6 +136,20 @@ func (h *Handler) CollectLogs(c *gin.Context) {
 	})
 }
 
+// CollectSourceLogs 采集单个数据源的日志（用于定时任务）
+func (h *Handler) CollectSourceLogs(source *model.NginxSource) error {
+	switch source.Type {
+	case model.SourceTypeHost:
+		_, err := h.collectHostLogs(source)
+		return err
+	case model.SourceTypeK8sIngress:
+		// TODO: K8s Ingress 采集
+		return fmt.Errorf("K8s Ingress 采集暂未实现")
+	default:
+		return fmt.Errorf("不支持的数据源类型: %s", source.Type)
+	}
+}
+
 // collectHostLogs 采集主机上的Nginx日志
 func (h *Handler) collectHostLogs(source *model.NginxSource) (int, error) {
 	if source.HostID == nil {
@@ -165,59 +180,155 @@ func (h *Handler) collectHostLogs(source *model.NginxSource) (int, error) {
 	}
 	defer sshClient.Close()
 
-	// 读取日志文件（最近1000行）
+	// 读取日志文件
 	logPath := source.LogPath
 	if logPath == "" {
 		logPath = "/var/log/nginx/access.log"
 	}
 
-	session, err := sshClient.NewSession()
+	// 1. 获取文件状态（大小、inode）
+	session1, err := sshClient.NewSession()
 	if err != nil {
 		return 0, fmt.Errorf("创建SSH会话失败: %w", err)
 	}
-	defer session.Close()
+	statCmd := fmt.Sprintf("stat -c '%%s %%i' %s 2>/dev/null || stat -f '%%z %%i' %s 2>/dev/null", logPath, logPath)
+	statOutput, err := session1.CombinedOutput(statCmd)
+	session1.Close()
+	if err != nil {
+		return 0, fmt.Errorf("获取文件状态失败: %w", err)
+	}
 
-	// 读取最近的日志
-	output, err := session.CombinedOutput(fmt.Sprintf("tail -n 1000 %s 2>/dev/null || cat %s 2>/dev/null | head -n 1000", logPath, logPath))
+	var fileSize, fileInode int64
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(statOutput)), "%d %d", &fileSize, &fileInode); err != nil {
+		return 0, fmt.Errorf("解析文件状态失败: %w", err)
+	}
+
+	// 2. 检测日志轮转（inode变化或文件变小）
+	wasRotated := false
+	if source.LastFileInode > 0 && (uint64(fileInode) != source.LastFileInode || fileSize < source.LastFileOffset) {
+		wasRotated = true
+	}
+
+	// 3. 确定读取起始位置
+	var startOffset int64
+	const maxChunkSize = 100 * 1024 * 1024       // 增量采集最多读取 100MB
+	const firstTimeChunkSize = 500 * 1024 * 1024 // 首次采集最多读取 500MB
+
+	if wasRotated || source.LastFileOffset == 0 {
+		// 日志轮转或首次采集：从文件末尾往前读取最多 500MB（覆盖更多今日数据）
+		startOffset = fileSize - firstTimeChunkSize
+		if startOffset < 0 {
+			startOffset = 0
+		}
+	} else {
+		// 增量采集：从上次位置继续
+		startOffset = source.LastFileOffset
+	}
+
+	// 如果没有新数据，直接返回
+	if startOffset >= fileSize {
+		return 0, nil
+	}
+
+	// 计算要读取的字节数
+	bytesToRead := fileSize - startOffset
+	currentChunkSize := maxChunkSize
+	if wasRotated || source.LastFileOffset == 0 {
+		currentChunkSize = firstTimeChunkSize
+	}
+	if bytesToRead > int64(currentChunkSize) {
+		bytesToRead = int64(currentChunkSize)
+	}
+
+	// 4. 读取日志数据
+	session2, err := sshClient.NewSession()
+	if err != nil {
+		return 0, fmt.Errorf("创建SSH会话失败: %w", err)
+	}
+	// 使用 tail + head 高效读取指定范围的数据
+	// tail -c +N 从第N字节开始读取，head -c M 读取M字节
+	readCmd := fmt.Sprintf("tail -c +%d %s 2>/dev/null | head -c %d", startOffset+1, logPath, bytesToRead)
+	output, err := session2.CombinedOutput(readCmd)
+	session2.Close()
 	if err != nil {
 		return 0, fmt.Errorf("读取日志文件失败: %w", err)
 	}
 
-	// 解析日志
-	logs := parseNginxLogs(string(output), source.LogFormat)
+	// 5. 处理不完整的首行（跳过第一个不完整的行）
+	logContent := string(output)
+	if startOffset > 0 {
+		// 如果不是从文件开头读，跳过第一个不完整的行
+		if idx := strings.Index(logContent, "\n"); idx >= 0 {
+			logContent = logContent[idx+1:]
+		}
+	}
+
+	// 6. 解析日志
+	logs := parseNginxLogs(logContent, source.LogFormat)
 	if len(logs) == 0 {
+		// 没有解析出日志，但仍需更新偏移量
+		h.db.Model(&model.NginxSource{}).Where("id = ?", source.ID).Updates(map[string]interface{}{
+			"last_file_size":   fileSize,
+			"last_file_offset": fileSize,
+			"last_file_inode":  uint64(fileInode),
+			"last_error":       "",
+		})
 		return 0, nil
 	}
 
-	// 转换为数据库模型，并截断超长字段以防止数据库错误
-	// 同时填充地理位置和UA信息
+	// 7. 基于时间过滤（只保留今天的日志或比上次采集更新的日志）
+	var filterTime time.Time
+	if source.LastCollectAt != nil && !wasRotated {
+		filterTime = *source.LastCollectAt
+	} else {
+		// 首次采集、重置后或日志轮转后，只采集今天的日志
+		todayStart, _ := time.ParseInLocation("2006-01-02", time.Now().Format("2006-01-02"), time.Local)
+		filterTime = todayStart
+	}
+
+	filteredLogs := make([]NginxLogEntry, 0, len(logs))
+	for _, log := range logs {
+		if log.Timestamp.After(filterTime) {
+			filteredLogs = append(filteredLogs, log)
+		}
+	}
+	logs = filteredLogs
+
+	if len(logs) == 0 {
+		// 没有符合条件的新日志，但仍需更新偏移量
+		h.db.Model(&model.NginxSource{}).Where("id = ?", source.ID).Updates(map[string]interface{}{
+			"last_file_size":   fileSize,
+			"last_file_offset": fileSize,
+			"last_file_inode":  uint64(fileInode),
+			"last_error":       "",
+		})
+		return 0, nil
+	}
+
+	// 8. 转换为数据库模型
 	accessLogs := make([]model.NginxAccessLog, 0, len(logs))
 	for _, log := range logs {
-		// 解析地理位置
 		geoInfo, _ := h.geoSvc.Lookup(log.RemoteAddr)
-
-		// 解析 User-Agent
 		uaInfo := h.uaParser.Parse(log.HTTPUserAgent)
 
 		accessLog := model.NginxAccessLog{
-			SourceID:       source.ID,
-			Timestamp:      log.Timestamp,
-			RemoteAddr:     truncateString(log.RemoteAddr, 50),
-			RemoteUser:     truncateString(log.RemoteUser, 100),
-			Request:        truncateString(log.Request, 2000),
-			Method:         truncateString(log.Method, 20),
-			URI:            truncateString(log.URI, 1000),
-			Protocol:       truncateString(log.Protocol, 50),
-			Status:         log.Status,
-			BodyBytesSent:  log.BodyBytesSent,
-			HTTPReferer:    truncateString(log.HTTPReferer, 1000),
-			HTTPUserAgent:  truncateString(log.HTTPUserAgent, 500),
-			RequestTime:    log.RequestTime,
-			Host:           truncateString(log.Host, 255),
-			CreatedAt:      time.Now(),
+			SourceID:      source.ID,
+			Timestamp:     log.Timestamp,
+			RemoteAddr:    truncateString(log.RemoteAddr, 50),
+			RemoteUser:    truncateString(log.RemoteUser, 100),
+			Request:       truncateString(log.Request, 2000),
+			Method:        truncateString(log.Method, 20),
+			URI:           truncateString(log.URI, 1000),
+			Protocol:      truncateString(log.Protocol, 50),
+			Status:        log.Status,
+			BodyBytesSent: log.BodyBytesSent,
+			HTTPReferer:   truncateString(log.HTTPReferer, 1000),
+			HTTPUserAgent: truncateString(log.HTTPUserAgent, 500),
+			RequestTime:   log.RequestTime,
+			Host:          truncateString(log.Host, 255),
+			CreatedAt:     time.Now(),
 		}
 
-		// 填充地理位置信息
 		if geoInfo != nil {
 			accessLog.Country = truncateString(geoInfo.Country, 50)
 			accessLog.Province = truncateString(geoInfo.Province, 50)
@@ -225,7 +336,6 @@ func (h *Handler) collectHostLogs(source *model.NginxSource) (int, error) {
 			accessLog.ISP = truncateString(geoInfo.ISP, 100)
 		}
 
-		// 填充 UA 解析信息 (uaInfo 是值类型，不需要判空)
 		accessLog.Browser = truncateString(uaInfo.Browser, 50)
 		accessLog.BrowserVersion = truncateString(uaInfo.BrowserVersion, 20)
 		accessLog.OS = truncateString(uaInfo.OS, 50)
@@ -235,10 +345,27 @@ func (h *Handler) collectHostLogs(source *model.NginxSource) (int, error) {
 		accessLogs = append(accessLogs, accessLog)
 	}
 
-	// 批量插入日志
+	// 9. 批量插入日志
 	if err := h.repo.BatchCreateAccessLogs(accessLogs); err != nil {
 		return 0, fmt.Errorf("保存日志失败: %w", err)
 	}
+
+	// 10. 更新采集状态
+	latestTime := accessLogs[0].Timestamp
+	for _, log := range accessLogs {
+		if log.Timestamp.After(latestTime) {
+			latestTime = log.Timestamp
+		}
+	}
+
+	h.db.Model(&model.NginxSource{}).Where("id = ?", source.ID).Updates(map[string]interface{}{
+		"last_collect_at":   latestTime,
+		"last_collect_logs": len(accessLogs),
+		"last_file_size":    fileSize,
+		"last_file_offset":  fileSize, // 下次从文件末尾继续
+		"last_file_inode":   uint64(fileInode),
+		"last_error":        "",
+	})
 
 	// 更新统计数据
 	if err := h.updateStats(source.ID, accessLogs); err != nil {
@@ -340,8 +467,6 @@ func (h *Handler) updateStats(sourceID uint, logs []model.NginxAccessLog) error 
 			existing.Status3xx += stats.Status3xx
 			existing.Status4xx += stats.Status4xx
 			existing.Status5xx += stats.Status5xx
-			// 独立访客需要重新计算，这里简单相加（可能有重复）
-			existing.UniqueVisitors += stats.UniqueVisitors
 			// 平均响应时间重新计算
 			totalReqs := existing.TotalRequests
 			if totalReqs > 0 {
@@ -353,6 +478,18 @@ func (h *Handler) updateStats(sourceID uint, logs []model.NginxAccessLog) error 
 
 		if err := h.repo.CreateOrUpdateDailyStats(stats); err != nil {
 			return fmt.Errorf("保存日统计失败: %w", err)
+		}
+
+		// 重新计算当天的真实 UV（从原始日志表查询 distinct IP）
+		var realUV int64
+		h.db.Model(&model.NginxAccessLog{}).
+			Where("source_id = ? AND DATE(timestamp) = ?", sourceID, dateKey).
+			Distinct("remote_addr").
+			Count(&realUV)
+		if realUV > 0 {
+			h.db.Model(&model.NginxDailyStats{}).
+				Where("source_id = ? AND DATE(date) = ?", sourceID, dateKey).
+				Update("unique_visitors", realUV)
 		}
 	}
 
@@ -369,7 +506,6 @@ func (h *Handler) updateStats(sourceID uint, logs []model.NginxAccessLog) error 
 			existing.Status3xx += stats.Status3xx
 			existing.Status4xx += stats.Status4xx
 			existing.Status5xx += stats.Status5xx
-			existing.UniqueVisitors += stats.UniqueVisitors
 			totalReqs := existing.TotalRequests
 			if totalReqs > 0 {
 				existing.AvgResponseTime = (existing.AvgResponseTime*float64(existing.TotalRequests-stats.TotalRequests) +
@@ -380,6 +516,20 @@ func (h *Handler) updateStats(sourceID uint, logs []model.NginxAccessLog) error 
 
 		if err := h.repo.CreateOrUpdateHourlyStats(stats); err != nil {
 			return fmt.Errorf("保存小时统计失败: %w", err)
+		}
+
+		// 重新计算该小时的真实 UV
+		hourStart := stats.Hour
+		hourEnd := hourStart.Add(time.Hour)
+		var realUV int64
+		h.db.Model(&model.NginxAccessLog{}).
+			Where("source_id = ? AND timestamp >= ? AND timestamp < ?", sourceID, hourStart, hourEnd).
+			Distinct("remote_addr").
+			Count(&realUV)
+		if realUV > 0 {
+			h.db.Model(&model.NginxHourlyStats{}).
+				Where("source_id = ? AND hour = ?", sourceID, hourStart).
+				Update("unique_visitors", realUV)
 		}
 	}
 
@@ -411,6 +561,201 @@ func parseNginxLogs(logContent string, format string) []NginxLogEntry {
 
 // parseNginxLogLine 解析单行Nginx日志
 func parseNginxLogLine(line string, format string) (NginxLogEntry, error) {
+	// 根据格式选择解析方式
+	if format == "json" {
+		return parseJSONLogEntry(line)
+	}
+
+	// 默认使用 combined 格式解析
+	return parseCombinedLogLine(line)
+}
+
+// parseJSONLogEntry 解析 JSON 格式的 Nginx 日志
+func parseJSONLogEntry(line string) (NginxLogEntry, error) {
+	var entry NginxLogEntry
+
+	// JSON 日志结构（支持常见的 JSON 日志格式）
+	type JSONLog struct {
+		TimeLocal      string `json:"time_local"`
+		Time           string `json:"time"`       // 备用时间字段
+		Timestamp      string `json:"@timestamp"` // 备用时间字段
+		RemoteAddr     string `json:"remote_addr"`
+		ClientIP       string `json:"client_ip"` // 备用 IP 字段
+		RemoteUser     string `json:"remote_user"`
+		Request        string `json:"request"`
+		RequestMethod  string `json:"request_method"` // 备用方法字段
+		RequestURI     string `json:"request_uri"`    // 备用 URI 字段
+		Status         int    `json:"status"`
+		StatusStr      string `json:"status_code"` // 备用状态码字段（字符串）
+		Bytes          int64  `json:"bytes"`
+		BodyBytes      int64  `json:"body_bytes_sent"`
+		BytesSent      int64  `json:"bytes_sent"` // 备用字节字段
+		Referer        string `json:"referer"`
+		HTTPReferer    string `json:"http_referer"` // 备用 referer 字段
+		UserAgent      string `json:"user_agent"`
+		HTTPUserAgent  string `json:"http_user_agent"` // 备用 UA 字段
+		RequestTime    string `json:"request_time"`
+		UpstreamTime   string `json:"upstream_time"`
+		Host           string `json:"host"`
+		ServerName     string `json:"server_name"` // 备用 host 字段
+		XForwarded     string `json:"x_forwarded"`
+		XForwardedFor  string `json:"x_forwarded_for"`
+		Protocol       string `json:"protocol"`
+		ServerProtocol string `json:"server_protocol"`
+	}
+
+	var jlog JSONLog
+	if err := json.Unmarshal([]byte(line), &jlog); err != nil {
+		return entry, fmt.Errorf("JSON解析失败: %w", err)
+	}
+
+	// 解析时间（支持多种格式）
+	timeStr := jlog.TimeLocal
+	if timeStr == "" {
+		timeStr = jlog.Time
+	}
+	if timeStr == "" {
+		timeStr = jlog.Timestamp
+	}
+	if timeStr != "" {
+		// 尝试多种时间格式
+		// 带时区的格式使用 time.Parse
+		formatsWithTZ := []string{
+			"02/Jan/2006:15:04:05 -0700",
+			"2006-01-02T15:04:05Z07:00",
+			"2006-01-02T15:04:05Z",
+			"2006-01-02T15:04:05.000Z",
+		}
+		// 不带时区的格式使用 time.ParseInLocation（假定为本地时区）
+		formatsNoTZ := []string{
+			"02/Jan/2006:15:04:05",
+			"2006-01-02 15:04:05",
+			"2006-01-02T15:04:05",
+		}
+
+		// 先尝试带时区的格式
+		for _, f := range formatsWithTZ {
+			if t, err := time.Parse(f, timeStr); err == nil {
+				entry.Timestamp = t.Local() // 转换为本地时区
+				break
+			}
+		}
+		// 再尝试不带时区的格式（使用本地时区解析）
+		if entry.Timestamp.IsZero() {
+			for _, f := range formatsNoTZ {
+				if t, err := time.ParseInLocation(f, timeStr, time.Local); err == nil {
+					entry.Timestamp = t
+					break
+				}
+			}
+		}
+	}
+	if entry.Timestamp.IsZero() {
+		return entry, fmt.Errorf("无法解析时间: %s", timeStr)
+	}
+
+	// 解析 IP
+	entry.RemoteAddr = jlog.RemoteAddr
+	if entry.RemoteAddr == "" {
+		entry.RemoteAddr = jlog.ClientIP
+	}
+	// 处理 X-Forwarded-For
+	if entry.RemoteAddr == "" || strings.HasPrefix(entry.RemoteAddr, "10.") || strings.HasPrefix(entry.RemoteAddr, "192.168.") {
+		xff := jlog.XForwarded
+		if xff == "" {
+			xff = jlog.XForwardedFor
+		}
+		if xff != "" && xff != "-" {
+			// 取第一个 IP
+			parts := strings.Split(xff, ",")
+			if len(parts) > 0 {
+				realIP := strings.TrimSpace(parts[0])
+				if realIP != "" && realIP != "-" {
+					entry.RemoteAddr = realIP
+				}
+			}
+		}
+	}
+
+	entry.RemoteUser = jlog.RemoteUser
+	if entry.RemoteUser == "-" {
+		entry.RemoteUser = ""
+	}
+
+	// 解析请求
+	entry.Request = jlog.Request
+	if entry.Request != "" {
+		parts := strings.SplitN(entry.Request, " ", 3)
+		if len(parts) >= 2 {
+			entry.Method = parts[0]
+			entry.URI = parts[1]
+			if len(parts) >= 3 {
+				entry.Protocol = parts[2]
+			}
+		}
+	} else {
+		// 使用备用字段
+		entry.Method = jlog.RequestMethod
+		entry.URI = jlog.RequestURI
+		entry.Protocol = jlog.Protocol
+		if entry.Protocol == "" {
+			entry.Protocol = jlog.ServerProtocol
+		}
+		entry.Request = entry.Method + " " + entry.URI + " " + entry.Protocol
+	}
+
+	// 状态码
+	entry.Status = jlog.Status
+	if entry.Status == 0 && jlog.StatusStr != "" {
+		entry.Status, _ = strconv.Atoi(jlog.StatusStr)
+	}
+
+	// 响应体大小
+	entry.BodyBytesSent = jlog.Bytes
+	if entry.BodyBytesSent == 0 {
+		entry.BodyBytesSent = jlog.BodyBytes
+	}
+	if entry.BodyBytesSent == 0 {
+		entry.BodyBytesSent = jlog.BytesSent
+	}
+
+	// Referer
+	entry.HTTPReferer = jlog.Referer
+	if entry.HTTPReferer == "" {
+		entry.HTTPReferer = jlog.HTTPReferer
+	}
+	if entry.HTTPReferer == "-" {
+		entry.HTTPReferer = ""
+	}
+
+	// User-Agent
+	entry.HTTPUserAgent = jlog.UserAgent
+	if entry.HTTPUserAgent == "" {
+		entry.HTTPUserAgent = jlog.HTTPUserAgent
+	}
+	if entry.HTTPUserAgent == "-" {
+		entry.HTTPUserAgent = ""
+	}
+
+	// 请求时间
+	if jlog.RequestTime != "" && jlog.RequestTime != "-" {
+		entry.RequestTime, _ = strconv.ParseFloat(jlog.RequestTime, 64)
+	}
+
+	// Host
+	entry.Host = jlog.Host
+	if entry.Host == "" {
+		entry.Host = jlog.ServerName
+	}
+	if entry.Host == "" {
+		entry.Host = extractHost(entry.URI, entry.HTTPReferer)
+	}
+
+	return entry, nil
+}
+
+// parseCombinedLogLine 解析 combined 格式的 Nginx 日志
+func parseCombinedLogLine(line string) (NginxLogEntry, error) {
 	var entry NginxLogEntry
 
 	// 支持 combined 和 main 格式
@@ -435,11 +780,14 @@ func parseNginxLogLine(line string, format string) (NginxLogEntry, error) {
 	timeStr := matches[3]
 	t, err := time.Parse("02/Jan/2006:15:04:05 -0700", timeStr)
 	if err != nil {
-		// 尝试不带时区
-		t, err = time.Parse("02/Jan/2006:15:04:05", timeStr)
+		// 尝试不带时区（使用本地时区解析）
+		t, err = time.ParseInLocation("02/Jan/2006:15:04:05", timeStr, time.Local)
 		if err != nil {
 			return entry, fmt.Errorf("解析时间失败: %w", err)
 		}
+	} else {
+		// 带时区的时间转换为本地时区
+		t = t.Local()
 	}
 	entry.Timestamp = t
 
