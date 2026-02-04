@@ -42,8 +42,14 @@ COPY --from=builder /build/opshub .
 # Copy config template as default config
 COPY config/config.yaml.example config/config.yaml
 
-# Create logs directory
-RUN mkdir -p logs
+# Copy download script
+COPY scripts/download-geoip.sh scripts/
+
+# Create directories
+RUN mkdir -p logs data && chmod +x scripts/download-geoip.sh
+
+# Download GeoIP database at build time
+RUN scripts/download-geoip.sh ./data
 
 # Expose port
 EXPOSE 9876
