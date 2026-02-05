@@ -137,9 +137,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Key, Plus, Grid } from '@element-plus/icons-vue'
 import {
-  getPermissions,
-  createPermission,
-  deletePermission,
+  getAppPermissions,
+  createAppPermission,
+  deleteAppPermission,
   getSSOApplications
 } from '@/api/identity'
 
@@ -205,7 +205,7 @@ const getSubjectName = (type: string, id: number) => {
 const loadPermissions = async () => {
   loading.value = true
   try {
-    const res = await getPermissions({
+    const res = await getAppPermissions({
       page: pagination.page,
       pageSize: pagination.pageSize,
       appId: searchForm.appId,
@@ -268,7 +268,7 @@ const handleSubmit = async () => {
     if (!valid) return
     submitLoading.value = true
     try {
-      await createPermission(form)
+      await createAppPermission(form)
       ElMessage.success('添加成功')
       dialogVisible.value = false
       loadPermissions()
@@ -287,7 +287,7 @@ const handleDelete = (row: any) => {
     type: 'warning'
   }).then(async () => {
     try {
-      await deletePermission(row.id)
+      await deleteAppPermission(row.id)
       ElMessage.success('删除成功')
       loadPermissions()
     } catch (error) {

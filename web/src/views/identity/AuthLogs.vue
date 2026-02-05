@@ -146,7 +146,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Document, User, Calendar, Warning, Grid } from '@element-plus/icons-vue'
-import { getAuthLogs, getAuthStats } from '@/api/identity'
+import { getAuthLogs, getAuthLogStats } from '@/api/identity'
 
 const logList = ref<any[]>([])
 const loading = ref(false)
@@ -215,7 +215,7 @@ const loadLogs = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await getAuthStats({})
+    const res = await getAuthLogStats({})
     if (res.data.code === 0) {
       const data = res.data.data || {}
       stats.totalLogins = data.totalLogins || 0
