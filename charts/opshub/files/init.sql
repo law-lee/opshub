@@ -160,6 +160,34 @@ CREATE TABLE IF NOT EXISTS `sys_user_position` (
   CONSTRAINT `fk_user_position_position` FOREIGN KEY (`position_id`) REFERENCES `sys_position` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 系统配置表
+CREATE TABLE IF NOT EXISTS `sys_config` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `key` varchar(100) NOT NULL COMMENT '配置键',
+  `value` text COMMENT '配置值',
+  `type` varchar(20) DEFAULT 'string' COMMENT '配置类型(string/int/bool/json)',
+  `group` varchar(50) COMMENT '配置分组(basic/security)',
+  `remark` varchar(200) COMMENT '备注说明',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime COMMENT '删除时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_key` (`key`),
+  KEY `idx_group` (`group`),
+  KEY `idx_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 用户登录失败记录表
+CREATE TABLE IF NOT EXISTS `sys_user_login_attempt` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) NOT NULL COMMENT '用户名',
+  `fail_count` int DEFAULT 0 COMMENT '失败次数',
+  `last_fail_at` datetime COMMENT '最后失败时间',
+  `locked_until` datetime COMMENT '锁定截止时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_username` (`username`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================
 -- 2. 审计日志表
 -- ============================================================
@@ -786,6 +814,273 @@ CREATE TABLE IF NOT EXISTS `ssl_renew_tasks` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
+-- 7. Nginx 日志分析插件表
+-- ============================================================
+
+-- Nginx 数据源配置表
+CREATE TABLE IF NOT EXISTS `nginx_sources` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL COMMENT '数据源名称',
+  `type` varchar(20) NOT NULL COMMENT '数据源类型 host/k8s_ingress',
+  `description` varchar(500) COMMENT '描述',
+  `status` tinyint DEFAULT 1 COMMENT '状态 1:启用 0:禁用',
+  `host_id` bigint unsigned COMMENT '主机ID(host类型)',
+  `log_path` varchar(500) COMMENT '日志路径(host类型)',
+  `log_format` varchar(50) DEFAULT 'combined' COMMENT '日志格式',
+  `cluster_id` bigint unsigned COMMENT 'K8s集群ID(k8s_ingress类型)',
+  `namespace` varchar(100) COMMENT 'K8s命名空间',
+  `ingress_name` varchar(100) COMMENT 'Ingress名称',
+  `k8s_pod_selector` varchar(200) COMMENT 'Pod标签选择器',
+  `k8s_container_name` varchar(100) COMMENT '容器名称',
+  `log_format_config` text COMMENT '自定义日志格式配置',
+  `geo_enabled` tinyint DEFAULT 1 COMMENT '是否启用地理位置解析',
+  `session_enabled` tinyint DEFAULT 0 COMMENT '是否启用会话跟踪',
+  `collect_interval` int DEFAULT 60 COMMENT '采集间隔(秒)',
+  `retention_days` int DEFAULT 30 COMMENT '数据保留天数',
+  `last_collect_at` datetime COMMENT '最后采集时间',
+  `last_collect_logs` bigint DEFAULT 0 COMMENT '最后采集日志数',
+  `last_error` varchar(500) COMMENT '最后错误信息',
+  `last_file_size` bigint DEFAULT 0 COMMENT '上次文件大小',
+  `last_file_offset` bigint DEFAULT 0 COMMENT '上次读取偏移量',
+  `last_file_inode` bigint unsigned DEFAULT 0 COMMENT '文件inode',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime COMMENT '删除时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_host_id` (`host_id`),
+  KEY `idx_cluster_id` (`cluster_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx IP 维度表
+CREATE TABLE IF NOT EXISTS `nginx_dim_ip` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ip_address` varchar(50) NOT NULL COMMENT 'IP地址',
+  `country` varchar(50) COMMENT '国家',
+  `province` varchar(50) COMMENT '省份',
+  `city` varchar(50) COMMENT '城市',
+  `isp` varchar(100) COMMENT '运营商',
+  `is_bot` tinyint DEFAULT 0 COMMENT '是否机器人',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ip_address` (`ip_address`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx URL 维度表
+CREATE TABLE IF NOT EXISTS `nginx_dim_url` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `url_hash` varchar(64) NOT NULL COMMENT 'URL哈希',
+  `url_path` varchar(2000) COMMENT 'URL路径',
+  `url_normalized` varchar(500) COMMENT '规范化路径',
+  `host` varchar(255) COMMENT '主机名',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_url_hash` (`url_hash`),
+  KEY `idx_url_normalized` (`url_normalized`),
+  KEY `idx_host` (`host`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx Referer 维度表
+CREATE TABLE IF NOT EXISTS `nginx_dim_referer` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `referer_hash` varchar(64) NOT NULL COMMENT 'Referer哈希',
+  `referer_url` varchar(2000) COMMENT 'Referer URL',
+  `referer_domain` varchar(255) COMMENT 'Referer域名',
+  `referer_type` varchar(20) COMMENT '来源类型 direct/search/social/other',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_referer_hash` (`referer_hash`),
+  KEY `idx_referer_domain` (`referer_domain`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx User-Agent 维度表
+CREATE TABLE IF NOT EXISTS `nginx_dim_user_agent` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `ua_hash` varchar(64) NOT NULL COMMENT 'UA哈希',
+  `user_agent` varchar(500) COMMENT 'User-Agent',
+  `browser` varchar(50) COMMENT '浏览器',
+  `browser_version` varchar(20) COMMENT '浏览器版本',
+  `os` varchar(50) COMMENT '操作系统',
+  `os_version` varchar(20) COMMENT '系统版本',
+  `device_type` varchar(20) COMMENT '设备类型 desktop/mobile/tablet/bot',
+  `is_bot` tinyint DEFAULT 0 COMMENT '是否机器人',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ua_hash` (`ua_hash`),
+  KEY `idx_browser` (`browser`),
+  KEY `idx_os` (`os`),
+  KEY `idx_device_type` (`device_type`),
+  KEY `idx_is_bot` (`is_bot`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx 访问日志事实表 (星型模型)
+CREATE TABLE IF NOT EXISTS `nginx_fact_access_logs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '数据源ID',
+  `timestamp` datetime NOT NULL COMMENT '访问时间',
+  `ip_id` bigint unsigned COMMENT 'IP维度ID',
+  `url_id` bigint unsigned COMMENT 'URL维度ID',
+  `referer_id` bigint unsigned COMMENT 'Referer维度ID',
+  `ua_id` bigint unsigned COMMENT 'UA维度ID',
+  `method` varchar(20) COMMENT '请求方法',
+  `protocol` varchar(50) COMMENT '协议',
+  `status` int COMMENT '状态码',
+  `body_bytes_sent` bigint COMMENT '响应大小',
+  `request_time` decimal(10,3) COMMENT '请求耗时',
+  `upstream_time` decimal(10,3) COMMENT '上游耗时',
+  `ingress_name` varchar(100) COMMENT 'Ingress名称',
+  `service_name` varchar(100) COMMENT '服务名称',
+  `pod_name` varchar(100) COMMENT 'Pod名称',
+  `is_pv` tinyint DEFAULT 1 COMMENT '是否页面访问',
+  `session_id` varchar(64) COMMENT '会话ID',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_source_time` (`source_id`, `timestamp`),
+  KEY `idx_ip_id` (`ip_id`),
+  KEY `idx_url_id` (`url_id`),
+  KEY `idx_referer_id` (`referer_id`),
+  KEY `idx_ua_id` (`ua_id`),
+  KEY `idx_method` (`method`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx 访问日志表 (兼容旧版，扁平化存储)
+CREATE TABLE IF NOT EXISTS `nginx_access_logs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '数据源ID',
+  `timestamp` datetime NOT NULL COMMENT '访问时间',
+  `remote_addr` varchar(50) COMMENT '客户端IP',
+  `remote_user` varchar(100) COMMENT '远程用户',
+  `request` varchar(2000) COMMENT '请求行',
+  `method` varchar(20) COMMENT '请求方法',
+  `uri` varchar(1000) COMMENT '请求URI',
+  `protocol` varchar(50) COMMENT '协议',
+  `status` int COMMENT '状态码',
+  `body_bytes_sent` bigint COMMENT '响应大小',
+  `http_referer` varchar(1000) COMMENT 'Referer',
+  `http_user_agent` varchar(500) COMMENT 'User-Agent',
+  `request_time` decimal(10,3) COMMENT '请求耗时',
+  `upstream_time` decimal(10,3) COMMENT '上游耗时',
+  `host` varchar(255) COMMENT '主机名',
+  `country` varchar(50) COMMENT '国家',
+  `province` varchar(50) COMMENT '省份',
+  `city` varchar(50) COMMENT '城市',
+  `isp` varchar(100) COMMENT '运营商',
+  `browser` varchar(50) COMMENT '浏览器',
+  `browser_version` varchar(20) COMMENT '浏览器版本',
+  `os` varchar(50) COMMENT '操作系统',
+  `os_version` varchar(20) COMMENT '系统版本',
+  `device_type` varchar(20) COMMENT '设备类型',
+  `ingress_name` varchar(100) COMMENT 'Ingress名称',
+  `service_name` varchar(100) COMMENT '服务名称',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_source_time` (`source_id`, `timestamp`),
+  KEY `idx_source_ip` (`source_id`, `remote_addr`),
+  KEY `idx_source_status` (`source_id`, `status`),
+  KEY `idx_source_country` (`source_id`, `country`),
+  KEY `idx_source_device` (`source_id`, `device_type`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx 小时聚合统计表
+CREATE TABLE IF NOT EXISTS `nginx_agg_hourly` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '数据源ID',
+  `hour` datetime NOT NULL COMMENT '小时时间点',
+  `total_requests` bigint DEFAULT 0 COMMENT '总请求数',
+  `pv_count` bigint DEFAULT 0 COMMENT 'PV数',
+  `unique_ips` bigint DEFAULT 0 COMMENT '独立IP数',
+  `total_bandwidth` bigint DEFAULT 0 COMMENT '总带宽',
+  `avg_response_time` decimal(10,3) DEFAULT 0 COMMENT '平均响应时间',
+  `max_response_time` decimal(10,3) DEFAULT 0 COMMENT '最大响应时间',
+  `min_response_time` decimal(10,3) DEFAULT 0 COMMENT '最小响应时间',
+  `status_2xx` bigint DEFAULT 0 COMMENT '2xx状态码数',
+  `status_3xx` bigint DEFAULT 0 COMMENT '3xx状态码数',
+  `status_4xx` bigint DEFAULT 0 COMMENT '4xx状态码数',
+  `status_5xx` bigint DEFAULT 0 COMMENT '5xx状态码数',
+  `method_distribution` text COMMENT '方法分布JSON',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_source_hour` (`source_id`, `hour`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx 日聚合统计表
+CREATE TABLE IF NOT EXISTS `nginx_agg_daily` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '数据源ID',
+  `date` date NOT NULL COMMENT '日期',
+  `total_requests` bigint DEFAULT 0 COMMENT '总请求数',
+  `pv_count` bigint DEFAULT 0 COMMENT 'PV数',
+  `unique_ips` bigint DEFAULT 0 COMMENT '独立IP数',
+  `total_bandwidth` bigint DEFAULT 0 COMMENT '总带宽',
+  `avg_response_time` decimal(10,3) DEFAULT 0 COMMENT '平均响应时间',
+  `max_response_time` decimal(10,3) DEFAULT 0 COMMENT '最大响应时间',
+  `min_response_time` decimal(10,3) DEFAULT 0 COMMENT '最小响应时间',
+  `status_2xx` bigint DEFAULT 0 COMMENT '2xx状态码数',
+  `status_3xx` bigint DEFAULT 0 COMMENT '3xx状态码数',
+  `status_4xx` bigint DEFAULT 0 COMMENT '4xx状态码数',
+  `status_5xx` bigint DEFAULT 0 COMMENT '5xx状态码数',
+  `top_urls` text COMMENT 'Top URL JSON',
+  `top_ips` text COMMENT 'Top IP JSON',
+  `top_referers` text COMMENT 'Top Referer JSON',
+  `top_countries` text COMMENT 'Top 国家 JSON',
+  `top_browsers` text COMMENT 'Top 浏览器 JSON',
+  `top_devices` text COMMENT 'Top 设备 JSON',
+  `hourly_traffic` text COMMENT '每小时流量分布 JSON',
+  `method_distribution` text COMMENT '方法分布 JSON',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_source_date` (`source_id`, `date`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx 日统计表 (兼容旧版)
+CREATE TABLE IF NOT EXISTS `nginx_daily_stats` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '数据源ID',
+  `date` date NOT NULL COMMENT '日期',
+  `total_requests` bigint DEFAULT 0 COMMENT '总请求数',
+  `unique_visitors` bigint DEFAULT 0 COMMENT '独立访客数',
+  `total_bandwidth` bigint DEFAULT 0 COMMENT '总带宽',
+  `avg_response_time` decimal(10,3) DEFAULT 0 COMMENT '平均响应时间',
+  `status_2xx` bigint DEFAULT 0 COMMENT '2xx状态码数',
+  `status_3xx` bigint DEFAULT 0 COMMENT '3xx状态码数',
+  `status_4xx` bigint DEFAULT 0 COMMENT '4xx状态码数',
+  `status_5xx` bigint DEFAULT 0 COMMENT '5xx状态码数',
+  `top_ur_is` text COMMENT 'Top URI JSON',
+  `top_i_ps` text COMMENT 'Top IP JSON',
+  `top_referers` text COMMENT 'Top Referer JSON',
+  `top_user_agents` text COMMENT 'Top UA JSON',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_source_id` (`source_id`),
+  KEY `idx_date` (`date`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nginx 小时统计表 (兼容旧版)
+CREATE TABLE IF NOT EXISTS `nginx_hourly_stats` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '数据源ID',
+  `hour` datetime NOT NULL COMMENT '小时时间点',
+  `total_requests` bigint DEFAULT 0 COMMENT '总请求数',
+  `unique_visitors` bigint DEFAULT 0 COMMENT '独立访客数',
+  `total_bandwidth` bigint DEFAULT 0 COMMENT '总带宽',
+  `avg_response_time` decimal(10,3) DEFAULT 0 COMMENT '平均响应时间',
+  `status_2xx` bigint DEFAULT 0 COMMENT '2xx状态码数',
+  `status_3xx` bigint DEFAULT 0 COMMENT '3xx状态码数',
+  `status_4xx` bigint DEFAULT 0 COMMENT '4xx状态码数',
+  `status_5xx` bigint DEFAULT 0 COMMENT '5xx状态码数',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_source_id` (`source_id`),
+  KEY `idx_hour` (`hour`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
 -- 初始化数据
 -- ============================================================
 
@@ -896,7 +1191,22 @@ VALUES
   ('kubernetes', 1, NOW(), NOW()),
   ('monitor', 1, NOW(), NOW()),
   ('task', 1, NOW(), NOW()),
-  ('ssl-cert', 1, NOW(), NOW());
+  ('ssl-cert', 1, NOW(), NOW()),
+  ('nginx', 1, NOW(), NOW());
+
+-- 插入默认系统配置
+INSERT INTO `sys_config` (`key`, `value`, `type`, `group`, `remark`, `created_at`, `updated_at`)
+VALUES
+  -- 基础配置
+  ('system_name', 'OpsHub', 'string', 'basic', '系统名称', NOW(), NOW()),
+  ('system_logo', '', 'string', 'basic', '系统Logo路径', NOW(), NOW()),
+  ('system_description', '运维管理平台', 'string', 'basic', '系统描述', NOW(), NOW()),
+  -- 安全配置
+  ('password_min_length', '8', 'int', 'security', '密码最小长度', NOW(), NOW()),
+  ('session_timeout', '3600', 'int', 'security', 'Session超时时间(秒)', NOW(), NOW()),
+  ('enable_captcha', 'true', 'bool', 'security', '是否开启验证码', NOW(), NOW()),
+  ('max_login_attempts', '5', 'int', 'security', '最大登录失败次数', NOW(), NOW()),
+  ('lockout_duration', '300', 'int', 'security', '账户锁定时间(秒)', NOW(), NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 
