@@ -80,18 +80,11 @@
                   <el-icon :size="18"><Edit /></el-icon>
                 </el-button>
               </el-tooltip>
-              <el-popconfirm
-                title="确定要删除该数据源吗？"
-                @confirm="handleDelete(row)"
-              >
-                <template #reference>
-                  <el-tooltip content="删除" placement="top">
-                    <el-button link type="danger" class="action-btn">
-                      <el-icon :size="18"><Delete /></el-icon>
-                    </el-button>
-                  </el-tooltip>
-                </template>
-              </el-popconfirm>
+              <el-tooltip content="删除" placement="top">
+                <el-button link type="danger" class="action-btn" @click="handleDelete(row)">
+                  <el-icon :size="18"><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
@@ -330,7 +323,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Setting, Plus, Refresh, InfoFilled, Monitor, Platform, Timer, Operation, Location, User, Edit, Delete } from '@element-plus/icons-vue'
 import {
@@ -466,12 +459,23 @@ const handleStatusChange = async (row: NginxSource) => {
 // 删除
 const handleDelete = async (row: NginxSource) => {
   try {
+    await ElMessageBox.confirm(
+      `确定要删除数据源「${row.name}」吗？`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
     await deleteNginxSource(row.id!)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
-    console.error('删除失败:', error)
-    ElMessage.error('删除失败')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
