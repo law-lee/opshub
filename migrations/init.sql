@@ -1348,6 +1348,7 @@ VALUES
   -- ========== 顶级菜单 ==========
   (10, '仪表盘', 'dashboard', 1, 0, '/dashboard', '', 'HomeFilled', 0, 1, 1, NOW(), NOW()),
   (15, '资产管理', 'asset-management', 1, 0, '/asset', '', 'Coin', 1, 1, 1, NOW(), NOW()),
+  (90, '身份认证', 'identity', 1, 0, '/identity', '', 'Key', 2, 1, 1, NOW(), NOW()),
   (23, '操作审计', 'audit', 1, 0, '/audit', '', 'Document', 50, 1, 1, NOW(), NOW()),
   (30, '插件管理', 'plugin', 1, 0, '/plugin', '', 'Grid', 80, 1, 1, NOW(), NOW()),
   (42, '监控中心', '_monitor', 1, 0, '/monitor', '', 'Monitor', 80, 1, 1, NOW(), NOW()),
@@ -1363,6 +1364,14 @@ VALUES
   (11, '部门信息', 'dept-info', 2, 1, '/dept-info', 'system/DeptInfo', 'OfficeBuilding', 5, 1, 1, NOW(), NOW()),
   (12, '岗位信息', 'position-info', 2, 1, '/position-info', 'system/PositionInfo', 'Avatar', 6, 1, 1, NOW(), NOW()),
   (13, '系统配置', 'system-config', 2, 1, '/system-config', 'system/SystemConfig', 'Setting', 7, 1, 1, NOW(), NOW()),
+
+  -- ========== 身份认证子菜单 (parent_id=90) ==========
+  (91, '身份源管理', 'identity_sources', 2, 90, '/identity/sources', 'identity/IdentitySources', 'User', 1, 1, 1, NOW(), NOW()),
+  (92, '应用管理', 'identity_apps', 2, 90, '/identity/apps', 'identity/SSOApplications', 'Grid', 2, 1, 1, NOW(), NOW()),
+  (93, '凭证管理', 'identity_credentials', 2, 90, '/identity/credentials', 'identity/Credentials', 'Lock', 3, 1, 1, NOW(), NOW()),
+  (94, '访问策略', 'identity_permissions', 2, 90, '/identity/permissions', 'identity/Permissions', 'Key', 4, 1, 1, NOW(), NOW()),
+  (95, '认证日志', 'identity_logs', 2, 90, '/identity/logs', 'identity/AuthLogs', 'Document', 5, 1, 1, NOW(), NOW()),
+  (96, '应用门户', 'identity_portal', 2, 90, '/identity/portal', 'identity/Portal', 'Menu', 6, 1, 1, NOW(), NOW()),
 
   -- ========== 资产管理子菜单 (parent_id=15) ==========
   (16, '主机管理', 'host-management', 2, 15, '/asset/hosts', 'asset/Hosts', 'Monitor', 1, 1, 1, NOW(), NOW()),
@@ -1410,13 +1419,15 @@ VALUES
   (1, 1), (1, 2), (1, 3), (1, 5), (1, 10), (1, 11), (1, 12), (1, 13), (1, 15), (1, 16), (1, 17), (1, 19),
   (1, 23), (1, 24), (1, 25), (1, 27), (1, 29), (1, 30), (1, 32), (1, 33), (1, 34), (1, 36),
   (1, 42), (1, 61), (1, 65), (1, 69), (1, 70), (1, 71), (1, 72), (1, 73), (1, 74), (1, 75), (1, 76), (1, 77),
-  (1, 78), (1, 79), (1, 80), (1, 81), (1, 82), (1, 83), (1, 84), (1, 85), (1, 86);
+  (1, 78), (1, 79), (1, 80), (1, 81), (1, 82), (1, 83), (1, 84), (1, 85), (1, 86),
+  (1, 90), (1, 91), (1, 92), (1, 93), (1, 94), (1, 95), (1, 96);
 
 -- 为普通用户角色分配基础菜单权限
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
 VALUES
   (2, 10), (2, 15), (2, 16), (2, 17), (2, 19), (2, 27), (2, 34), (2, 65),
-  (2, 23), (2, 24), (2, 25), (2, 36), (2, 42), (2, 61);
+  (2, 23), (2, 24), (2, 25), (2, 36), (2, 42), (2, 61),
+  (2, 90), (2, 92), (2, 93), (2, 96);
 
 -- ============================================================
 -- 11. 插件状态表
