@@ -96,7 +96,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button class="black-button" @click="dialogVisible = false">取消</el-button>
         <el-button class="black-button" @click="handleSubmit" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
@@ -142,9 +142,7 @@ const loadCredentials = async () => {
   loading.value = true
   try {
     const res = await getUserCredentials()
-    if (res.data.code === 0) {
-      credentialList.value = res.data.data || []
-    }
+    credentialList.value = res || []
   } catch (error) {
     console.error('加载凭证失败:', error)
   } finally {
@@ -155,9 +153,7 @@ const loadCredentials = async () => {
 const loadApps = async () => {
   try {
     const res = await getSSOApplications({ enabled: true, pageSize: 100 })
-    if (res.data.code === 0) {
-      appList.value = res.data.data?.list || []
-    }
+    appList.value = res?.list || []
   } catch (error) {
     console.error('加载应用列表失败:', error)
   }
@@ -412,11 +408,11 @@ onMounted(() => {
 .black-button {
   background-color: #000 !important;
   border-color: #000 !important;
-  color: #d4af37 !important;
+  color: #fff !important;
 }
 
 .black-button:hover {
-  background-color: #1a1a1a !important;
-  border-color: #1a1a1a !important;
+  background-color: #333 !important;
+  border-color: #333 !important;
 }
 </style>

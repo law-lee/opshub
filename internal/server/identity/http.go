@@ -22,19 +22,24 @@ package identity
 import (
 	"github.com/gin-gonic/gin"
 	bizIdentity "github.com/ydcloud-dy/opshub/internal/biz/identity"
+	"github.com/ydcloud-dy/opshub/internal/biz/rbac"
 	dataIdentity "github.com/ydcloud-dy/opshub/internal/data/identity"
+	dataRbac "github.com/ydcloud-dy/opshub/internal/data/rbac"
 	svcIdentity "github.com/ydcloud-dy/opshub/internal/service/identity"
 	"gorm.io/gorm"
 )
 
 // HTTPServer 身份认证HTTP服务
 type HTTPServer struct {
-	sourceService     *svcIdentity.IdentitySourceService
-	appService        *svcIdentity.SSOApplicationService
-	portalService     *svcIdentity.PortalService
-	credentialService *svcIdentity.CredentialService
-	permissionService *svcIdentity.PermissionService
-	authLogService    *svcIdentity.AuthLogService
+	sourceService      *svcIdentity.IdentitySourceService
+	appService         *svcIdentity.SSOApplicationService
+	portalService      *svcIdentity.PortalService
+	credentialService  *svcIdentity.CredentialService
+	permissionService  *svcIdentity.PermissionService
+	authLogService     *svcIdentity.AuthLogService
+	ldapService        *svcIdentity.LDAPService
+	oauth2Service      *svcIdentity.OAuth2ServerService
+	userRepo           rbac.UserRepo
 }
 
 // NewIdentityServices 创建身份认证相关服务
@@ -48,6 +53,10 @@ func NewIdentityServices(db *gorm.DB) (*HTTPServer, error) {
 		&bizIdentity.UserOAuthBinding{},
 		&bizIdentity.AuthLog{},
 		&bizIdentity.UserFavoriteApp{},
+		&bizIdentity.LDAPSyncJob{},
+		&bizIdentity.OAuth2AuthorizationCode{},
+		&bizIdentity.OAuth2AccessToken{},
+		&bizIdentity.OAuth2RefreshToken{},
 	); err != nil {
 		return nil, err
 	}
@@ -60,6 +69,10 @@ func NewIdentityServices(db *gorm.DB) (*HTTPServer, error) {
 	oauthBindingRepo := dataIdentity.NewUserOAuthBindingRepo(db)
 	authLogRepo := dataIdentity.NewAuthLogRepo(db)
 	favoriteRepo := dataIdentity.NewUserFavoriteAppRepo(db)
+	authCodeRepo := dataIdentity.NewOAuth2AuthCodeRepo(db)
+	tokenRepo := dataIdentity.NewOAuth2TokenRepo(db)
+	userRepo := dataRbac.NewUserRepo(db)
+	_ = dataIdentity.NewLDAPSyncJobRepo(db) // LDAP同步任务仓库，后续LDAP完整集成时使用
 
 	// 创建用例
 	sourceUseCase := bizIdentity.NewIdentitySourceUseCase(sourceRepo)
@@ -70,6 +83,17 @@ func NewIdentityServices(db *gorm.DB) (*HTTPServer, error) {
 	authLogUseCase := bizIdentity.NewAuthLogUseCase(authLogRepo)
 	favoriteUseCase := bizIdentity.NewUserFavoriteAppUseCase(favoriteRepo)
 
+	// OAuth2 服务端用例
+	oauth2UseCase := bizIdentity.NewOAuth2ServerUseCase(
+		appRepo,
+		authCodeRepo,
+		tokenRepo,
+		userRepo,
+		permissionRepo,
+		"http://localhost:8080", // issuer，实际应从配置读取
+		"your-signing-key",      // signingKey，实际应从配置读取
+	)
+
 	// 创建服务
 	sourceService := svcIdentity.NewIdentitySourceService(sourceUseCase)
 	appService := svcIdentity.NewSSOApplicationService(appUseCase)
@@ -77,14 +101,22 @@ func NewIdentityServices(db *gorm.DB) (*HTTPServer, error) {
 	credentialService := svcIdentity.NewCredentialService(credentialUseCase, appUseCase)
 	permissionService := svcIdentity.NewPermissionService(permissionUseCase)
 	authLogService := svcIdentity.NewAuthLogService(authLogUseCase)
+	oauth2Service := svcIdentity.NewOAuth2ServerService(oauth2UseCase)
+
+	// LDAP服务需要UserRepo，这里暂时传nil，实际使用时需要注入
+	// 在完整集成时，需要从rbac模块获取UserRepo
+	var ldapService *svcIdentity.LDAPService
 
 	return &HTTPServer{
-		sourceService:     sourceService,
-		appService:        appService,
-		portalService:     portalService,
-		credentialService: credentialService,
-		permissionService: permissionService,
-		authLogService:    authLogService,
+		sourceService:      sourceService,
+		appService:         appService,
+		portalService:      portalService,
+		credentialService:  credentialService,
+		permissionService:  permissionService,
+		authLogService:     authLogService,
+		ldapService:        ldapService,
+		oauth2Service:      oauth2Service,
+		userRepo:           userRepo,
 	}, nil
 }
 
@@ -150,5 +182,47 @@ func (s *HTTPServer) RegisterRoutes(router *gin.RouterGroup) {
 			logs.GET("/stats", s.authLogService.GetStats)
 			logs.GET("/trend", s.authLogService.GetLoginTrend)
 		}
+
+		// LDAP管理
+		if s.ldapService != nil {
+			sources.POST("/:id/test", s.ldapService.TestConnection)
+			sources.POST("/:id/sync", s.ldapService.SyncUsers)
+			sources.GET("/:id/sync/jobs", s.ldapService.ListSyncJobs)
+			sources.GET("/:id/sync/jobs/:jobId", s.ldapService.GetSyncStatus)
+		}
 	}
+}
+
+// RegisterOAuth2Routes 注册OAuth2服务端路由（需要在根路由注册）
+func (s *HTTPServer) RegisterOAuth2Routes(router *gin.Engine, authMiddleware func() gin.HandlerFunc) {
+	// OAuth2 公开端点（不需要认证）
+	oauth2 := router.Group("/oauth2")
+	{
+		// OIDC 发现端点
+		oauth2.GET("/.well-known/openid-configuration", s.oauth2Service.Discovery)
+		oauth2.GET("/jwks", s.oauth2Service.JWKS)
+
+		// Token 端点（客户端认证，不需要用户认证）
+		oauth2.POST("/token", s.oauth2Service.Token)
+
+		// Token 内省和撤销
+		oauth2.POST("/introspect", s.oauth2Service.Introspect)
+		oauth2.POST("/revoke", s.oauth2Service.Revoke)
+	}
+
+	// OAuth2 需要用户认证的端点
+	oauth2Auth := router.Group("/oauth2")
+	oauth2Auth.Use(authMiddleware())
+	{
+		// 授权端点
+		oauth2Auth.GET("/authorize", s.oauth2Service.Authorize)
+
+		// 用户信息端点
+		oauth2Auth.GET("/userinfo", s.oauth2Service.UserInfo)
+	}
+}
+
+// GetOAuth2Service 获取OAuth2服务（供外部使用）
+func (s *HTTPServer) GetOAuth2Service() *svcIdentity.OAuth2ServerService {
+	return s.oauth2Service
 }

@@ -109,6 +109,25 @@
             </el-button>
           </el-form-item>
         </el-form>
+
+        <!-- 第三方登录 -->
+        <div v-if="enabledProviders.length > 0" class="social-login-section">
+          <div class="social-divider">
+            <span>或使用第三方登录</span>
+          </div>
+          <div class="social-buttons">
+            <div
+              v-for="provider in enabledProviders"
+              :key="provider.id"
+              class="social-button"
+              @click="handleSocialLogin(provider)"
+            >
+              <img v-if="provider.icon" :src="provider.icon" :alt="provider.name" class="provider-icon" />
+              <span v-else class="provider-initial">{{ provider.name.charAt(0) }}</span>
+              <span class="provider-name">{{ provider.name }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -124,6 +143,13 @@ import { useSystemStore } from '@/stores/system'
 import request from '@/utils/request'
 import { getPublicConfig } from '@/api/system'
 
+interface Provider {
+  id: number
+  name: string
+  type: string
+  icon: string
+}
+
 const router = useRouter()
 const userStore = useUserStore()
 const systemStore = useSystemStore()
@@ -132,6 +158,7 @@ const loading = ref(false)
 const captchaImage = ref('')
 const captchaId = ref('')
 const captchaEnabled = ref(true) // 默认开启验证码
+const enabledProviders = ref<Provider[]>([])
 
 const loginForm = reactive({
   username: '',
@@ -238,21 +265,45 @@ const handleLogin = async () => {
   })
 }
 
+// 获取启用的身份源列表
+const fetchEnabledProviders = async () => {
+  try {
+    const res: any = await request.get('/api/v1/public/auth/providers')
+    enabledProviders.value = res || []
+  } catch (error) {
+    console.error('获取身份源列表失败', error)
+    enabledProviders.value = []
+  }
+}
+
+// 处理第三方登录
+const handleSocialLogin = async (provider: Provider) => {
+  try {
+    const redirectUrl = window.location.origin + '/oauth/callback/' + provider.type
+    const res: any = await request.get(`/api/v1/public/auth/oauth/${provider.type}/authorize`, {
+      params: { redirect_url: redirectUrl }
+    })
+    if (res?.authUrl) {
+      window.location.href = res.authUrl
+    } else {
+      ElMessage.error('获取授权链接失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '第三方登录失败')
+  }
+}
+
 onMounted(async () => {
-  // 加载记住的用户名
   const rememberedUsername = localStorage.getItem('rememberedUsername')
   if (rememberedUsername) {
     loginForm.username = rememberedUsername
     loginForm.remember = true
   }
-
-  // 加载公开配置
   await loadPublicConfig()
-
-  // 如果开启了验证码，加载验证码
   if (captchaEnabled.value) {
     refreshCaptcha()
   }
+  fetchEnabledProviders()
 })
 </script>
 
@@ -620,5 +671,84 @@ onMounted(async () => {
   .login-wrapper {
     padding: 20px;
   }
+}
+
+/* 第三方登录样式 */
+.social-login-section {
+  margin-top: 30px;
+}
+
+.social-divider {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.social-divider::before,
+.social-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e0e0e0, transparent);
+}
+
+.social-divider span {
+  padding: 0 16px;
+  font-size: 14px;
+  color: #999;
+  white-space: nowrap;
+}
+
+.social-buttons {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.social-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 24px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fafafa;
+  min-width: 100px;
+}
+
+.social-button:hover {
+  border-color: #D4AF37;
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+}
+
+.provider-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+.provider-initial {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #D4AF37, #FFD700);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 50%;
+  margin-bottom: 8px;
+}
+
+.provider-name {
+  font-size: 13px;
+  color: #666;
 }
 </style>

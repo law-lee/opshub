@@ -35,7 +35,7 @@
         </div>
         <div class="filter-actions">
           <el-button class="black-button" @click="loadPermissions">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
+          <el-button class="black-button" @click="resetSearch">重置</el-button>
         </div>
       </div>
 
@@ -125,7 +125,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button class="black-button" @click="dialogVisible = false">取消</el-button>
         <el-button class="black-button" @click="handleSubmit" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
@@ -211,10 +211,8 @@ const loadPermissions = async () => {
       appId: searchForm.appId,
       subjectType: searchForm.subjectType
     })
-    if (res.data.code === 0) {
-      permissionList.value = res.data.data?.list || []
-      pagination.total = res.data.data?.total || 0
-    }
+    permissionList.value = res?.list || []
+    pagination.total = res?.total || 0
   } catch (error) {
     console.error('加载权限失败:', error)
   } finally {
@@ -225,9 +223,7 @@ const loadPermissions = async () => {
 const loadApps = async () => {
   try {
     const res = await getSSOApplications({ pageSize: 100 })
-    if (res.data.code === 0) {
-      appList.value = res.data.data?.list || []
-    }
+    appList.value = res?.list || []
   } catch (error) {
     console.error('加载应用失败:', error)
   }
@@ -427,11 +423,11 @@ onMounted(() => {
 .black-button {
   background-color: #000 !important;
   border-color: #000 !important;
-  color: #d4af37 !important;
+  color: #fff !important;
 }
 
 .black-button:hover {
-  background-color: #1a1a1a !important;
-  border-color: #1a1a1a !important;
+  background-color: #333 !important;
+  border-color: #333 !important;
 }
 </style>

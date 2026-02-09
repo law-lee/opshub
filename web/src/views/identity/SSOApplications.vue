@@ -12,7 +12,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <el-button @click="showTemplates = true">
+        <el-button class="black-button" @click="showTemplates = true">
           <el-icon style="margin-right: 6px;"><Files /></el-icon>
           选择模板
         </el-button>
@@ -49,7 +49,7 @@
         </div>
         <div class="filter-actions">
           <el-button class="black-button" @click="loadApps">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
+          <el-button class="black-button" @click="resetSearch">重置</el-button>
         </div>
       </div>
 
@@ -196,7 +196,7 @@
         </el-row>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button class="black-button" @click="dialogVisible = false">取消</el-button>
         <el-button class="black-button" @click="handleSubmit" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
@@ -280,10 +280,9 @@ const loadApps = async () => {
       category: searchForm.category,
       enabled: searchForm.enabled
     })
-    if (res.data.code === 0) {
-      appList.value = res.data.data?.list || []
-      pagination.total = res.data.data?.total || 0
-    }
+    // 响应拦截器已经解构了响应数据，直接使用 res
+    appList.value = res?.list || []
+    pagination.total = res?.total || 0
   } catch (error) {
     console.error('加载应用失败:', error)
   } finally {
@@ -294,9 +293,8 @@ const loadApps = async () => {
 const loadTemplates = async () => {
   try {
     const res = await getAppTemplates()
-    if (res.data.code === 0) {
-      templates.value = res.data.data || []
-    }
+    // 响应拦截器已经解构了响应数据，直接使用 res
+    templates.value = res || []
   } catch (error) {
     console.error('加载模板失败:', error)
   }
@@ -628,11 +626,11 @@ onMounted(() => {
 .black-button {
   background-color: #000 !important;
   border-color: #000 !important;
-  color: #d4af37 !important;
+  color: #fff !important;
 }
 
 .black-button:hover {
-  background-color: #1a1a1a !important;
-  border-color: #1a1a1a !important;
+  background-color: #333 !important;
+  border-color: #333 !important;
 }
 </style>

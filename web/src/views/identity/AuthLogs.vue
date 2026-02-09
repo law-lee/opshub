@@ -80,7 +80,7 @@
         </div>
         <div class="filter-actions">
           <el-button class="black-button" @click="loadLogs">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
+          <el-button class="black-button" @click="resetSearch">重置</el-button>
         </div>
       </div>
 
@@ -202,10 +202,8 @@ const loadLogs = async () => {
       params.endTime = searchForm.dateRange[1]
     }
     const res = await getAuthLogs(params)
-    if (res.data.code === 0) {
-      logList.value = res.data.data?.list || []
-      pagination.total = res.data.data?.total || 0
-    }
+    logList.value = res?.list || []
+    pagination.total = res?.total || 0
   } catch (error) {
     console.error('加载日志失败:', error)
   } finally {
@@ -216,13 +214,10 @@ const loadLogs = async () => {
 const loadStats = async () => {
   try {
     const res = await getAuthLogStats({})
-    if (res.data.code === 0) {
-      const data = res.data.data || {}
-      stats.totalLogins = data.totalLogins || 0
-      stats.todayLogins = data.todayLogins || 0
-      stats.failedLogins = data.failedLogins || 0
-      stats.appAccessCount = data.appAccessCount || 0
-    }
+    stats.totalLogins = res?.totalLogins || 0
+    stats.todayLogins = res?.todayLogins || 0
+    stats.failedLogins = res?.failedLogins || 0
+    stats.appAccessCount = res?.appAccessCount || 0
   } catch (error) {
     console.error('加载统计失败:', error)
   }
@@ -410,11 +405,11 @@ onMounted(() => {
 .black-button {
   background-color: #000 !important;
   border-color: #000 !important;
-  color: #d4af37 !important;
+  color: #fff !important;
 }
 
 .black-button:hover {
-  background-color: #1a1a1a !important;
-  border-color: #1a1a1a !important;
+  background-color: #333 !important;
+  border-color: #333 !important;
 }
 </style>

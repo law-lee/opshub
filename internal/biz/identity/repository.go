@@ -98,3 +98,29 @@ type UserFavoriteAppRepo interface {
 	ListByUser(ctx context.Context, userID uint) ([]*UserFavoriteApp, error)
 	IsFavorite(ctx context.Context, userID, appID uint) (bool, error)
 }
+
+// OAuthStateRepo OAuth状态仓库接口
+type OAuthStateRepo interface {
+	Create(ctx context.Context, state *OAuthState) error
+	GetByState(ctx context.Context, state string) (*OAuthState, error)
+	Delete(ctx context.Context, state string) error
+	DeleteExpired(ctx context.Context) error
+}
+
+// OAuth2AuthCodeRepo OAuth2授权码仓库接口
+type OAuth2AuthCodeRepo interface {
+	Create(ctx context.Context, code *OAuth2AuthorizationCode) error
+	GetByCode(ctx context.Context, code string) (*OAuth2AuthorizationCode, error)
+	MarkUsed(ctx context.Context, code string) error
+	DeleteExpired(ctx context.Context) error
+}
+
+// OAuth2TokenRepo OAuth2令牌仓库接口
+type OAuth2TokenRepo interface {
+	CreateAccessToken(ctx context.Context, token *OAuth2AccessToken) error
+	CreateRefreshToken(ctx context.Context, token *OAuth2RefreshToken) error
+	GetAccessTokenByHash(ctx context.Context, tokenHash string) (*OAuth2AccessToken, error)
+	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*OAuth2RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, tokenHash string) error
+	DeleteExpiredTokens(ctx context.Context) error
+}

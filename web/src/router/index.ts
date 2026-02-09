@@ -12,6 +12,12 @@ const router = createRouter({
       meta: { title: '登录' }
     },
     {
+      path: '/oauth/callback/:provider?',
+      name: 'OAuthCallback',
+      component: () => import('@/views/auth/OAuthCallback.vue'),
+      meta: { title: '登录中...', public: true }
+    },
+    {
       path: '/',
       name: 'Layout',
       component: () => import('@/views/Layout.vue'),
@@ -200,9 +206,9 @@ export function registerPluginRoutes() {
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
 
-  // 如果访问登录页，且已登录，则跳转到首页
-  if (to.path === '/login') {
-    if (token) {
+  // 公开路由（登录页、OAuth回调等）
+  if (to.path === '/login' || to.meta.public) {
+    if (to.path === '/login' && token) {
       next('/')
     } else {
       next()

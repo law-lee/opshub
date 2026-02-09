@@ -814,6 +814,254 @@ CREATE TABLE IF NOT EXISTS `ssl_renew_tasks` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
+-- 8. 统一认证模块表 (Identity)
+-- ============================================================
+
+-- 身份源表（第三方登录配置）
+CREATE TABLE IF NOT EXISTS `identity_sources` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) NOT NULL COMMENT '身份源名称',
+  `type` varchar(30) NOT NULL COMMENT '类型(wechat/dingtalk/feishu/qq/github/ldap/oidc/saml)',
+  `icon` varchar(255) COMMENT '图标URL',
+  `config` text COMMENT '配置JSON',
+  `user_mapping` text COMMENT '用户属性映射',
+  `auto_create_user` tinyint(1) DEFAULT 0 COMMENT '自动创建用户',
+  `default_role_id` bigint unsigned DEFAULT 0 COMMENT '默认角色ID',
+  `enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用',
+  `sort` int DEFAULT 0 COMMENT '排序',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime COMMENT '删除时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_type` (`type`),
+  KEY `idx_enabled` (`enabled`),
+  KEY `idx_sort` (`sort`),
+  KEY `idx_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- SSO应用表
+CREATE TABLE IF NOT EXISTS `sso_applications` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL COMMENT '应用名称',
+  `code` varchar(50) COMMENT '应用编码',
+  `icon` varchar(255) COMMENT '图标URL',
+  `description` varchar(500) COMMENT '应用描述',
+  `category` varchar(50) COMMENT '分类(cicd/code/monitor/registry/other)',
+  `url` varchar(500) NOT NULL COMMENT '应用URL',
+  `sso_type` varchar(30) COMMENT 'SSO类型(oauth2/saml/form/token)',
+  `sso_config` text COMMENT 'SSO配置JSON',
+  `enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用',
+  `sort` int DEFAULT 0 COMMENT '排序',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime COMMENT '删除时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_code` (`code`, `deleted_at`),
+  KEY `idx_category` (`category`),
+  KEY `idx_enabled` (`enabled`),
+  KEY `idx_sort` (`sort`),
+  KEY `idx_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 用户凭证表（存储用户在各应用的账号密码）
+CREATE TABLE IF NOT EXISTS `user_credentials` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `app_id` bigint unsigned NOT NULL COMMENT '应用ID',
+  `username` varchar(100) COMMENT '应用账号',
+  `password` varchar(500) COMMENT '应用密码(AES加密存储)',
+  `extra_data` text COMMENT '额外数据JSON',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime COMMENT '删除时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_app_id` (`app_id`),
+  KEY `idx_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 应用权限表（控制用户/角色/部门对应用的访问权限）
+CREATE TABLE IF NOT EXISTS `app_permissions` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `app_id` bigint unsigned NOT NULL COMMENT '应用ID',
+  `subject_type` varchar(20) NOT NULL COMMENT '主体类型(user/role/dept)',
+  `subject_id` bigint unsigned NOT NULL COMMENT '主体ID',
+  `permission` varchar(20) DEFAULT 'access' COMMENT '权限类型(access/admin)',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_app_id` (`app_id`),
+  KEY `idx_subject` (`subject_type`, `subject_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 用户OAuth绑定表（用户与第三方账号的绑定关系）
+CREATE TABLE IF NOT EXISTS `user_oauth_bindings` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `source_id` bigint unsigned NOT NULL COMMENT '身份源ID',
+  `source_type` varchar(30) NOT NULL COMMENT '身份源类型',
+  `open_id` varchar(255) COMMENT 'OpenID',
+  `union_id` varchar(255) COMMENT 'UnionID',
+  `nickname` varchar(100) COMMENT '昵称',
+  `avatar` varchar(500) COMMENT '头像URL',
+  `extra_info` text COMMENT '额外信息JSON',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime COMMENT '删除时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_source_id` (`source_id`),
+  KEY `idx_open_id` (`open_id`),
+  KEY `idx_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 认证日志表
+CREATE TABLE IF NOT EXISTS `auth_logs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned COMMENT '用户ID',
+  `username` varchar(50) COMMENT '用户名',
+  `action` varchar(30) COMMENT '动作(login/logout/access_app)',
+  `app_id` bigint unsigned DEFAULT 0 COMMENT '应用ID',
+  `app_name` varchar(100) COMMENT '应用名称',
+  `login_type` varchar(30) COMMENT '登录类型(password/oauth/ldap)',
+  `ip` varchar(50) COMMENT 'IP地址',
+  `location` varchar(100) COMMENT '地理位置',
+  `user_agent` varchar(500) COMMENT 'UserAgent',
+  `result` varchar(20) COMMENT '结果(success/failed)',
+  `fail_reason` varchar(255) COMMENT '失败原因',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_action` (`action`),
+  KEY `idx_result` (`result`),
+  KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 用户收藏应用表
+CREATE TABLE IF NOT EXISTS `user_favorite_apps` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `app_id` bigint unsigned NOT NULL COMMENT '应用ID',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_app` (`user_id`, `app_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_app_id` (`app_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OAuth状态表（CSRF防护）
+CREATE TABLE IF NOT EXISTS `oauth_states` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `state` varchar(64) NOT NULL COMMENT '状态码',
+  `provider` varchar(30) NOT NULL COMMENT '提供商类型',
+  `redirect_url` varchar(500) COMMENT '回调后重定向URL',
+  `action` varchar(20) DEFAULT 'login' COMMENT '操作类型(login/bind)',
+  `user_id` bigint unsigned DEFAULT 0 COMMENT '用户ID(绑定操作时使用)',
+  `expires_at` datetime NOT NULL COMMENT '过期时间',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_state` (`state`),
+  KEY `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OAuth2授权码表（OpsHub作为OAuth2服务端）
+CREATE TABLE IF NOT EXISTS `oauth2_authorization_codes` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(64) NOT NULL COMMENT '授权码',
+  `client_id` varchar(100) NOT NULL COMMENT '客户端ID',
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `scope` text COMMENT '授权范围',
+  `redirect_uri` varchar(500) COMMENT '重定向URI',
+  `code_challenge` varchar(128) COMMENT 'PKCE挑战码',
+  `code_challenge_method` varchar(10) COMMENT 'PKCE方法(S256/plain)',
+  `expires_at` datetime NOT NULL COMMENT '过期时间',
+  `used` tinyint(1) DEFAULT 0 COMMENT '是否已使用',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_code` (`code`),
+  KEY `idx_client_id` (`client_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OAuth2访问令牌表
+CREATE TABLE IF NOT EXISTS `oauth2_access_tokens` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `token_hash` varchar(64) NOT NULL COMMENT '令牌哈希',
+  `client_id` varchar(100) NOT NULL COMMENT '客户端ID',
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `scope` text COMMENT '授权范围',
+  `expires_at` datetime NOT NULL COMMENT '过期时间',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_token_hash` (`token_hash`),
+  KEY `idx_client_id` (`client_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OAuth2刷新令牌表
+CREATE TABLE IF NOT EXISTS `oauth2_refresh_tokens` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `token_hash` varchar(64) NOT NULL COMMENT '令牌哈希',
+  `access_token_id` bigint unsigned NOT NULL COMMENT '关联的访问令牌ID',
+  `expires_at` datetime NOT NULL COMMENT '过期时间',
+  `revoked` tinyint(1) DEFAULT 0 COMMENT '是否已撤销',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_token_hash` (`token_hash`),
+  KEY `idx_access_token_id` (`access_token_id`),
+  KEY `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- MFA设置表（双因素认证）
+CREATE TABLE IF NOT EXISTS `mfa_settings` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `totp_enabled` tinyint(1) DEFAULT 0 COMMENT 'TOTP是否启用',
+  `totp_secret` varchar(255) COMMENT 'TOTP密钥(加密存储)',
+  `totp_verified` tinyint(1) DEFAULT 0 COMMENT 'TOTP是否已验证',
+  `backup_codes` text COMMENT '备用码(JSON数组,加密存储)',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- MFA挑战表
+CREATE TABLE IF NOT EXISTS `mfa_challenges` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL COMMENT '用户ID',
+  `token` varchar(64) NOT NULL COMMENT '挑战令牌',
+  `type` varchar(20) NOT NULL COMMENT '类型(login/action)',
+  `attempts` int DEFAULT 0 COMMENT '尝试次数',
+  `verified` tinyint(1) DEFAULT 0 COMMENT '是否已验证',
+  `expires_at` datetime NOT NULL COMMENT '过期时间',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_token` (`token`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- LDAP同步任务表
+CREATE TABLE IF NOT EXISTS `ldap_sync_jobs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `source_id` bigint unsigned NOT NULL COMMENT '身份源ID',
+  `status` varchar(20) NOT NULL COMMENT '状态(pending/running/completed/failed)',
+  `total_users` int DEFAULT 0 COMMENT '总用户数',
+  `synced_users` int DEFAULT 0 COMMENT '已同步用户数',
+  `failed_users` int DEFAULT 0 COMMENT '失败用户数',
+  `error_message` text COMMENT '错误信息',
+  `started_at` datetime COMMENT '开始时间',
+  `completed_at` datetime COMMENT '完成时间',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_source_id` (`source_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
 -- 7. Nginx 日志分析插件表
 -- ============================================================
 

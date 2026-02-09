@@ -188,9 +188,7 @@ const loadApps = async () => {
   loading.value = true
   try {
     const res = await getPortalApps({ category: selectedCategory.value })
-    if (res.data.code === 0) {
-      apps.value = res.data.data || []
-    }
+    apps.value = res || []
   } catch (error) {
     console.error('加载应用列表失败:', error)
   } finally {
@@ -201,8 +199,8 @@ const loadApps = async () => {
 const handleAccessApp = async (app: PortalApp) => {
   try {
     const res = await accessApp(app.id)
-    if (res.data.code === 0 && res.data.data?.url) {
-      window.open(res.data.data.url, '_blank')
+    if (res?.url) {
+      window.open(res.url, '_blank')
     }
   } catch (error) {
     ElMessage.error('访问应用失败')
@@ -212,10 +210,8 @@ const handleAccessApp = async (app: PortalApp) => {
 const handleToggleFavorite = async (app: PortalApp) => {
   try {
     const res = await toggleFavoriteApp(app.id)
-    if (res.data.code === 0) {
-      app.isFavorite = res.data.data?.isFavorite ?? !app.isFavorite
-      ElMessage.success(app.isFavorite ? '已收藏' : '已取消收藏')
-    }
+    app.isFavorite = res?.isFavorite ?? !app.isFavorite
+    ElMessage.success(app.isFavorite ? '已收藏' : '已取消收藏')
   } catch (error) {
     ElMessage.error('操作失败')
   }

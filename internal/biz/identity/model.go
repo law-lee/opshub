@@ -27,41 +27,50 @@ import (
 
 // IdentitySource 身份源表
 type IdentitySource struct {
-	gorm.Model
-	Name           string `gorm:"type:varchar(50);not null;comment:身份源名称" json:"name"`
-	Type           string `gorm:"type:varchar(30);not null;comment:类型(wechat/dingtalk/feishu/qq/github等)" json:"type"`
-	Icon           string `gorm:"type:varchar(255);comment:图标URL" json:"icon"`
-	Config         string `gorm:"type:text;comment:配置JSON" json:"config"`
-	UserMapping    string `gorm:"type:text;comment:用户属性映射" json:"userMapping"`
-	AutoCreateUser bool   `gorm:"default:false;comment:自动创建用户" json:"autoCreateUser"`
-	DefaultRoleID  uint   `gorm:"default:0;comment:默认角色ID" json:"defaultRoleId"`
-	Enabled        bool   `gorm:"default:true;comment:是否启用" json:"enabled"`
-	Sort           int    `gorm:"default:0;comment:排序" json:"sort"`
+	ID             uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	Name           string         `gorm:"type:varchar(50);not null;comment:身份源名称" json:"name"`
+	Type           string         `gorm:"type:varchar(30);not null;comment:类型(wechat/dingtalk/feishu/qq/github等)" json:"type"`
+	Icon           string         `gorm:"type:varchar(255);comment:图标URL" json:"icon"`
+	Config         string         `gorm:"type:text;comment:配置JSON" json:"config"`
+	UserMapping    string         `gorm:"type:text;comment:用户属性映射" json:"userMapping"`
+	AutoCreateUser bool           `gorm:"default:false;comment:自动创建用户" json:"autoCreateUser"`
+	DefaultRoleID  uint           `gorm:"default:0;comment:默认角色ID" json:"defaultRoleId"`
+	Enabled        bool           `gorm:"default:true;comment:是否启用" json:"enabled"`
+	Sort           int            `gorm:"default:0;comment:排序" json:"sort"`
 }
 
 // SSOApplication SSO应用表
 type SSOApplication struct {
-	gorm.Model
-	Name        string `gorm:"type:varchar(100);not null;comment:应用名称" json:"name"`
-	Code        string `gorm:"type:varchar(50);uniqueIndex;comment:应用编码" json:"code"`
-	Icon        string `gorm:"type:varchar(255);comment:图标URL" json:"icon"`
-	Description string `gorm:"type:varchar(500);comment:应用描述" json:"description"`
-	Category    string `gorm:"type:varchar(50);comment:分类(cicd/code/monitor/registry)" json:"category"`
-	URL         string `gorm:"type:varchar(500);not null;comment:应用URL" json:"url"`
-	SSOType     string `gorm:"type:varchar(30);comment:SSO类型(oauth2/saml/form/token)" json:"ssoType"`
-	SSOConfig   string `gorm:"type:text;comment:SSO配置JSON" json:"ssoConfig"`
-	Enabled     bool   `gorm:"default:true;comment:是否启用" json:"enabled"`
-	Sort        int    `gorm:"default:0;comment:排序" json:"sort"`
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	Name        string         `gorm:"type:varchar(100);not null;comment:应用名称" json:"name"`
+	Code        string         `gorm:"type:varchar(50);uniqueIndex;comment:应用编码" json:"code"`
+	Icon        string         `gorm:"type:varchar(255);comment:图标URL" json:"icon"`
+	Description string         `gorm:"type:varchar(500);comment:应用描述" json:"description"`
+	Category    string         `gorm:"type:varchar(50);comment:分类(cicd/code/monitor/registry)" json:"category"`
+	URL         string         `gorm:"type:varchar(500);not null;comment:应用URL" json:"url"`
+	SSOType     string         `gorm:"type:varchar(30);comment:SSO类型(oauth2/saml/form/token)" json:"ssoType"`
+	SSOConfig   string         `gorm:"type:text;comment:SSO配置JSON" json:"ssoConfig"`
+	Enabled     bool           `gorm:"default:true;comment:是否启用" json:"enabled"`
+	Sort        int            `gorm:"default:0;comment:排序" json:"sort"`
 }
 
 // UserCredential 用户凭证表
 type UserCredential struct {
-	gorm.Model
-	UserID    uint   `gorm:"index;not null;comment:用户ID" json:"userId"`
-	AppID     uint   `gorm:"index;not null;comment:应用ID" json:"appId"`
-	Username  string `gorm:"type:varchar(100);comment:应用账号" json:"username"`
-	Password  string `gorm:"type:varchar(500);comment:应用密码(加密存储)" json:"-"`
-	ExtraData string `gorm:"type:text;comment:额外数据JSON" json:"extraData"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	UserID    uint           `gorm:"index;not null;comment:用户ID" json:"userId"`
+	AppID     uint           `gorm:"index;not null;comment:应用ID" json:"appId"`
+	Username  string         `gorm:"type:varchar(100);comment:应用账号" json:"username"`
+	Password  string         `gorm:"type:varchar(500);comment:应用密码(加密存储)" json:"-"`
+	ExtraData string         `gorm:"type:text;comment:额外数据JSON" json:"extraData"`
 }
 
 // AppPermission 应用权限表
@@ -76,15 +85,18 @@ type AppPermission struct {
 
 // UserOAuthBinding 用户第三方绑定表
 type UserOAuthBinding struct {
-	gorm.Model
-	UserID     uint   `gorm:"index;not null;comment:用户ID" json:"userId"`
-	SourceID   uint   `gorm:"index;not null;comment:身份源ID" json:"sourceId"`
-	SourceType string `gorm:"type:varchar(30);not null;comment:身份源类型" json:"sourceType"`
-	OpenID     string `gorm:"type:varchar(255);index;comment:OpenID" json:"openId"`
-	UnionID    string `gorm:"type:varchar(255);comment:UnionID" json:"unionId"`
-	Nickname   string `gorm:"type:varchar(100);comment:昵称" json:"nickname"`
-	Avatar     string `gorm:"type:varchar(500);comment:头像URL" json:"avatar"`
-	ExtraInfo  string `gorm:"type:text;comment:额外信息JSON" json:"extraInfo"`
+	ID         uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+	UserID     uint           `gorm:"index;not null;comment:用户ID" json:"userId"`
+	SourceID   uint           `gorm:"index;not null;comment:身份源ID" json:"sourceId"`
+	SourceType string         `gorm:"type:varchar(30);not null;comment:身份源类型" json:"sourceType"`
+	OpenID     string         `gorm:"type:varchar(255);index;comment:OpenID" json:"openId"`
+	UnionID    string         `gorm:"type:varchar(255);comment:UnionID" json:"unionId"`
+	Nickname   string         `gorm:"type:varchar(100);comment:昵称" json:"nickname"`
+	Avatar     string         `gorm:"type:varchar(500);comment:头像URL" json:"avatar"`
+	ExtraInfo  string         `gorm:"type:text;comment:额外信息JSON" json:"extraInfo"`
 }
 
 // AuthLog 认证日志表
@@ -225,4 +237,98 @@ type TopUserStat struct {
 	UserID   uint   `json:"userId"`
 	Username string `json:"username"`
 	Count    int64  `json:"count"`
+}
+
+// OAuthState OAuth状态表（用于CSRF防护）
+type OAuthState struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	State       string    `gorm:"type:varchar(64);uniqueIndex;not null;comment:状态码" json:"state"`
+	Provider    string    `gorm:"type:varchar(30);not null;comment:提供商类型" json:"provider"`
+	RedirectURL string    `gorm:"type:varchar(500);comment:回调后重定向URL" json:"redirectUrl"`
+	Action      string    `gorm:"type:varchar(20);default:login;comment:操作类型(login/bind)" json:"action"`
+	UserID      uint      `gorm:"default:0;comment:用户ID(绑定操作时使用)" json:"userId"`
+	ExpiresAt   time.Time `gorm:"index;not null;comment:过期时间" json:"expiresAt"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+func (OAuthState) TableName() string {
+	return "oauth_states"
+}
+
+// OAuthToken OAuth令牌
+type OAuthToken struct {
+	AccessToken  string    `json:"accessToken"`
+	RefreshToken string    `json:"refreshToken,omitempty"`
+	TokenType    string    `json:"tokenType"`
+	ExpiresIn    int       `json:"expiresIn"`
+	ExpiresAt    time.Time `json:"expiresAt,omitempty"`
+}
+
+// OAuthUserInfo 统一的OAuth用户信息
+type OAuthUserInfo struct {
+	OpenID    string                 `json:"openId"`
+	UnionID   string                 `json:"unionId,omitempty"`
+	Nickname  string                 `json:"nickname"`
+	Avatar    string                 `json:"avatar,omitempty"`
+	Email     string                 `json:"email,omitempty"`
+	Phone     string                 `json:"phone,omitempty"`
+	ExtraInfo map[string]interface{} `json:"extraInfo,omitempty"`
+}
+
+// OAuthLoginResult OAuth登录结果
+type OAuthLoginResult struct {
+	IsNewUser bool           `json:"isNewUser"`
+	NeedBind  bool           `json:"needBind"`
+	UserID    uint           `json:"userId,omitempty"`
+	Token     string         `json:"token,omitempty"`
+	BindToken string         `json:"bindToken,omitempty"`
+	OAuthInfo *OAuthUserInfo `json:"oauthInfo,omitempty"`
+}
+
+// OAuth2AuthorizationCode OAuth2授权码
+type OAuth2AuthorizationCode struct {
+	ID                  uint      `gorm:"primaryKey" json:"id"`
+	Code                string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"code"`
+	ClientID            string    `gorm:"type:varchar(100);not null;index" json:"clientId"`
+	UserID              uint      `gorm:"not null;index" json:"userId"`
+	Scope               string    `gorm:"type:text" json:"scope"`
+	RedirectURI         string    `gorm:"type:varchar(500)" json:"redirectUri"`
+	CodeChallenge       string    `gorm:"type:varchar(128)" json:"codeChallenge"`
+	CodeChallengeMethod string    `gorm:"type:varchar(10)" json:"codeChallengeMethod"`
+	ExpiresAt           time.Time `gorm:"index;not null" json:"expiresAt"`
+	Used                bool      `gorm:"default:false" json:"used"`
+	CreatedAt           time.Time `json:"createdAt"`
+}
+
+func (OAuth2AuthorizationCode) TableName() string {
+	return "oauth2_authorization_codes"
+}
+
+// OAuth2AccessToken OAuth2访问令牌
+type OAuth2AccessToken struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	TokenHash string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"tokenHash"`
+	ClientID  string    `gorm:"type:varchar(100);not null;index" json:"clientId"`
+	UserID    uint      `gorm:"not null;index" json:"userId"`
+	Scope     string    `gorm:"type:text" json:"scope"`
+	ExpiresAt time.Time `gorm:"index;not null" json:"expiresAt"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (OAuth2AccessToken) TableName() string {
+	return "oauth2_access_tokens"
+}
+
+// OAuth2RefreshToken OAuth2刷新令牌
+type OAuth2RefreshToken struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	TokenHash     string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"tokenHash"`
+	AccessTokenID uint      `gorm:"not null;index" json:"accessTokenId"`
+	ExpiresAt     time.Time `gorm:"not null" json:"expiresAt"`
+	Revoked       bool      `gorm:"default:false" json:"revoked"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+func (OAuth2RefreshToken) TableName() string {
+	return "oauth2_refresh_tokens"
 }

@@ -192,6 +192,8 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 			appLogger.Error("创建Identity服务失败", zap.Error(err))
 		} else {
 			identityServer.RegisterRoutes(v1)
+			// 注册 OAuth2 服务端路由（在根路径 /oauth2）
+			identityServer.RegisterOAuth2Routes(router, authMiddleware.AuthRequired)
 		}
 
 		// 上传接口
