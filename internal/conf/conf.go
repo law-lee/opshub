@@ -36,12 +36,22 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Mode       string `mapstructure:"mode"`         // debug, release, test
-	HttpPort   int    `mapstructure:"http_port"`
-	RPCPort    int    `mapstructure:"rpc_port"`
-	ReadTimeout  int  `mapstructure:"read_timeout"`  // 毫秒
-	WriteTimeout int  `mapstructure:"write_timeout"` // 毫秒
-	JWTSecret  string `mapstructure:"jwt_secret"`    // JWT密钥
+	Mode         string       `mapstructure:"mode"`          // debug, release, test
+	HttpPort     int          `mapstructure:"http_port"`
+	RPCPort      int          `mapstructure:"rpc_port"`
+	ReadTimeout  int          `mapstructure:"read_timeout"`  // 毫秒
+	WriteTimeout int          `mapstructure:"write_timeout"` // 毫秒
+	JWTSecret    string       `mapstructure:"jwt_secret"`    // JWT密钥
+	ExternalURL  string       `mapstructure:"external_url"`  // 外部访问URL，用于OAuth2 issuer
+}
+
+// GetOAuth2Issuer 获取OAuth2 issuer URL
+func (c *ServerConfig) GetOAuth2Issuer() string {
+	if c.ExternalURL != "" {
+		return c.ExternalURL
+	}
+	// 默认使用本地地址
+	return fmt.Sprintf("http://localhost:%d", c.HttpPort)
 }
 
 // DatabaseConfig 数据库配置

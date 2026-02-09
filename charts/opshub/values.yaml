@@ -223,6 +223,8 @@ server:
   jwtSecret: "opshub-jwt-secret-key-please-change-in-production"
   # JWT 过期时间
   jwtExpire: "24h"
+  # 外部访问URL（用于OAuth2 SSO，如 http://opshub.example.com:9876）
+  externalURL: ""
 
 # ==================== Ingress 配置 ====================
 ingress:

@@ -187,7 +187,7 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 		assetServer.RegisterRoutes(v1)
 
 		// 注册 Identity 路由
-		identityServer, err := identityserver.NewIdentityServices(s.db)
+		identityServer, err := identityserver.NewIdentityServices(s.db, s.conf)
 		if err != nil {
 			appLogger.Error("创建Identity服务失败", zap.Error(err))
 		} else {

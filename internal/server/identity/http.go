@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	bizIdentity "github.com/ydcloud-dy/opshub/internal/biz/identity"
 	"github.com/ydcloud-dy/opshub/internal/biz/rbac"
+	"github.com/ydcloud-dy/opshub/internal/conf"
 	dataIdentity "github.com/ydcloud-dy/opshub/internal/data/identity"
 	dataRbac "github.com/ydcloud-dy/opshub/internal/data/rbac"
 	svcIdentity "github.com/ydcloud-dy/opshub/internal/service/identity"
@@ -43,7 +44,7 @@ type HTTPServer struct {
 }
 
 // NewIdentityServices 创建身份认证相关服务
-func NewIdentityServices(db *gorm.DB) (*HTTPServer, error) {
+func NewIdentityServices(db *gorm.DB, cfg *conf.Config) (*HTTPServer, error) {
 	// 自动迁移数据库表
 	if err := db.AutoMigrate(
 		&bizIdentity.IdentitySource{},
@@ -90,8 +91,8 @@ func NewIdentityServices(db *gorm.DB) (*HTTPServer, error) {
 		tokenRepo,
 		userRepo,
 		permissionRepo,
-		"http://localhost:8080", // issuer，实际应从配置读取
-		"your-signing-key",      // signingKey，实际应从配置读取
+		cfg.Server.GetOAuth2Issuer(), // 从配置读取 issuer
+		cfg.Server.JWTSecret,         // 使用 JWT 密钥作为签名密钥
 	)
 
 	// 创建服务

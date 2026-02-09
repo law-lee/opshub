@@ -5,6 +5,7 @@ server:
   read_timeout: 60000  # 毫秒
   write_timeout: 60000 # 毫秒
   jwt_secret: "your-secret-key-change-in-production"  # JWT密钥
+  external_url: ""  # 外部访问URL，用于OAuth2 SSO，如 http://10.122.24.67:9876
 
 database:
   driver: mysql
