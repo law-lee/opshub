@@ -145,10 +145,39 @@ func (p *Plugin) RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 func (p *Plugin) GetMenus() []plugin.MenuConfig {
 	return []plugin.MenuConfig{
 		{
-			Name: "域名监控",
-			Path: "/monitor/domains",
-			Icon: "Monitor",
-			Sort: 40,
+			Name:       "监控中心",
+			Path:       "/monitor",
+			Icon:       "Monitor",
+			Sort:       20,
+			ParentPath: "",
+		},
+		{
+			Name:       "域名监控",
+			Path:       "/monitor/domain",
+			Icon:       "Monitor",
+			Sort:       1,
+			ParentPath: "/monitor",
+		},
+		{
+			Name:       "告警通道",
+			Path:       "/monitor/alert-channels",
+			Icon:       "Bell",
+			Sort:       2,
+			ParentPath: "/monitor",
+		},
+		{
+			Name:       "告警接收人",
+			Path:       "/monitor/alert-receivers",
+			Icon:       "User",
+			Sort:       3,
+			ParentPath: "/monitor",
+		},
+		{
+			Name:       "告警日志",
+			Path:       "/monitor/alert-logs",
+			Icon:       "Document",
+			Sort:       4,
+			ParentPath: "/monitor",
 		},
 	}
 }

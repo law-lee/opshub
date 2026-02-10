@@ -98,22 +98,32 @@ func (p *Plugin) RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 func (p *Plugin) GetMenus() []plugin.MenuConfig {
 	return []plugin.MenuConfig{
 		{
-			Name: "执行任务",
-			Path: "/task/execute",
-			Icon: "VideoPlay",
-			Sort: 50,
+			Name:       "任务中心",
+			Path:       "/task",
+			Icon:       "Tickets",
+			Sort:       90,
+			ParentPath: "",
 		},
 		{
-			Name: "模板管理",
-			Path: "/task/templates",
-			Icon: "Document",
-			Sort: 51,
+			Name:       "执行任务",
+			Path:       "/task/execute",
+			Icon:       "VideoPlay",
+			Sort:       1,
+			ParentPath: "/task",
 		},
 		{
-			Name: "文件分发",
-			Path: "/task/file-distribution",
-			Icon: "FolderOpened",
-			Sort: 52,
+			Name:       "模板管理",
+			Path:       "/task/templates",
+			Icon:       "Document",
+			Sort:       2,
+			ParentPath: "/task",
+		},
+		{
+			Name:       "文件分发",
+			Path:       "/task/file-distribution",
+			Icon:       "FolderOpened",
+			Sort:       3,
+			ParentPath: "/task",
 		},
 	}
 }

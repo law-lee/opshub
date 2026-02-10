@@ -102,7 +102,7 @@ func NewIdentityServices(db *gorm.DB, cfg *conf.Config) (*HTTPServer, error) {
 	credentialService := svcIdentity.NewCredentialService(credentialUseCase, appUseCase)
 	permissionService := svcIdentity.NewPermissionService(permissionUseCase)
 	authLogService := svcIdentity.NewAuthLogService(authLogUseCase)
-	oauth2Service := svcIdentity.NewOAuth2ServerService(oauth2UseCase)
+	oauth2Service := svcIdentity.NewOAuth2ServerService(oauth2UseCase, cfg.Server.GetFrontendURL())
 
 	// LDAP服务需要UserRepo，这里暂时传nil，实际使用时需要注入
 	// 在完整集成时，需要从rbac模块获取UserRepo
@@ -195,7 +195,7 @@ func (s *HTTPServer) RegisterRoutes(router *gin.RouterGroup) {
 }
 
 // RegisterOAuth2Routes 注册OAuth2服务端路由（需要在根路由注册）
-func (s *HTTPServer) RegisterOAuth2Routes(router *gin.Engine, authMiddleware func() gin.HandlerFunc) {
+func (s *HTTPServer) RegisterOAuth2Routes(router *gin.Engine, authMiddleware func() gin.HandlerFunc, optionalAuth func() gin.HandlerFunc) {
 	// OAuth2 公开端点（不需要认证）
 	oauth2 := router.Group("/oauth2")
 	{
@@ -206,24 +206,32 @@ func (s *HTTPServer) RegisterOAuth2Routes(router *gin.Engine, authMiddleware fun
 		// Token 端点（客户端认证，不需要用户认证）
 		oauth2.POST("/token", s.oauth2Service.Token)
 
+		// 用户信息端点（使用 OAuth2 access token 认证，在 handler 内部验证）
+		oauth2.GET("/userinfo", s.oauth2Service.UserInfo)
+
 		// Token 内省和撤销
 		oauth2.POST("/introspect", s.oauth2Service.Introspect)
 		oauth2.POST("/revoke", s.oauth2Service.Revoke)
 	}
 
-	// OAuth2 需要用户认证的端点
-	oauth2Auth := router.Group("/oauth2")
-	oauth2Auth.Use(authMiddleware())
+	// 授权端点 - 使用可选认证，未登录时重定向到登录页
+	oauth2Optional := router.Group("/oauth2")
+	oauth2Optional.Use(optionalAuth())
 	{
-		// 授权端点
-		oauth2Auth.GET("/authorize", s.oauth2Service.Authorize)
-
-		// 用户信息端点
-		oauth2Auth.GET("/userinfo", s.oauth2Service.UserInfo)
+		oauth2Optional.GET("/authorize", s.oauth2Service.Authorize)
 	}
 }
 
 // GetOAuth2Service 获取OAuth2服务（供外部使用）
 func (s *HTTPServer) GetOAuth2Service() *svcIdentity.OAuth2ServerService {
 	return s.oauth2Service
+}
+
+// RegisterPublicRoutes 注册公开路由（不需要认证）
+func (s *HTTPServer) RegisterPublicRoutes(router *gin.RouterGroup) {
+	auth := router.Group("/auth")
+	{
+		// 获取启用的身份源提供商（用于登录页展示）
+		auth.GET("/providers", s.sourceService.GetEnabledSources)
+	}
 }

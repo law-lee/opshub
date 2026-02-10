@@ -90,6 +90,13 @@ func (m *AuthMiddleware) AuthRequired() gin.HandlerFunc {
 			token = c.Query("token")
 		}
 
+		// 从 session cookie 获取（用于 OAuth2 SSO 流程）
+		if token == "" {
+			if cookieToken, err := c.Cookie("opshub_session"); err == nil && cookieToken != "" {
+				token = cookieToken
+			}
+		}
+
 		// 如果都没有，返回未授权
 		if token == "" {
 			response.ErrorCode(c, http.StatusUnauthorized, "未登录")
@@ -106,6 +113,47 @@ func (m *AuthMiddleware) AuthRequired() gin.HandlerFunc {
 
 		c.Set(UserIdKey, claims.UserID)
 		c.Set(UsernameKey, claims.Username)
+		c.Set("userID", claims.UserID) // 兼容 OAuth2 使用的 key
+		c.Next()
+	}
+}
+
+// OptionalAuth 可选认证中间件（不强制要求登录，用于OAuth2授权端点）
+func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var token string
+
+		// 从 Authorization header 获取 token
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				token = parts[1]
+			}
+		}
+
+		// 从 query 参数获取
+		if token == "" {
+			token = c.Query("token")
+		}
+
+		// 从 session cookie 获取（用于 OAuth2 SSO 流程，浏览器重定向时会自动携带）
+		if token == "" {
+			if cookieToken, err := c.Cookie("opshub_session"); err == nil && cookieToken != "" {
+				token = cookieToken
+			}
+		}
+
+		// 如果有 token，尝试解析
+		if token != "" {
+			claims, err := m.authService.ParseToken(token)
+			if err == nil {
+				c.Set(UserIdKey, claims.UserID)
+				c.Set(UsernameKey, claims.Username)
+				c.Set("userID", claims.UserID)
+			}
+		}
+
 		c.Next()
 	}
 }

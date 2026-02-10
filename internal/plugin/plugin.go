@@ -21,6 +21,7 @@ package plugin
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -158,6 +159,11 @@ func (m *Manager) Enable(name string) error {
 		return err
 	}
 
+	// 同步插件菜单到数据库
+	if err := m.syncPluginMenus(name, plugin.GetMenus()); err != nil {
+		return fmt.Errorf("failed to sync plugin menus: %w", err)
+	}
+
 	// 更新插件状态为已启用
 	if err := m.db.Model(&PluginState{}).Where("name = ?", name).Update("enabled", true).Error; err != nil {
 		return fmt.Errorf("failed to update plugin state: %w", err)
@@ -176,6 +182,11 @@ func (m *Manager) Disable(name string) error {
 	// Execute plugin Disable method
 	if err := plugin.Disable(m.db); err != nil {
 		return err
+	}
+
+	// 从数据库移除插件菜单
+	if err := m.removePluginMenus(name); err != nil {
+		return fmt.Errorf("failed to remove plugin menus: %w", err)
 	}
 
 	// 更新插件状态为已禁用
@@ -232,4 +243,168 @@ func (m *Manager) GetAllMenus() []MenuConfig {
 		}
 	}
 	return allMenus
+}
+
+// pluginSysMenu 插件菜单数据库模型（本地定义，避免循环引用）
+type pluginSysMenu struct {
+	ID        uint           `gorm:"primarykey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+	Name      string         `gorm:"type:varchar(50);not null;comment:菜单名称"`
+	Code      string         `gorm:"type:varchar(50);uniqueIndex;comment:菜单编码"`
+	Type      int            `gorm:"type:tinyint;not null;comment:类型 1:目录 2:菜单 3:按钮"`
+	ParentID  uint           `gorm:"default:0;comment:父菜单ID"`
+	Path      string         `gorm:"type:varchar(200);comment:路由路径"`
+	Component string         `gorm:"type:varchar(200);comment:组件路径"`
+	Icon      string         `gorm:"type:varchar(100);comment:图标"`
+	Sort      int            `gorm:"type:int;default:0;comment:排序"`
+	Visible   int            `gorm:"type:tinyint;default:1;comment:是否显示 1:显示 0:隐藏"`
+	Status    int            `gorm:"type:tinyint;default:1;comment:状态 1:启用 0:禁用"`
+}
+
+func (pluginSysMenu) TableName() string {
+	return "sys_menu"
+}
+
+// syncPluginMenus 同步插件菜单到数据库
+func (m *Manager) syncPluginMenus(pluginName string, menus []MenuConfig) error {
+	if len(menus) == 0 {
+		return nil
+	}
+
+	// 生成菜单code前缀（将连字符替换为下划线）
+	codePrefix := "_" + strings.ReplaceAll(pluginName, "-", "_")
+	// 原始前缀（保留连字符，用于清理旧格式记录）
+	originalPrefix := "_" + pluginName
+
+	// 第一步：收集所有菜单路径
+	allPaths := make([]string, 0, len(menus))
+	for _, menu := range menus {
+		allPaths = append(allPaths, menu.Path)
+	}
+
+	// 第二步：硬删除所有已存在的同路径菜单（使用原生SQL确保完全删除）
+	if err := m.db.Exec("DELETE FROM sys_menu WHERE path IN ?", allPaths).Error; err != nil {
+		return fmt.Errorf("failed to clean existing menus by path: %w", err)
+	}
+
+	// 第三步：硬删除所有以此插件code前缀开头的菜单
+	if err := m.db.Exec("DELETE FROM sys_menu WHERE code = ? OR code LIKE ?", codePrefix, codePrefix+"_%").Error; err != nil {
+		return fmt.Errorf("failed to clean existing menus by code prefix: %w", err)
+	}
+
+	// 第四步：如果插件名包含连字符，也删除旧格式（如 _ssl-cert）
+	if codePrefix != originalPrefix {
+		if err := m.db.Exec("DELETE FROM sys_menu WHERE code = ? OR code LIKE ?", originalPrefix, originalPrefix+"_%").Error; err != nil {
+			return fmt.Errorf("failed to clean existing menus by original prefix: %w", err)
+		}
+	}
+
+	// 第五步：找出所有父菜单（ParentPath为空的）和子菜单
+	parentMenus := make([]MenuConfig, 0)
+	childMenus := make([]MenuConfig, 0)
+	for _, menu := range menus {
+		if menu.ParentPath == "" {
+			parentMenus = append(parentMenus, menu)
+		} else {
+			childMenus = append(childMenus, menu)
+		}
+	}
+
+	// 第六步：创建父菜单，建立 path -> id 映射
+	pathToID := make(map[string]uint)
+
+	for _, menu := range parentMenus {
+		// 简化code生成：直接用 _pluginName 作为父菜单code
+		menuCode := codePrefix
+		visible := 1
+		if menu.Hidden {
+			visible = 0
+		}
+
+		newMenu := pluginSysMenu{
+			Name:     menu.Name,
+			Code:     menuCode,
+			Type:     1, // 目录
+			ParentID: 0,
+			Path:     menu.Path,
+			Icon:     menu.Icon,
+			Sort:     menu.Sort,
+			Visible:  visible,
+			Status:   1,
+		}
+		if err := m.db.Create(&newMenu).Error; err != nil {
+			return fmt.Errorf("failed to create parent menu %s: %w", menu.Path, err)
+		}
+		pathToID[menu.Path] = newMenu.ID
+	}
+
+	// 第七步：创建子菜单
+	for _, menu := range childMenus {
+		// 简化code生成：_pluginName_childPath
+		menuCode := codePrefix + pathToCode(menu.Path)
+		visible := 1
+		if menu.Hidden {
+			visible = 0
+		}
+
+		// 获取父菜单ID
+		parentID, ok := pathToID[menu.ParentPath]
+		if !ok {
+			// 父菜单可能是系统菜单，尝试从数据库查找
+			var parentMenu pluginSysMenu
+			if err := m.db.Where("path = ?", menu.ParentPath).First(&parentMenu).Error; err != nil {
+				return fmt.Errorf("parent menu %s not found for child %s: %w", menu.ParentPath, menu.Path, err)
+			}
+			parentID = parentMenu.ID
+		}
+
+		newMenu := pluginSysMenu{
+			Name:     menu.Name,
+			Code:     menuCode,
+			Type:     2, // 菜单
+			ParentID: parentID,
+			Path:     menu.Path,
+			Icon:     menu.Icon,
+			Sort:     menu.Sort,
+			Visible:  visible,
+			Status:   1,
+		}
+		if err := m.db.Create(&newMenu).Error; err != nil {
+			return fmt.Errorf("failed to create child menu %s: %w", menu.Path, err)
+		}
+	}
+
+	return nil
+}
+
+// removePluginMenus 从数据库移除插件菜单
+func (m *Manager) removePluginMenus(pluginName string) error {
+	codePrefix := "_" + strings.ReplaceAll(pluginName, "-", "_")
+	originalPrefix := "_" + pluginName
+
+	// 硬删除所有以此前缀开头的菜单
+	if err := m.db.Exec("DELETE FROM sys_menu WHERE code = ? OR code LIKE ?", codePrefix, codePrefix+"_%").Error; err != nil {
+		return fmt.Errorf("failed to remove plugin menus: %w", err)
+	}
+
+	// 如果插件名包含连字符，也删除旧格式
+	if codePrefix != originalPrefix {
+		if err := m.db.Exec("DELETE FROM sys_menu WHERE code = ? OR code LIKE ?", originalPrefix, originalPrefix+"_%").Error; err != nil {
+			return fmt.Errorf("failed to remove plugin menus with original prefix: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// pathToCode 将路径转换为菜单code
+// 例如: /task/execute -> _task_execute
+func pathToCode(path string) string {
+	// 移除开头的斜杠，然后将斜杠替换为下划线
+	code := strings.TrimPrefix(path, "/")
+	code = strings.ReplaceAll(code, "/", "_")
+	code = strings.ReplaceAll(code, "-", "_")
+	return "_" + code
 }

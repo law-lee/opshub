@@ -36,22 +36,36 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Mode         string       `mapstructure:"mode"`          // debug, release, test
-	HttpPort     int          `mapstructure:"http_port"`
-	RPCPort      int          `mapstructure:"rpc_port"`
-	ReadTimeout  int          `mapstructure:"read_timeout"`  // 毫秒
-	WriteTimeout int          `mapstructure:"write_timeout"` // 毫秒
-	JWTSecret    string       `mapstructure:"jwt_secret"`    // JWT密钥
-	ExternalURL  string       `mapstructure:"external_url"`  // 外部访问URL，用于OAuth2 issuer
+	Mode         string `mapstructure:"mode"`          // debug, release, test
+	HttpPort     int    `mapstructure:"http_port"`
+	RPCPort      int    `mapstructure:"rpc_port"`
+	ReadTimeout  int    `mapstructure:"read_timeout"`  // 毫秒
+	WriteTimeout int    `mapstructure:"write_timeout"` // 毫秒
+	JWTSecret    string `mapstructure:"jwt_secret"`    // JWT密钥
+	ExternalURL  string `mapstructure:"external_url"`  // 外部访问URL，用于OAuth2 issuer
+	FrontendURL  string `mapstructure:"frontend_url"`  // 前端URL，用于OAuth2登录重定向
 }
 
 // GetOAuth2Issuer 获取OAuth2 issuer URL
+// 本地开发时使用后端端口，因为 Jenkins 服务器端需要直接调用 token endpoint
 func (c *ServerConfig) GetOAuth2Issuer() string {
 	if c.ExternalURL != "" {
 		return c.ExternalURL
 	}
-	// 默认使用本地地址
+	// 本地开发默认使用后端端口
 	return fmt.Sprintf("http://localhost:%d", c.HttpPort)
+}
+
+// GetFrontendURL 获取前端URL
+func (c *ServerConfig) GetFrontendURL() string {
+	if c.FrontendURL != "" {
+		return c.FrontendURL
+	}
+	if c.ExternalURL != "" {
+		return c.ExternalURL
+	}
+	// 本地开发默认使用 Vite 端口
+	return "http://localhost:5173"
 }
 
 // DatabaseConfig 数据库配置

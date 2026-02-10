@@ -175,6 +175,15 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 		public.GET("/example", s.svc.Example)
 	}
 
+	// 创建 Identity 服务（提前创建，用于公开路由）
+	identityServer, err := identityserver.NewIdentityServices(s.db, s.conf)
+	if err != nil {
+		appLogger.Error("创建Identity服务失败", zap.Error(err))
+	} else {
+		// 注册 Identity 公开路由
+		identityServer.RegisterPublicRoutes(public)
+	}
+
 	// API v1 - 需要认证的接口
 	v1 := router.Group("/api/v1")
 	v1.Use(authMiddleware.AuthRequired())
@@ -187,13 +196,10 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine, jwtSecret string) {
 		assetServer.RegisterRoutes(v1)
 
 		// 注册 Identity 路由
-		identityServer, err := identityserver.NewIdentityServices(s.db, s.conf)
-		if err != nil {
-			appLogger.Error("创建Identity服务失败", zap.Error(err))
-		} else {
+		if identityServer != nil {
 			identityServer.RegisterRoutes(v1)
 			// 注册 OAuth2 服务端路由（在根路径 /oauth2）
-			identityServer.RegisterOAuth2Routes(router, authMiddleware.AuthRequired)
+			identityServer.RegisterOAuth2Routes(router, authMiddleware.AuthRequired, authMiddleware.OptionalAuth)
 		}
 
 		// 上传接口

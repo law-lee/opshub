@@ -199,10 +199,24 @@ const loadApps = async () => {
 const handleAccessApp = async (app: PortalApp) => {
   try {
     const res = await accessApp(app.id)
+    console.log('访问应用响应:', res)
     if (res?.url) {
-      window.open(res.url, '_blank')
+      // 新窗口打开应用
+      const newWindow = window.open(res.url, '_blank')
+      if (!newWindow) {
+        // 如果弹窗被拦截，提示用户
+        ElMessage.warning('弹窗被拦截，请允许弹窗或点击链接直接访问')
+        // 备用方案：创建一个临时链接让用户点击
+        const link = document.createElement('a')
+        link.href = res.url
+        link.target = '_blank'
+        link.click()
+      }
+    } else {
+      ElMessage.warning('应用URL未配置')
     }
   } catch (error) {
+    console.error('访问应用失败:', error)
     ElMessage.error('访问应用失败')
   }
 }

@@ -136,10 +136,19 @@ import {
   Grid,
   Cloudy,
   Grape,
-  House
+  House,
+  Cpu,
+  DocumentChecked,
+  DataLine,
+  PieChart,
+  Calendar,
+  Timer,
+  Key,
+  Upload,
+  Bell,
+  VideoPlay
 } from '@element-plus/icons-vue'
 import { getUserMenu } from '@/api/menu'
-import { pluginManager } from '@/plugins/manager'
 
 // Header 图片路径（来自 public 文件夹）
 const headerImage = '/header.png'
@@ -241,92 +250,22 @@ const iconMap: Record<string, any> = {
   'Grid': Grid,
   'Cloudy': Cloudy,
   'Grape': Grape,
-  'House': House
+  'House': House,
+  'Cpu': Cpu,
+  'DocumentChecked': DocumentChecked,
+  'DataLine': DataLine,
+  'PieChart': PieChart,
+  'Calendar': Calendar,
+  'Timer': Timer,
+  'Key': Key,
+  'Upload': Upload,
+  'Bell': Bell,
+  'VideoPlay': VideoPlay
 }
 
 // 获取图标组件
 const getIcon = (iconName: string) => {
   return iconMap[iconName] || Menu
-}
-
-// 从插件管理器构建菜单（只包含已启用的插件，并根据权限过滤）
-const buildPluginMenus = async (authorizedPaths: Set<string>) => {
-  const pluginMenus: any[] = []
-  const allPlugins = pluginManager.getAll() // 获取所有注册的插件
-
-  // 检查当前用户是否是超级管理员
-  const roles = userStore.userInfo?.roles || []
-  const isSuperAdmin = roles.some((r: any) => r.code === 'admin')
-
-  // 从后端API获取插件启用状态
-  let enabledPluginNames: Set<string> = new Set()
-  try {
-    const { listPlugins } = await import('@/api/plugin')
-    const backendPlugins = await listPlugins()
-    enabledPluginNames = new Set(
-      backendPlugins
-        .filter((p: any) => p.enabled)
-        .map((p: any) => p.name)
-    )
-  } catch (error) {
-    // 如果获取失败，显示所有已安装的插件菜单
-    const installedPlugins = pluginManager.getInstalled()
-    enabledPluginNames = new Set(installedPlugins.map(p => p.name))
-  }
-
-  // 从 localStorage 加载自定义排序
-  const PLUGIN_MENU_SORT_KEY = 'opshub_plugin_menu_sort'
-  const customSort: Map<string, number> = (() => {
-    try {
-      const stored = localStorage.getItem(PLUGIN_MENU_SORT_KEY)
-      if (stored) {
-        const sortMap = JSON.parse(stored)
-        return new Map(Object.entries(sortMap))
-      }
-    } catch (error) {
-    }
-    return new Map()
-  })()
-
-
-  allPlugins.forEach(plugin => {
-    // 只处理已启用的插件
-    if (!enabledPluginNames.has(plugin.name)) {
-      return
-    }
-
-    if (plugin.getMenus) {
-      const menus = plugin.getMenus()
-
-      menus.forEach(menu => {
-        // 权限过滤：
-        // 1. 超级管理员显示所有菜单
-        // 2. 普通用户只显示有权限的菜单
-        // 3. 用户没有任何权限且不是超级管理员，不显示任何菜单
-        if (!isSuperAdmin && !authorizedPaths.has(menu.path)) {
-          return
-        }
-
-        // 优先使用自定义排序，如果没有则使用默认排序
-        const sort = customSort.get(menu.path) ?? menu.sort
-
-        pluginMenus.push({
-          ID: menu.path,
-          name: menu.name,
-          path: menu.path,
-          icon: menu.icon,
-          sort: sort, // 使用自定义排序或默认排序
-          hidden: menu.hidden,
-          parentPath: menu.parentPath
-          // 不设置 children 属性，让 buildMenuTree 根据实际子菜单动态设置
-        })
-
-      })
-    } else {
-    }
-  })
-
-  return pluginMenus
 }
 
 // 构建菜单树
@@ -484,42 +423,12 @@ const loadMenu = async () => {
     // 清空现有菜单,避免重复
     menuList.value = []
 
-    // 1. 获取系统菜单（后端已根据用户权限过滤）
+    // 从后端获取用户菜单（后端已根据用户权限过滤，包括插件菜单）
     const systemMenus = await getUserMenu() || []
 
-    // 2. 从系统菜单中提取所有授权的路径（用于插件菜单权限过滤）
-    const pluginPathPrefixes = ['/kubernetes', '/monitor', '/task']
-    const extractPaths = (menus: any[]): Set<string> => {
-      const paths = new Set<string>()
-      const traverse = (items: any[]) => {
-        items.forEach(item => {
-          if (item.path) {
-            paths.add(item.path)
-          }
-          if (item.children && item.children.length > 0) {
-            traverse(item.children)
-          }
-        })
-      }
-      traverse(menus)
-      return paths
-    }
-
-    const allAuthorizedPaths = extractPaths(systemMenus)
-
-    // 3. 获取插件菜单（根据授权路径过滤）
-    const pluginMenus = await buildPluginMenus(allAuthorizedPaths)
-
-    // 4. 展平系统菜单树，并过滤掉那些已经由插件提供的菜单
-    const pluginProvidedMenuCodes = new Set(['kubernetes_application_diagnosis', 'kubernetes_cluster_inspection', 'monitor_domain', 'monitor_alert_channels', 'monitor_alert_receivers', 'monitor_alert_logs', 'task_templates', 'task_execute', 'task_file_distribution', 'kubernetes_clusters', 'kubernetes_nodes', 'kubernetes_namespaces', 'kubernetes_workloads', 'kubernetes_network', 'kubernetes_config', 'kubernetes_storage', 'kubernetes_access', 'kubernetes_audit'])
-
+    // 展平菜单树
     const flattenMenus = (menus: any[], result: any[] = []) => {
       menus.forEach(menu => {
-        // 如果这个菜单的code在插件提供的列表中，跳过它（由插件提供）
-        if (menu.code && pluginProvidedMenuCodes.has(menu.code)) {
-          return
-        }
-
         // 移除children属性，避免旧的children数据干扰
         const { children, ...menuWithoutChildren } = menu
         result.push(menuWithoutChildren)
@@ -532,11 +441,8 @@ const loadMenu = async () => {
 
     const flatSystemMenus = flattenMenus(systemMenus)
 
-    // 5. 合并所有菜单
-    const allMenus = [...flatSystemMenus, ...pluginMenus]
-
-    // 6. 构建菜单树
-    menuList.value = buildMenuTree(allMenus)
+    // 构建菜单树
+    menuList.value = buildMenuTree(flatSystemMenus)
 
     // 检查用户是否有权限
     // 如果不是超级管理员且没有任何菜单，则显示无权限页面

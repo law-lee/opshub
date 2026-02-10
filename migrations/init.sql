@@ -1343,6 +1343,8 @@ VALUES
   (2, '普通用户', 'user', '普通用户，具有基本操作权限', 1, 1, NOW(), NOW());
 
 -- 插入默认菜单（从当前数据库导出的完整菜单结构）
+-- 注意：插件菜单（kubernetes、monitor、task、nginx、ssl-cert、test）不在此处定义
+-- 插件菜单由后端在插件启用时自动同步到数据库
 INSERT INTO `sys_menu` (`id`, `name`, `code`, `type`, `parent_id`, `path`, `component`, `icon`, `sort`, `visible`, `status`, `created_at`, `updated_at`)
 VALUES
   -- ========== 顶级菜单 ==========
@@ -1351,11 +1353,8 @@ VALUES
   (90, '身份认证', 'identity', 1, 0, '/identity', '', 'Key', 2, 1, 1, NOW(), NOW()),
   (23, '操作审计', 'audit', 1, 0, '/audit', '', 'Document', 50, 1, 1, NOW(), NOW()),
   (30, '插件管理', 'plugin', 1, 0, '/plugin', '', 'Grid', 80, 1, 1, NOW(), NOW()),
-  (42, '监控中心', '_monitor', 1, 0, '/monitor', '', 'Monitor', 80, 1, 1, NOW(), NOW()),
-  (61, '任务中心', '_task', 1, 0, '/task', '', 'Grid', 90, 1, 1, NOW(), NOW()),
   (1, '系统管理', 'system', 1, 0, '', '', 'Setting', 100, 1, 1, NOW(), NOW()),
   (29, '个人信息', 'profile', 2, 0, '/profile', 'Profile', 'UserFilled', 100, 0, 1, NOW(), NOW()),
-  (36, '容器管理', '_kubernetes', 1, 0, '/kubernetes', '', 'Platform', 100, 1, 1, NOW(), NOW()),
 
   -- ========== 系统管理子菜单 (parent_id=1) ==========
   (2, '用户管理', 'users', 2, 1, '/users', 'system/Users', 'User', 1, 1, 1, NOW(), NOW()),
@@ -1387,46 +1386,20 @@ VALUES
 
   -- ========== 插件管理子菜单 (parent_id=30) ==========
   (32, '插件列表', 'plugin-list', 2, 30, '/plugin/list', 'plugin/PluginList', 'Grid', 1, 1, 1, NOW(), NOW()),
-  (33, '插件安装', 'plugin-install', 2, 30, '/plugin/install', 'plugin/PluginInstall', 'Upload', 2, 1, 1, NOW(), NOW()),
+  (33, '插件安装', 'plugin-install', 2, 30, '/plugin/install', 'plugin/PluginInstall', 'Upload', 2, 1, 1, NOW(), NOW());
 
-  -- ========== 容器管理子菜单 (parent_id=36) ==========
-  (69, '集群管理', 'kubernetes_clusters', 2, 36, '/kubernetes/clusters', '', 'Connection', 1, 1, 1, NOW(), NOW()),
-  (70, '节点管理', 'kubernetes_nodes', 2, 36, '/kubernetes/nodes', '', 'Monitor', 2, 1, 1, NOW(), NOW()),
-  (71, '命名空间', 'kubernetes_namespaces', 2, 36, '/kubernetes/namespaces', '', 'FolderOpened', 3, 1, 1, NOW(), NOW()),
-  (72, '工作负载', 'kubernetes_workloads', 2, 36, '/kubernetes/workloads', '', 'Grid', 4, 1, 1, NOW(), NOW()),
-  (73, '网络管理', 'kubernetes_network', 2, 36, '/kubernetes/network', '', 'Connection', 5, 1, 1, NOW(), NOW()),
-  (74, '配置管理', 'kubernetes_config', 2, 36, '/kubernetes/config', '', 'Tools', 6, 1, 1, NOW(), NOW()),
-  (75, '存储管理', 'kubernetes_storage', 2, 36, '/kubernetes/storage', '', 'Files', 7, 1, 1, NOW(), NOW()),
-  (76, '访问控制', 'kubernetes_access', 2, 36, '/kubernetes/access', '', 'Lock', 8, 1, 1, NOW(), NOW()),
-  (77, '终端审计', 'kubernetes_audit', 2, 36, '/kubernetes/audit', '', 'Monitor', 9, 1, 1, NOW(), NOW()),
-  (85, '应用诊断', 'kubernetes_application_diagnosis', 2, 36, '/kubernetes/application-diagnosis', '', 'Grid', 10, 1, 1, NOW(), NOW()),
-  (86, '集群巡检', 'kubernetes_cluster_inspection', 2, 36, '/kubernetes/cluster-inspection', '', 'Grid', 11, 1, 1, NOW(), NOW()),
-
-  -- ========== 监控中心子菜单 (parent_id=42) ==========
-  (78, '域名监控', 'monitor_domain', 2, 42, '/monitor/domain', '', 'Monitor', 1, 1, 1, NOW(), NOW()),
-  (79, '告警通道', 'monitor_alert_channels', 2, 42, '/monitor/alert-channels', '', 'Grid', 2, 1, 1, NOW(), NOW()),
-  (80, '告警接收人', 'monitor_alert_receivers', 2, 42, '/monitor/alert-receivers', '', 'User', 3, 1, 1, NOW(), NOW()),
-  (81, '告警日志', 'monitor_alert_logs', 2, 42, '/monitor/alert-logs', '', 'Document', 4, 1, 1, NOW(), NOW()),
-
-  -- ========== 任务中心子菜单 (parent_id=61) ==========
-  (82, '任务模板', 'task_templates', 2, 61, '/task/templates', '', 'Document', 1, 1, 1, NOW(), NOW()),
-  (83, '执行任务', 'task_execute', 2, 61, '/task/execute', '', 'Tools', 2, 1, 1, NOW(), NOW()),
-  (84, '文件分发', 'task_file_distribution', 2, 61, '/task/file-distribution', '', 'Files', 3, 1, 1, NOW(), NOW());
-
--- 为管理员角色分配所有菜单权限
+-- 为管理员角色分配所有菜单权限（不包括插件菜单，插件菜单权限在插件启用后单独分配）
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
 VALUES
   (1, 1), (1, 2), (1, 3), (1, 5), (1, 10), (1, 11), (1, 12), (1, 13), (1, 15), (1, 16), (1, 17), (1, 19),
-  (1, 23), (1, 24), (1, 25), (1, 27), (1, 29), (1, 30), (1, 32), (1, 33), (1, 34), (1, 36),
-  (1, 42), (1, 61), (1, 65), (1, 69), (1, 70), (1, 71), (1, 72), (1, 73), (1, 74), (1, 75), (1, 76), (1, 77),
-  (1, 78), (1, 79), (1, 80), (1, 81), (1, 82), (1, 83), (1, 84), (1, 85), (1, 86),
+  (1, 23), (1, 24), (1, 25), (1, 27), (1, 29), (1, 30), (1, 32), (1, 33), (1, 34), (1, 65),
   (1, 90), (1, 91), (1, 92), (1, 93), (1, 94), (1, 95), (1, 96);
 
 -- 为普通用户角色分配基础菜单权限
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
 VALUES
   (2, 10), (2, 15), (2, 16), (2, 17), (2, 19), (2, 27), (2, 34), (2, 65),
-  (2, 23), (2, 24), (2, 25), (2, 36), (2, 42), (2, 61),
+  (2, 23), (2, 24), (2, 25),
   (2, 90), (2, 92), (2, 93), (2, 96);
 
 -- ============================================================

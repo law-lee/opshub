@@ -19,7 +19,15 @@ export default defineConfig({
       '/api': {
         target: process.env.VITE_API_BASE_URL || 'http://localhost:9876',
         changeOrigin: true,
-        ws: true  // 启用 WebSocket 代理
+        ws: true,  // 启用 WebSocket 代理
+        cookieDomainRewrite: '',  // 重写 cookie domain
+        cookiePathRewrite: '/'    // 重写 cookie path
+      },
+      '/oauth2': {
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:9876',
+        changeOrigin: true,
+        cookieDomainRewrite: '',  // 重写 cookie domain
+        cookiePathRewrite: '/'    // 重写 cookie path
       }
     }
   }

@@ -56,7 +56,7 @@
       <!-- 表格 -->
       <div class="table-wrapper">
         <el-table :data="appList" v-loading="loading" border stripe>
-          <el-table-column label="应用" min-width="200">
+          <el-table-column label="应用" width="180">
             <template #default="{ row }">
               <div class="app-cell">
                 <div class="app-icon-small">
@@ -70,27 +70,31 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="分类" width="120">
+          <el-table-column label="分类" width="100">
             <template #default="{ row }">
               <el-tag size="small">{{ getCategoryLabel(row.category) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="url" label="URL" min-width="200" show-overflow-tooltip />
-          <el-table-column label="SSO类型" width="100">
+          <el-table-column prop="url" label="URL" min-width="130"  show-overflow-tooltip />
+          <el-table-column label="SSO类型" width="120">
             <template #default="{ row }">
               <span>{{ row.ssoType || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="100" align="center">
+          <el-table-column label="状态" width="70" align="center">
             <template #default="{ row }">
               <el-switch v-model="row.enabled" @change="handleToggleEnabled(row)" />
             </template>
           </el-table-column>
-          <el-table-column prop="createdAt" label="创建时间" width="170" />
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column label="创建时间" width="230">
             <template #default="{ row }">
-              <el-button class="black-button" size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+              <span style="white-space: nowrap;">{{ formatDateTime(row.createdAt) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" align="center">
+            <template #default="{ row }">
+              <el-button class="black-button" size="small" :icon="Edit" circle @click="handleEdit(row)" />
+              <el-button type="danger" size="small" :icon="Delete" circle @click="handleDelete(row)" />
             </template>
           </el-table-column>
         </el-table>
@@ -206,7 +210,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Grid, Plus, Search, Files } from '@element-plus/icons-vue'
+import { Grid, Plus, Search, Files, Edit, Delete } from '@element-plus/icons-vue'
 import {
   getSSOApplications,
   createSSOApplication,
@@ -268,6 +272,18 @@ const rules: FormRules = {
 const getCategoryLabel = (cat: string) => {
   const found = categories.find(c => c.value === cat)
   return found?.label || cat || '未分类'
+}
+
+const formatDateTime = (dateStr: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 const loadApps = async () => {

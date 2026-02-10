@@ -135,7 +135,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, FormInstance } from 'element-plus'
 import { User, Lock, Key } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
@@ -151,6 +151,7 @@ interface Provider {
 }
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const systemStore = useSystemStore()
 const formRef = ref<FormInstance>()
@@ -234,7 +235,20 @@ const handleLogin = async () => {
         }
 
         ElMessage.success('登录成功')
-        await router.push('/')
+
+        // 检查是否有重定向URL（用于OAuth2 SSO流程）
+        const redirectUrl = route.query.redirect as string
+        if (redirectUrl) {
+          // 如果是外部URL（OAuth2授权回调），直接跳转
+          if (redirectUrl.startsWith('http://') || redirectUrl.startsWith('https://')) {
+            window.location.href = redirectUrl
+          } else {
+            // 内部路由
+            await router.push(redirectUrl)
+          }
+        } else {
+          await router.push('/')
+        }
       } catch (error: any) {
 
         // 提取错误消息 - 支持多种错误对象格式

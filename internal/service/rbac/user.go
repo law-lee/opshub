@@ -218,6 +218,18 @@ func (s *UserService) Login(c *gin.Context) {
 
 	appLogger.Info("用户登录成功", zap.String("username", req.Username))
 
+	// 设置 session cookie（用于 OAuth2 SSO 流程）
+	// 使用 httpOnly cookie 来保持会话，这样浏览器重定向时会自动携带
+	c.SetCookie(
+		"opshub_session", // cookie name
+		token,            // cookie value (JWT token)
+		86400,            // maxAge: 24小时
+		"/",              // path
+		"",               // domain (空表示当前域)
+		false,            // secure (本地开发设为false，生产环境应设为true)
+		true,             // httpOnly
+	)
+
 	response.Success(c, LoginResponse{
 		Token: token,
 		User:  user,

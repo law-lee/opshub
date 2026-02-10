@@ -149,10 +149,11 @@ func (p *Plugin) RegisterRoutes(router *gin.RouterGroup, db *gorm.DB) {
 func (p *Plugin) GetMenus() []plugin.MenuConfig {
 	return []plugin.MenuConfig{
 		{
-			Name: "SSL证书",
-			Path: "/ssl-cert",
-			Icon: "Key",
-			Sort: 50,
+			Name:       "SSL证书",
+			Path:       "/ssl-cert",
+			Icon:       "Key",
+			Sort:       50,
+			ParentPath: "",
 		},
 		{
 			Name:       "证书管理",

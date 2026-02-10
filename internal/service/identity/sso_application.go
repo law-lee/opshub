@@ -140,14 +140,53 @@ func (s *SSOApplicationService) UpdateApp(c *gin.Context) {
 		return
 	}
 
-	var app identity.SSOApplication
-	if err := c.ShouldBindJSON(&app); err != nil {
+	// 先获取现有记录
+	existing, err := s.useCase.GetByID(c.Request.Context(), uint(id))
+	if err != nil {
+		response.ErrorCode(c, http.StatusNotFound, "应用不存在")
+		return
+	}
+
+	// 解析请求体到 map，支持部分更新
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
 		response.ErrorCode(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
 
-	app.ID = uint(id)
-	if err := s.useCase.Update(c.Request.Context(), &app); err != nil {
+	// 合并更新字段到现有记录
+	if name, ok := updates["name"].(string); ok {
+		existing.Name = name
+	}
+	if code, ok := updates["code"].(string); ok {
+		existing.Code = code
+	}
+	if icon, ok := updates["icon"].(string); ok {
+		existing.Icon = icon
+	}
+	if description, ok := updates["description"].(string); ok {
+		existing.Description = description
+	}
+	if category, ok := updates["category"].(string); ok {
+		existing.Category = category
+	}
+	if url, ok := updates["url"].(string); ok {
+		existing.URL = url
+	}
+	if ssoType, ok := updates["ssoType"].(string); ok {
+		existing.SSOType = ssoType
+	}
+	if ssoConfig, ok := updates["ssoConfig"].(string); ok {
+		existing.SSOConfig = ssoConfig
+	}
+	if enabled, ok := updates["enabled"].(bool); ok {
+		existing.Enabled = enabled
+	}
+	if sort, ok := updates["sort"].(float64); ok {
+		existing.Sort = int(sort)
+	}
+
+	if err := s.useCase.Update(c.Request.Context(), existing); err != nil {
 		response.ErrorCode(c, http.StatusInternalServerError, "更新应用失败: "+err.Error())
 		return
 	}

@@ -39,7 +39,10 @@ func (r *ssoApplicationRepo) Create(ctx context.Context, app *identity.SSOApplic
 }
 
 func (r *ssoApplicationRepo) Update(ctx context.Context, app *identity.SSOApplication) error {
-	return r.db.WithContext(ctx).Model(app).Omit("created_at").Updates(app).Error
+	// 使用 Select 明确指定要更新的字段，包括 enabled（布尔零值也需要更新）
+	return r.db.WithContext(ctx).Model(app).
+		Select("name", "code", "icon", "description", "category", "url", "sso_type", "sso_config", "enabled", "sort", "updated_at").
+		Updates(app).Error
 }
 
 func (r *ssoApplicationRepo) Delete(ctx context.Context, id uint) error {

@@ -293,6 +293,7 @@ type OAuth2AuthorizationCode struct {
 	UserID              uint      `gorm:"not null;index" json:"userId"`
 	Scope               string    `gorm:"type:text" json:"scope"`
 	RedirectURI         string    `gorm:"type:varchar(500)" json:"redirectUri"`
+	Nonce               string    `gorm:"type:varchar(128)" json:"nonce"`
 	CodeChallenge       string    `gorm:"type:varchar(128)" json:"codeChallenge"`
 	CodeChallengeMethod string    `gorm:"type:varchar(10)" json:"codeChallengeMethod"`
 	ExpiresAt           time.Time `gorm:"index;not null" json:"expiresAt"`

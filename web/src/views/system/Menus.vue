@@ -565,17 +565,14 @@ const buildMenuTree = (menus: any[]) => {
 const loadMenus = async () => {
   loading.value = true
   try {
-    // 1. 获取系统菜单
+    // 获取系统菜单（包括插件菜单，已在后端同步到数据库）
     let systemMenus: any[] = []
     try {
       systemMenus = await getMenuTree() || []
     } catch (error) {
     }
 
-    // 2. 获取插件菜单
-    const pluginMenus = buildPluginMenuList()
-
-    // 3. 清理系统菜单树中的空 children 数组
+    // 清理系统菜单树中的空 children 数组
     const cleanEmptyChildren = (nodes: any[]) => {
       nodes.forEach(node => {
         if (node.children && Array.isArray(node.children)) {
@@ -595,23 +592,17 @@ const loadMenus = async () => {
       })
     }
 
-    // 4. 清理系统菜单
+    // 清理系统菜单
     if (systemMenus && systemMenus.length > 0) {
       // 深拷贝以避免修改原始数据
       systemMenus = JSON.parse(JSON.stringify(systemMenus))
       cleanEmptyChildren(systemMenus)
     }
 
-    // 5. 直接使用清理后的系统菜单树
+    // 直接使用清理后的系统菜单树
     menuList.value = systemMenus || []
 
-    // 6. 将插件菜单添加到树中
-    if (pluginMenus.length > 0) {
-      // 插件菜单需要根据 parentId 插入到正确的位置
-      insertPluginMenus(menuList.value, pluginMenus)
-    }
-
-    // 7. 构建菜单树选项（仅包含系统菜单）
+    // 构建菜单树选项（仅包含系统菜单）
     menuTreeOptions.value = JSON.parse(JSON.stringify(systemMenus || []))
     menuTreeOptions.value.unshift({ ID: 0, name: '顶级菜单' })
 

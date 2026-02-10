@@ -26,17 +26,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ydcloud-dy/opshub/internal/biz/identity"
+	appLogger "github.com/ydcloud-dy/opshub/pkg/logger"
 	"github.com/ydcloud-dy/opshub/pkg/response"
+	"go.uber.org/zap"
 )
 
 // OAuth2ServerService OAuth2服务端服务
 type OAuth2ServerService struct {
-	useCase *identity.OAuth2ServerUseCase
+	useCase     *identity.OAuth2ServerUseCase
+	frontendURL string
 }
 
 // NewOAuth2ServerService 创建OAuth2服务端服务
-func NewOAuth2ServerService(useCase *identity.OAuth2ServerUseCase) *OAuth2ServerService {
-	return &OAuth2ServerService{useCase: useCase}
+func NewOAuth2ServerService(useCase *identity.OAuth2ServerUseCase, frontendURL string) *OAuth2ServerService {
+	return &OAuth2ServerService{
+		useCase:     useCase,
+		frontendURL: frontendURL,
+	}
 }
 
 // Authorize OAuth2授权端点
@@ -47,56 +53,66 @@ func (s *OAuth2ServerService) Authorize(c *gin.Context) {
 		ResponseType:        c.Query("response_type"),
 		Scope:               c.Query("scope"),
 		State:               c.Query("state"),
+		Nonce:               c.Query("nonce"),
 		CodeChallenge:       c.Query("code_challenge"),
 		CodeChallengeMethod: c.Query("code_challenge_method"),
 	}
 
+	// Debug: 打印请求信息
+	sessionCookie, _ := c.Cookie("opshub_session")
+	appLogger.Info("OAuth2 Authorize 请求",
+		zap.String("client_id", req.ClientID),
+		zap.String("redirect_uri", req.RedirectURI),
+		zap.String("host", c.Request.Host),
+		zap.Bool("has_session_cookie", sessionCookie != ""),
+	)
+
 	// 验证请求
-	app, err := s.useCase.ValidateAuthorizeRequest(c.Request.Context(), req)
+	_, err := s.useCase.ValidateAuthorizeRequest(c.Request.Context(), req)
 	if err != nil {
+		appLogger.Error("OAuth2 验证请求失败", zap.Error(err))
 		s.redirectWithError(c, req.RedirectURI, req.State, "invalid_request", err.Error())
 		return
 	}
 
 	// 检查用户是否已登录
 	userID, exists := c.Get("userID")
+	appLogger.Info("OAuth2 用户登录状态", zap.Bool("logged_in", exists), zap.Any("userID", userID))
+
 	if !exists {
-		// 重定向到登录页，登录后返回
-		loginURL := "/login?redirect=" + url.QueryEscape(c.Request.URL.String())
+		// 重定向到前端登录页，登录后返回
+		// 构建完整的当前 URL（包含 scheme 和 host）
+		currentURL := c.Request.URL.String()
+		if !strings.HasPrefix(currentURL, "http") {
+			scheme := "http"
+			if c.Request.TLS != nil {
+				scheme = "https"
+			}
+			// 使用 X-Forwarded-Host 或 Host
+			host := c.GetHeader("X-Forwarded-Host")
+			if host == "" {
+				host = c.Request.Host
+			}
+			currentURL = scheme + "://" + host + currentURL
+		}
+		loginURL := s.frontendURL + "/login?redirect=" + url.QueryEscape(currentURL)
+		appLogger.Info("OAuth2 重定向到登录页", zap.String("loginURL", loginURL), zap.String("currentURL", currentURL))
 		c.Redirect(http.StatusFound, loginURL)
 		return
 	}
 
-	// 检查用户是否有权限访问该应用
-	// 这里简化处理，实际应该检查权限
-
-	// 如果需要显示授权同意页面
-	if c.Query("consent") != "true" {
-		// 返回授权同意页面数据
-		c.JSON(http.StatusOK, gin.H{
-			"needConsent": true,
-			"app": gin.H{
-				"id":          app.ID,
-				"name":        app.Name,
-				"icon":        app.Icon,
-				"description": app.Description,
-			},
-			"scopes":   identity.ParseScope(req.Scope),
-			"clientId": req.ClientID,
-			"state":    req.State,
-		})
-		return
-	}
-
-	// 创建授权码
+	// 用户已登录，直接创建授权码并重定向（自动授权，无需用户同意）
+	// 对于内部 SSO 应用，我们信任它们，自动授权
 	authResp, err := s.useCase.CreateAuthorizationCode(c.Request.Context(), req, userID.(uint))
 	if err != nil {
+		appLogger.Error("OAuth2 创建授权码失败", zap.Error(err))
 		s.redirectWithError(c, req.RedirectURI, req.State, "server_error", err.Error())
 		return
 	}
 
 	// 重定向回客户端
 	redirectURL := s.buildRedirectURL(req.RedirectURI, authResp.Code, authResp.State)
+	appLogger.Info("OAuth2 授权成功，重定向到客户端", zap.String("redirectURL", redirectURL))
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
@@ -172,11 +188,10 @@ func (s *OAuth2ServerService) Discovery(c *gin.Context) {
 	c.JSON(http.StatusOK, discovery)
 }
 
-// JWKS JWKS端点（简化版，返回空）
+// JWKS JWKS端点
 func (s *OAuth2ServerService) JWKS(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"keys": []interface{}{},
-	})
+	jwks := identity.GetJWKS()
+	c.JSON(http.StatusOK, jwks)
 }
 
 // Revoke 令牌撤销端点

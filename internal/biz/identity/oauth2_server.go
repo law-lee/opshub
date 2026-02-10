@@ -22,17 +22,58 @@ package identity
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ydcloud-dy/opshub/internal/biz/rbac"
 )
+
+// RSA 密钥对（单例）
+var (
+	rsaPrivateKey *rsa.PrivateKey
+	rsaPublicKey  *rsa.PublicKey
+	rsaKeyOnce    sync.Once
+	rsaKeyID      = "opshub-key-1"
+)
+
+// 初始化 RSA 密钥对
+func initRSAKeys() {
+	rsaKeyOnce.Do(func() {
+		var err error
+		rsaPrivateKey, err = rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic("failed to generate RSA key: " + err.Error())
+		}
+		rsaPublicKey = &rsaPrivateKey.PublicKey
+	})
+}
+
+// GetJWKS 获取 JWKS（JSON Web Key Set）
+func GetJWKS() map[string]interface{} {
+	initRSAKeys()
+	return map[string]interface{}{
+		"keys": []map[string]interface{}{
+			{
+				"kty": "RSA",
+				"use": "sig",
+				"kid": rsaKeyID,
+				"alg": "RS256",
+				"n":   base64.RawURLEncoding.EncodeToString(rsaPublicKey.N.Bytes()),
+				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(rsaPublicKey.E)).Bytes()),
+			},
+		},
+	}
+}
 
 // OAuth2ServerUseCase OAuth2服务端用例
 type OAuth2ServerUseCase struct {
@@ -73,6 +114,7 @@ type AuthorizeRequest struct {
 	ResponseType        string `json:"response_type"`
 	Scope               string `json:"scope"`
 	State               string `json:"state"`
+	Nonce               string `json:"nonce"`
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
 }
@@ -156,6 +198,7 @@ func (uc *OAuth2ServerUseCase) CreateAuthorizationCode(ctx context.Context, req 
 		UserID:              userID,
 		Scope:               req.Scope,
 		RedirectURI:         req.RedirectURI,
+		Nonce:               req.Nonce,
 		CodeChallenge:       req.CodeChallenge,
 		CodeChallengeMethod: req.CodeChallengeMethod,
 		ExpiresAt:           time.Now().Add(10 * time.Minute),
@@ -279,13 +322,85 @@ func (uc *OAuth2ServerUseCase) exchangeAuthorizationCode(ctx context.Context, re
 		return nil, fmt.Errorf("failed to save refresh token: %w", err)
 	}
 
+	// 生成 id_token（OIDC 标准要求）
+	idToken, err := uc.generateIDToken(ctx, authCode.UserID, authCode.ClientID, authCode.Scope, authCode.Nonce)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate id_token: %w", err)
+	}
+
 	return &TokenResponse{
 		AccessToken:  accessToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    3600,
 		RefreshToken: refreshToken,
 		Scope:        authCode.Scope,
+		IDToken:      idToken,
 	}, nil
+}
+
+// generateIDToken 生成 OIDC id_token
+func (uc *OAuth2ServerUseCase) generateIDToken(ctx context.Context, userID uint, clientID, scope, nonce string) (string, error) {
+	initRSAKeys()
+
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"iss":                uc.issuer,                     // Issuer
+		"sub":                user.Username,                 // Subject (使用用户名，便于 Jenkins 等系统显示)
+		"aud":                clientID,                      // Audience (client ID)
+		"exp":                now.Add(1 * time.Hour).Unix(), // Expiration
+		"iat":                now.Unix(),                    // Issued at
+		"auth_time":          now.Unix(),                    // Authentication time
+		"preferred_username": user.Username,                 // 始终包含用户名
+		"name":               user.RealName,                 // 始终包含显示名称
+	}
+
+	// 添加 nonce（OIDC 要求）
+	if nonce != "" {
+		claims["nonce"] = nonce
+	}
+
+	// 添加头像（转换为绝对 URL）
+	if user.Avatar != "" {
+		avatarURL := uc.makeAbsoluteURL(user.Avatar)
+		claims["picture"] = avatarURL
+	}
+
+	// 根据 scope 添加额外用户信息
+	scopes := strings.Split(scope, " ")
+	for _, s := range scopes {
+		switch s {
+		case "email":
+			if user.Email != "" {
+				claims["email"] = user.Email
+			}
+		case "phone":
+			if user.Phone != "" {
+				claims["phone_number"] = user.Phone
+			}
+		}
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = rsaKeyID
+	return token.SignedString(rsaPrivateKey)
+}
+
+// makeAbsoluteURL 将相对 URL 转换为绝对 URL
+func (uc *OAuth2ServerUseCase) makeAbsoluteURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	// 如果已经是绝对 URL，直接返回
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	// 将相对路径转换为绝对 URL
+	return strings.TrimSuffix(uc.issuer, "/") + "/" + strings.TrimPrefix(path, "/")
 }
 
 // refreshAccessToken 刷新访问令牌
@@ -338,12 +453,14 @@ func (uc *OAuth2ServerUseCase) GetUserInfo(ctx context.Context, accessToken stri
 		return nil, errors.New("user not found")
 	}
 
+	// 使用用户名作为 sub，这样 Jenkins 等系统会显示正确的用户名
+	// 头像转换为绝对 URL
 	return &UserInfoResponse{
-		Sub:      fmt.Sprintf("%d", user.ID),
+		Sub:      user.Username,
 		Name:     user.RealName,
 		Email:    user.Email,
 		Phone:    user.Phone,
-		Avatar:   user.Avatar,
+		Avatar:   uc.makeAbsoluteURL(user.Avatar),
 		Username: user.Username,
 	}, nil
 }
