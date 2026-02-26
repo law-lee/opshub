@@ -21,6 +21,7 @@ package identity
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -103,7 +104,7 @@ func (s *PortalService) GetPortalApps(c *gin.Context) {
 
 // AccessApp 访问应用
 // @Summary 访问应用
-// @Description 访问应用并记录日志
+// @Description 访问应用并记录日志，返回跳转URL实现自动登录
 // @Tags 身份认证-应用门户
 // @Accept json
 // @Produce json
@@ -143,10 +144,38 @@ func (s *PortalService) AccessApp(c *gin.Context) {
 	}
 	s.authLogUseCase.Create(c.Request.Context(), authLog)
 
+	// 构建跳转 URL
+	accessURL := app.URL
+	if app.SSOType == "oauth2" || app.SSOType == "oidc" {
+		// 对于 OAuth2/OIDC 应用，跳转到 Jenkins 的登录入口
+		// Jenkins 会自动发起 OAuth2 授权请求到 OpsHub
+		// 浏览器跳转时会携带 OpsHub 的 session cookie
+		accessURL = s.buildSSOLoginURL(app)
+	}
+
 	// 返回跳转URL
 	response.Success(c, gin.H{
-		"url": app.URL,
+		"url": accessURL,
 	})
+}
+
+// buildSSOLoginURL 构建 SSO 登录跳转 URL
+// 让应用自己发起 OAuth2 授权请求，这样 state 由应用生成和验证
+func (s *PortalService) buildSSOLoginURL(app *identity.SSOApplication) string {
+	if app.URL == "" {
+		return ""
+	}
+
+	// 解析应用 URL
+	appURL, err := url.Parse(app.URL)
+	if err != nil {
+		return app.URL
+	}
+
+	// 对于 Jenkins，跳转到 securityRealm/commenceLogin 触发 OIDC 登录
+	// 这样 Jenkins 会生成正确的 state 并存储在 session 中
+	appURL.Path = "/securityRealm/commenceLogin"
+	return appURL.String()
 }
 
 // FavoriteApp 收藏应用
