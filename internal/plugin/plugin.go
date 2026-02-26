@@ -284,24 +284,37 @@ func (m *Manager) syncPluginMenus(pluginName string, menus []MenuConfig) error {
 		allPaths = append(allPaths, menu.Path)
 	}
 
-	// 第二步：硬删除所有已存在的同路径菜单（使用原生SQL确保完全删除）
+	// 第二步：删除这些菜单的角色权限关联（先删除关联，再删除菜单）
+	if err := m.db.Exec("DELETE FROM sys_role_menu WHERE menu_id IN (SELECT id FROM sys_menu WHERE path IN ?)", allPaths).Error; err != nil {
+		return fmt.Errorf("failed to clean role_menu relations by path: %w", err)
+	}
+
+	// 第三步：硬删除所有已存在的同路径菜单（使用原生SQL确保完全删除）
 	if err := m.db.Exec("DELETE FROM sys_menu WHERE path IN ?", allPaths).Error; err != nil {
 		return fmt.Errorf("failed to clean existing menus by path: %w", err)
 	}
 
-	// 第三步：硬删除所有以此插件code前缀开头的菜单
+	// 第四步：删除插件code前缀菜单的角色权限关联
+	if err := m.db.Exec("DELETE FROM sys_role_menu WHERE menu_id IN (SELECT id FROM sys_menu WHERE code = ? OR code LIKE ?)", codePrefix, codePrefix+"_%").Error; err != nil {
+		return fmt.Errorf("failed to clean role_menu relations by code prefix: %w", err)
+	}
+
+	// 第五步：硬删除所有以此插件code前缀开头的菜单
 	if err := m.db.Exec("DELETE FROM sys_menu WHERE code = ? OR code LIKE ?", codePrefix, codePrefix+"_%").Error; err != nil {
 		return fmt.Errorf("failed to clean existing menus by code prefix: %w", err)
 	}
 
-	// 第四步：如果插件名包含连字符，也删除旧格式（如 _ssl-cert）
+	// 第六步：如果插件名包含连字符，也删除旧格式（如 _ssl-cert）
 	if codePrefix != originalPrefix {
+		if err := m.db.Exec("DELETE FROM sys_role_menu WHERE menu_id IN (SELECT id FROM sys_menu WHERE code = ? OR code LIKE ?)", originalPrefix, originalPrefix+"_%").Error; err != nil {
+			return fmt.Errorf("failed to clean role_menu relations by original prefix: %w", err)
+		}
 		if err := m.db.Exec("DELETE FROM sys_menu WHERE code = ? OR code LIKE ?", originalPrefix, originalPrefix+"_%").Error; err != nil {
 			return fmt.Errorf("failed to clean existing menus by original prefix: %w", err)
 		}
 	}
 
-	// 第五步：找出所有父菜单（ParentPath为空的）和子菜单
+	// 第七步：找出所有父菜单（ParentPath为空的）和子菜单
 	parentMenus := make([]MenuConfig, 0)
 	childMenus := make([]MenuConfig, 0)
 	for _, menu := range menus {
@@ -312,8 +325,10 @@ func (m *Manager) syncPluginMenus(pluginName string, menus []MenuConfig) error {
 		}
 	}
 
-	// 第六步：创建父菜单，建立 path -> id 映射
+	// 第八步：创建父菜单，建立 path -> id 映射
 	pathToID := make(map[string]uint)
+	// 收集所有创建的菜单ID，用于分配权限
+	allMenuIDs := make([]uint, 0)
 
 	for _, menu := range parentMenus {
 		// 简化code生成：直接用 _pluginName 作为父菜单code
@@ -338,9 +353,10 @@ func (m *Manager) syncPluginMenus(pluginName string, menus []MenuConfig) error {
 			return fmt.Errorf("failed to create parent menu %s: %w", menu.Path, err)
 		}
 		pathToID[menu.Path] = newMenu.ID
+		allMenuIDs = append(allMenuIDs, newMenu.ID)
 	}
 
-	// 第七步：创建子菜单
+	// 第九步：创建子菜单
 	for _, menu := range childMenus {
 		// 简化code生成：_pluginName_childPath
 		menuCode := codePrefix + pathToCode(menu.Path)
@@ -373,6 +389,28 @@ func (m *Manager) syncPluginMenus(pluginName string, menus []MenuConfig) error {
 		}
 		if err := m.db.Create(&newMenu).Error; err != nil {
 			return fmt.Errorf("failed to create child menu %s: %w", menu.Path, err)
+		}
+		allMenuIDs = append(allMenuIDs, newMenu.ID)
+	}
+
+	// 第十步：为管理员角色（code='admin'）分配所有插件菜单权限
+	if len(allMenuIDs) > 0 {
+		// 获取管理员角色ID
+		var adminRole struct {
+			ID uint
+		}
+		if err := m.db.Table("sys_role").Select("id").Where("code = ?", "admin").First(&adminRole).Error; err != nil {
+			// 如果找不到管理员角色，记录警告但不返回错误（可能角色还未创建）
+			fmt.Printf("warning: admin role not found, skip assigning plugin menu permissions: %v\n", err)
+			return nil
+		}
+
+		// 批量插入角色菜单关联
+		for _, menuID := range allMenuIDs {
+			// 使用 ON DUPLICATE KEY UPDATE 避免重复插入
+			if err := m.db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE role_id = role_id", adminRole.ID, menuID).Error; err != nil {
+				fmt.Printf("warning: failed to assign menu %d to admin role: %v\n", menuID, err)
+			}
 		}
 	}
 

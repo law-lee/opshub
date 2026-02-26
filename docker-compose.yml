@@ -53,7 +53,7 @@ services:
       - opshub-network
 
   backend:
-    image: dyclouds/opshub-api:latest
+    image: docker.1ms.run/dyclouds/opshub-api:latest
     container_name: opshub-backend
     restart: unless-stopped
     ports:
@@ -86,7 +86,7 @@ services:
       - opshub-network
 
   frontend:
-    image: dyclouds/opshub-web:latest
+    image: docker.1ms.run/dyclouds/opshub-web:latest
     container_name: opshub-frontend
     restart: unless-stopped
     ports:

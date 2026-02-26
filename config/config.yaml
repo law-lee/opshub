@@ -14,7 +14,7 @@ database:
   port: 3306
   database: opshub
   username: root
-  password: "123456"
+  password: "DUjie123!"
   max_idle_conns: 10
   max_open_conns: 100
   conn_max_lifetime: 3600 # 秒
@@ -22,7 +22,7 @@ database:
 redis:
   host: 127.0.0.1
   port: 6379
-  password: ""
+  password: "123456"
   db: 0
   pool_size: 10
   min_idle_conn: 5

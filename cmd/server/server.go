@@ -31,6 +31,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/ydcloud-dy/opshub/cmd/root"
 	"github.com/ydcloud-dy/opshub/internal/biz"
+	assetmodel "github.com/ydcloud-dy/opshub/internal/biz/asset"
 	auditmodel "github.com/ydcloud-dy/opshub/internal/biz/audit"
 	rbacmodel "github.com/ydcloud-dy/opshub/internal/biz/rbac"
 	systemmodel "github.com/ydcloud-dy/opshub/internal/biz/system"
@@ -188,6 +189,11 @@ func autoMigrate(db *gorm.DB) error {
 		// 系统配置相关表
 		&systemmodel.SysConfig{},
 		&systemmodel.SysUserLoginAttempt{},
+		// 资产管理相关表
+		&assetmodel.Host{},
+		&assetmodel.Credential{},
+		&assetmodel.AssetGroup{},
+		&assetmodel.CloudAccount{},
 		// Kubernetes 集群相关表
 		&models.Cluster{},
 		&k8smodel.UserKubeConfig{},
@@ -293,55 +299,111 @@ func initDefaultData(db *gorm.DB) error {
 		return fmt.Errorf("分配管理员角色失败: %w", err)
 	}
 
-	// 创建默认菜单 - 先创建顶级菜单
-	dashboardMenu := &rbacmodel.SysMenu{Name: "仪表盘", Code: "dashboard", Type: 2, ParentID: 0, Path: "/dashboard", Component: "Dashboard", Icon: "HomeFilled", Sort: 0, Visible: 1, Status: 1}
-	if err := db.Create(dashboardMenu).Error; err != nil {
-		return fmt.Errorf("创建首页菜单失败: %w", err)
-	}
-	db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, dashboardMenu.ID)
-
-	// 创建系统管理顶级菜单
-	systemMenu := &rbacmodel.SysMenu{Name: "系统管理", Code: "system", Type: 1, ParentID: 0, Path: "/system", Icon: "Setting", Sort: 100, Visible: 1, Status: 1}
-	if err := db.Create(systemMenu).Error; err != nil {
-		return fmt.Errorf("创建系统管理菜单失败: %w", err)
-	}
-	db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, systemMenu.ID)
-
-	// 创建系统管理子菜单（使用 systemMenu.ID 作为父级）
-	systemSubMenus := []*rbacmodel.SysMenu{
-		{Name: "用户管理", Code: "users", Type: 2, ParentID: systemMenu.ID, Path: "/system/users", Component: "system/Users", Icon: "User", Sort: 1, Visible: 1, Status: 1},
-		{Name: "角色管理", Code: "roles", Type: 2, ParentID: systemMenu.ID, Path: "/system/roles", Component: "system/Roles", Icon: "UserFilled", Sort: 2, Visible: 1, Status: 1},
-		{Name: "菜单管理", Code: "menus", Type: 2, ParentID: systemMenu.ID, Path: "/system/menus", Component: "system/Menus", Icon: "Menu", Sort: 3, Visible: 1, Status: 1},
-		{Name: "部门信息", Code: "departments", Type: 2, ParentID: systemMenu.ID, Path: "/system/departments", Component: "system/Departments", Icon: "OfficeBuilding", Sort: 4, Visible: 1, Status: 1},
-		{Name: "岗位信息", Code: "positions", Type: 2, ParentID: systemMenu.ID, Path: "/system/positions", Component: "system/Positions", Icon: "Avatar", Sort: 5, Visible: 1, Status: 1},
-		{Name: "系统配置", Code: "settings", Type: 2, ParentID: systemMenu.ID, Path: "/system/settings", Component: "system/Settings", Icon: "Tools", Sort: 6, Visible: 1, Status: 1},
-	}
-
-	for _, menu := range systemSubMenus {
+	// 辅助函数：创建菜单并分配权限
+	createMenuWithPermission := func(menu *rbacmodel.SysMenu) error {
 		if err := db.Create(menu).Error; err != nil {
-			return fmt.Errorf("创建系统管理子菜单失败: %w", err)
+			return err
 		}
 		db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, menu.ID)
+		return nil
 	}
 
-	// 创建操作审计顶级菜单
+	// ========== 1. 仪表盘 ==========
+	dashboardMenu := &rbacmodel.SysMenu{Name: "仪表盘", Code: "dashboard", Type: 1, ParentID: 0, Path: "/dashboard", Icon: "HomeFilled", Sort: 0, Visible: 1, Status: 1}
+	if err := createMenuWithPermission(dashboardMenu); err != nil {
+		return fmt.Errorf("创建仪表盘菜单失败: %w", err)
+	}
+
+	// ========== 2. 资产管理 ==========
+	assetMenu := &rbacmodel.SysMenu{Name: "资产管理", Code: "asset-management", Type: 1, ParentID: 0, Path: "/asset", Icon: "Coin", Sort: 1, Visible: 1, Status: 1}
+	if err := createMenuWithPermission(assetMenu); err != nil {
+		return fmt.Errorf("创建资产管理菜单失败: %w", err)
+	}
+
+	assetSubMenus := []*rbacmodel.SysMenu{
+		{Name: "主机管理", Code: "host-management", Type: 2, ParentID: assetMenu.ID, Path: "/asset/hosts", Component: "asset/Hosts", Icon: "Monitor", Sort: 1, Visible: 1, Status: 1},
+		{Name: "凭据管理", Code: "asset:credentials", Type: 3, ParentID: assetMenu.ID, Path: "/asset/credentials", Component: "asset/Credentials", Icon: "Lock", Sort: 2, Visible: 1, Status: 1},
+		{Name: "业务分组", Code: "business-group", Type: 2, ParentID: assetMenu.ID, Path: "/asset/groups", Component: "asset/Groups", Icon: "Collection", Sort: 3, Visible: 1, Status: 1},
+		{Name: "云账号管理", Code: "cloud-accounts", Type: 2, ParentID: assetMenu.ID, Path: "/asset/cloud-accounts", Component: "asset/CloudAccounts", Icon: "Cloudy", Sort: 4, Visible: 1, Status: 1},
+		{Name: "终端审计", Code: "asset_terminal_audit", Type: 2, ParentID: assetMenu.ID, Path: "/asset/terminal-audit", Icon: "View", Sort: 5, Visible: 1, Status: 1},
+		{Name: "权限配置", Code: "asset_permission", Type: 2, ParentID: assetMenu.ID, Path: "/asset/permissions", Component: "views/asset/AssetPermission.vue", Icon: "Lock", Sort: 6, Visible: 1, Status: 1},
+	}
+	for _, menu := range assetSubMenus {
+		if err := createMenuWithPermission(menu); err != nil {
+			return fmt.Errorf("创建资产管理子菜单失败: %w", err)
+		}
+	}
+
+	// ========== 3. 身份认证 ==========
+	identityMenu := &rbacmodel.SysMenu{Name: "身份认证", Code: "identity", Type: 1, ParentID: 0, Path: "/identity", Icon: "Key", Sort: 2, Visible: 1, Status: 1}
+	if err := createMenuWithPermission(identityMenu); err != nil {
+		return fmt.Errorf("创建身份认证菜单失败: %w", err)
+	}
+
+	identitySubMenus := []*rbacmodel.SysMenu{
+		{Name: "身份源管理", Code: "identity_sources", Type: 2, ParentID: identityMenu.ID, Path: "/identity/sources", Component: "identity/IdentitySources", Icon: "User", Sort: 1, Visible: 1, Status: 1},
+		{Name: "应用管理", Code: "identity_apps", Type: 2, ParentID: identityMenu.ID, Path: "/identity/apps", Component: "identity/SSOApplications", Icon: "Grid", Sort: 2, Visible: 1, Status: 1},
+		{Name: "凭证管理", Code: "identity_credentials", Type: 2, ParentID: identityMenu.ID, Path: "/identity/credentials", Component: "identity/Credentials", Icon: "Lock", Sort: 3, Visible: 1, Status: 1},
+		{Name: "访问策略", Code: "identity_permissions", Type: 2, ParentID: identityMenu.ID, Path: "/identity/permissions", Component: "identity/Permissions", Icon: "Key", Sort: 4, Visible: 1, Status: 1},
+		{Name: "认证日志", Code: "identity_logs", Type: 2, ParentID: identityMenu.ID, Path: "/identity/logs", Component: "identity/AuthLogs", Icon: "Document", Sort: 5, Visible: 1, Status: 1},
+		{Name: "应用门户", Code: "identity_portal", Type: 2, ParentID: identityMenu.ID, Path: "/identity/portal", Component: "identity/Portal", Icon: "Menu", Sort: 6, Visible: 1, Status: 1},
+	}
+	for _, menu := range identitySubMenus {
+		if err := createMenuWithPermission(menu); err != nil {
+			return fmt.Errorf("创建身份认证子菜单失败: %w", err)
+		}
+	}
+
+	// ========== 4. 操作审计 ==========
 	auditMenu := &rbacmodel.SysMenu{Name: "操作审计", Code: "audit", Type: 1, ParentID: 0, Path: "/audit", Icon: "Document", Sort: 50, Visible: 1, Status: 1}
-	if err := db.Create(auditMenu).Error; err != nil {
+	if err := createMenuWithPermission(auditMenu); err != nil {
 		return fmt.Errorf("创建操作审计菜单失败: %w", err)
 	}
-	db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, auditMenu.ID)
 
-	// 创建操作审计子菜单（不包含数据日志）
 	auditSubMenus := []*rbacmodel.SysMenu{
 		{Name: "操作日志", Code: "operation-logs", Type: 2, ParentID: auditMenu.ID, Path: "/audit/operation-logs", Component: "audit/OperationLogs", Icon: "Document", Sort: 1, Visible: 1, Status: 1},
 		{Name: "登录日志", Code: "login-logs", Type: 2, ParentID: auditMenu.ID, Path: "/audit/login-logs", Component: "audit/LoginLogs", Icon: "CircleCheck", Sort: 2, Visible: 1, Status: 1},
 	}
-
 	for _, menu := range auditSubMenus {
-		if err := db.Create(menu).Error; err != nil {
+		if err := createMenuWithPermission(menu); err != nil {
 			return fmt.Errorf("创建操作审计子菜单失败: %w", err)
 		}
-		db.Exec("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (?, ?)", adminRole.ID, menu.ID)
+	}
+
+	// ========== 5. 插件管理 ==========
+	pluginMenu := &rbacmodel.SysMenu{Name: "插件管理", Code: "plugin", Type: 1, ParentID: 0, Path: "/plugin", Icon: "Grid", Sort: 80, Visible: 1, Status: 1}
+	if err := createMenuWithPermission(pluginMenu); err != nil {
+		return fmt.Errorf("创建插件管理菜单失败: %w", err)
+	}
+
+	pluginSubMenus := []*rbacmodel.SysMenu{
+		{Name: "插件列表", Code: "plugin-list", Type: 2, ParentID: pluginMenu.ID, Path: "/plugin/list", Component: "plugin/PluginList", Icon: "Grid", Sort: 1, Visible: 1, Status: 1},
+		{Name: "插件安装", Code: "plugin-install", Type: 2, ParentID: pluginMenu.ID, Path: "/plugin/install", Component: "plugin/PluginInstall", Icon: "Upload", Sort: 2, Visible: 1, Status: 1},
+	}
+	for _, menu := range pluginSubMenus {
+		if err := createMenuWithPermission(menu); err != nil {
+			return fmt.Errorf("创建插件管理子菜单失败: %w", err)
+		}
+	}
+
+	// ========== 6. 系统管理 ==========
+	systemMenu := &rbacmodel.SysMenu{Name: "系统管理", Code: "system", Type: 1, ParentID: 0, Path: "/system", Icon: "Setting", Sort: 100, Visible: 1, Status: 1}
+	if err := createMenuWithPermission(systemMenu); err != nil {
+		return fmt.Errorf("创建系统管理菜单失败: %w", err)
+	}
+
+	systemSubMenus := []*rbacmodel.SysMenu{
+		{Name: "用户管理", Code: "users", Type: 2, ParentID: systemMenu.ID, Path: "/users", Component: "system/Users", Icon: "User", Sort: 1, Visible: 1, Status: 1},
+		{Name: "角色管理", Code: "roles", Type: 2, ParentID: systemMenu.ID, Path: "/roles", Component: "system/Roles", Icon: "UserFilled", Sort: 2, Visible: 1, Status: 1},
+		{Name: "菜单管理", Code: "menus", Type: 2, ParentID: systemMenu.ID, Path: "/menus", Component: "system/Menus", Icon: "Menu", Sort: 3, Visible: 1, Status: 1},
+		{Name: "部门信息", Code: "dept-info", Type: 2, ParentID: systemMenu.ID, Path: "/dept-info", Component: "system/DeptInfo", Icon: "OfficeBuilding", Sort: 4, Visible: 1, Status: 1},
+		{Name: "岗位信息", Code: "position-info", Type: 2, ParentID: systemMenu.ID, Path: "/position-info", Component: "system/PositionInfo", Icon: "Avatar", Sort: 5, Visible: 1, Status: 1},
+		{Name: "系统配置", Code: "system-config", Type: 2, ParentID: systemMenu.ID, Path: "/system-config", Component: "system/SystemConfig", Icon: "Setting", Sort: 6, Visible: 1, Status: 1},
+	}
+	for _, menu := range systemSubMenus {
+		if err := createMenuWithPermission(menu); err != nil {
+			return fmt.Errorf("创建系统管理子菜单失败: %w", err)
+		}
 	}
 
 	appLogger.Info("默认数据初始化完成")
