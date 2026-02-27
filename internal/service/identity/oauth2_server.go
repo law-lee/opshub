@@ -58,6 +58,26 @@ func (s *OAuth2ServerService) Authorize(c *gin.Context) {
 		CodeChallengeMethod: c.Query("code_challenge_method"),
 	}
 
+	// 兼容性修复：如果 client_id 为空，尝试从 redirect_uri 中提取
+	// 例如：http://example.com/users/auth/oauth2_generic/callback -> oauth2_generic
+	if req.ClientID == "" && req.RedirectURI != "" {
+		if u, err := url.Parse(req.RedirectURI); err == nil {
+			// 从路径中提取 provider 名称
+			// 路径格式通常是 /users/auth/{provider}/callback
+			parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+			for i, part := range parts {
+				if part == "auth" && i+1 < len(parts) {
+					req.ClientID = parts[i+1]
+					appLogger.Info("从 redirect_uri 提取 client_id",
+						zap.String("redirect_uri", req.RedirectURI),
+						zap.String("extracted_client_id", req.ClientID),
+					)
+					break
+				}
+			}
+		}
+	}
+
 	// Debug: 打印请求信息
 	sessionCookie, _ := c.Cookie("opshub_session")
 	appLogger.Info("OAuth2 Authorize 请求",
@@ -146,6 +166,32 @@ func (s *OAuth2ServerService) Token(c *gin.Context) {
 		}
 	}
 
+	// 兼容性修复：如果 client_id 为空，尝试从 redirect_uri 中提取
+	// 例如：http://example.com/users/auth/gitlab/callback -> gitlab
+	if req.ClientID == "" && req.RedirectURI != "" {
+		if u, err := url.Parse(req.RedirectURI); err == nil {
+			parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+			for i, part := range parts {
+				if part == "auth" && i+1 < len(parts) {
+					req.ClientID = parts[i+1]
+					appLogger.Info("Token请求从 redirect_uri 提取 client_id",
+						zap.String("redirect_uri", req.RedirectURI),
+						zap.String("extracted_client_id", req.ClientID),
+					)
+					break
+				}
+			}
+		}
+	}
+
+	// Debug: 打印 Token 请求信息
+	appLogger.Info("OAuth2 Token 请求",
+		zap.String("client_id", req.ClientID),
+		zap.String("code", req.Code),
+		zap.String("redirect_uri", req.RedirectURI),
+		zap.String("grant_type", req.GrantType),
+	)
+
 	// 交换令牌
 	tokenResp, err := s.useCase.ExchangeToken(c.Request.Context(), &req)
 	if err != nil {
@@ -192,6 +238,42 @@ func (s *OAuth2ServerService) Discovery(c *gin.Context) {
 func (s *OAuth2ServerService) JWKS(c *gin.Context) {
 	jwks := identity.GetJWKS()
 	c.JSON(http.StatusOK, jwks)
+}
+
+// GitLabUserInfo GitLab 兼容的用户信息端点
+// GitLab 的 oauth2_generic 默认请求 /api/v4/user
+func (s *OAuth2ServerService) GitLabUserInfo(c *gin.Context) {
+	// 从Authorization header获取access token
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
+		return
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header"})
+		return
+	}
+
+	accessToken := parts[1]
+
+	userInfo, err := s.useCase.GetUserInfo(c.Request.Context(), accessToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	// GitLab API v4 user 格式
+	c.JSON(http.StatusOK, gin.H{
+		"id":               userInfo.Sub,
+		"username":         userInfo.Username,
+		"name":             userInfo.Name,
+		"email":            userInfo.Email,
+		"avatar_url":       userInfo.Avatar,
+		"state":            "active",
+		"two_factor_enabled": false,
+	})
 }
 
 // Revoke 令牌撤销端点

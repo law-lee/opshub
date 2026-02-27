@@ -220,6 +220,12 @@ func (s *HTTPServer) RegisterOAuth2Routes(router *gin.Engine, authMiddleware fun
 	{
 		oauth2Optional.GET("/authorize", s.oauth2Service.Authorize)
 	}
+
+	// GitLab 兼容端点 - GitLab oauth2_generic 默认请求 /api/v4/user
+	apiV4 := router.Group("/api/v4")
+	{
+		apiV4.GET("/user", s.oauth2Service.GitLabUserInfo)
+	}
 }
 
 // GetOAuth2Service 获取OAuth2服务（供外部使用）

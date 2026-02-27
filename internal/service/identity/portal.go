@@ -172,9 +172,20 @@ func (s *PortalService) buildSSOLoginURL(app *identity.SSOApplication) string {
 		return app.URL
 	}
 
-	// 对于 Jenkins，跳转到 securityRealm/commenceLogin 触发 OIDC 登录
-	// 这样 Jenkins 会生成正确的 state 并存储在 session 中
-	appURL.Path = "/securityRealm/commenceLogin"
+	// 根据应用类型构建不同的登录入口
+	switch app.Code {
+	case "jenkins":
+		// Jenkins: 跳转到 securityRealm/commenceLogin 触发 OIDC 登录
+		appURL.Path = "/securityRealm/commenceLogin"
+	case "gitlab":
+		// GitLab: 如果启用了 omniauth_auto_sign_in_with_provider，直接访问即可自动跳转 SSO
+		// 否则跳转到登录页面
+		appURL.Path = "/users/sign_in"
+	default:
+		// 默认：直接返回应用 URL，让应用自己处理登录
+		return app.URL
+	}
+
 	return appURL.String()
 }
 

@@ -161,6 +161,8 @@ func (uc *OAuth2ServerUseCase) ValidateAuthorizeRequest(ctx context.Context, req
 	// 验证客户端
 	app, err := uc.appRepo.GetByCode(ctx, req.ClientID)
 	if err != nil {
+		// Debug: 打印详细的错误信息
+		fmt.Printf("ValidateAuthorizeRequest: client_id=%s, error=%v\n", req.ClientID, err)
 		return nil, errors.New("invalid_client: client not found")
 	}
 
@@ -186,6 +188,9 @@ func (uc *OAuth2ServerUseCase) ValidateAuthorizeRequest(ctx context.Context, req
 
 // CreateAuthorizationCode 创建授权码
 func (uc *OAuth2ServerUseCase) CreateAuthorizationCode(ctx context.Context, req *AuthorizeRequest, userID uint) (*AuthorizeResponse, error) {
+	// Debug: 打印授权请求信息
+	fmt.Printf("CreateAuthorizationCode: client_id=%s, redirect_uri=%s, scope=%s\n", req.ClientID, req.RedirectURI, req.Scope)
+
 	// 生成授权码
 	code, err := generateRandomCode(32)
 	if err != nil {
@@ -248,6 +253,7 @@ func (uc *OAuth2ServerUseCase) exchangeAuthorizationCode(ctx context.Context, re
 
 	// 验证客户端
 	if authCode.ClientID != req.ClientID {
+		fmt.Printf("client_id mismatch: authCode.ClientID=%s, req.ClientID=%s\n", authCode.ClientID, req.ClientID)
 		return nil, errors.New("invalid_grant: client_id mismatch")
 	}
 
